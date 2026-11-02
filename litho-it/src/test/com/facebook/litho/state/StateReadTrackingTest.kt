@@ -383,6 +383,7 @@ private class MyKComponent(
   }
 }
 
+@Suppress("PrimitiveLayoutBehaviorCaptureDetector")
 private class MyPrimitiveComponent(
     private val readInResolve: Boolean = false,
     private val readInLayout: Boolean = false,

@@ -308,6 +308,7 @@ class UseFlowTest {
     val layoutValueRef = AtomicInteger(0)
     val testFlow = MutableStateFlow(10)
 
+    @Suppress("PrimitiveLayoutBehaviorCaptureDetector")
     class TestComponent : PrimitiveComponent() {
       override fun PrimitiveComponentScope.render(): LithoPrimitive {
         renders.incrementAndGet()
