@@ -150,9 +150,8 @@ class GraphBinding private constructor(private val dataFlowGraph: DataFlowGraph)
 
   companion object {
     /** Creates a [GraphBinding] associated with the default [DataFlowGraph] instance. */
-    @JvmStatic fun create(): GraphBinding = GraphBinding(DataFlowGraph.getInstance())
+    fun create(): GraphBinding = GraphBinding(DataFlowGraph.getInstance())
 
-    @JvmStatic
     @VisibleForTesting
     fun create(dataFlowGraph: DataFlowGraph): GraphBinding = GraphBinding(dataFlowGraph)
   }
