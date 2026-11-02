@@ -115,6 +115,38 @@ class AnimationControllerTest {
   }
 
   @Test
+  fun disabledScaleHonorsFrameRequestsDuringTickAndCompletionWithoutPolling() {
+    val driver = TestAnimationFrameDriver()
+    AnimationController.withFrameDriverForTest(driver) {
+      AnimationController.setDurationScaleForTest(0f)
+      var ticks = 0
+      lateinit var animation: FrameDrivenAnimation
+      animation = FrameDrivenAnimation {
+        ++ticks
+        if (ticks == 1) AnimationController.register(animation, forceFrame = true)
+        true
+      }
+      AnimationController.register(animation)
+      driver.runNextFrame(16.ms)
+      assertThat(ticks).isEqualTo(1)
+      assertThat(driver.hasScheduledFrameCallbacks()).isTrue()
+      driver.runNextFrame(16.ms)
+      assertThat(ticks).isEqualTo(2)
+      assertThat(driver.hasScheduledFrameCallbacks()).isFalse()
+
+      AnimationController.enqueueCompletion {
+        AnimationController.register(animation, forceFrame = true)
+      }
+      driver.runNextFrame(16.ms)
+      assertThat(ticks).isEqualTo(3)
+      assertThat(driver.hasScheduledFrameCallbacks()).isTrue()
+      driver.runNextFrame(16.ms)
+      assertThat(ticks).isEqualTo(4)
+      assertThat(driver.hasScheduledFrameCallbacks()).isFalse()
+    }
+  }
+
+  @Test
   fun withFrameDriverForTest_unregisterCancelsScheduledFrame() {
     val frameDriver = TestAnimationFrameDriver()
     val animation = FrameDrivenAnimation { true }
@@ -159,7 +191,11 @@ class AnimationControllerTest {
       AnimationController.register(
           FrameDrivenAnimation {
             events.add("first tick")
-            AnimationController.enqueueCompletion({ events.add("completion") })
+            assertThat(AnimationController.completionFrameTimeNanos).isEqualTo(Long.MIN_VALUE)
+            AnimationController.enqueueCompletion {
+              assertThat(AnimationController.completionFrameTimeNanos).isZero()
+              events.add("completion")
+            }
             false
           },
       )
@@ -173,6 +209,7 @@ class AnimationControllerTest {
       driver.runNextFrame(16.ms)
 
       assertThat(events).containsExactly("first tick", "second tick", "completion")
+      assertThat(AnimationController.completionFrameTimeNanos).isEqualTo(Long.MIN_VALUE)
       assertThat(driver.hasScheduledFrameCallbacks()).isFalse()
     }
   }

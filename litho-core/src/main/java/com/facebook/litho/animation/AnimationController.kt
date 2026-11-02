@@ -47,14 +47,18 @@ object AnimationController {
   private val activeAnimations = mutableSetOf<FrameDrivenAnimation>()
   private val completions = ArrayDeque<PostFrameCallback>()
   private val frameCallback = Choreographer.FrameCallback(::onFrame)
-  private var frameScheduled = false
+  // Posted while idle; requested for the next frame during dispatch.
   private var frameRequested = false
-  private var isDispatchingFrame = false
+  private var phase = FramePhase.Idle
   private var frameDriver: AnimationFrameDriver = ChoreographerAnimationFrameDriver
   private val systemDurationScale = SystemDurationScale(::updateDurationScale)
   private var segmentWallStartNanos = Long.MIN_VALUE
   private var segmentAnimationStartNanos = 0L
   private var lastWallTimeNanos = Long.MIN_VALUE
+
+  /** Scaled frame time during post-flush delivery; Long.MIN_VALUE outside the drain. */
+  internal val completionFrameTimeNanos: Long
+    get() = if (phase == FramePhase.Completing) animationTime(lastWallTimeNanos) else Long.MIN_VALUE
 
   internal var durationScale: Float = 1f
     private set
@@ -70,7 +74,7 @@ object AnimationController {
 
   private fun updateDurationScale(scale: Float) {
     ThreadUtils.assertMainThread()
-    check(!isDispatchingFrame)
+    check(phase == FramePhase.Idle)
     val normalized =
         when {
           !scale.isFinite() || scale < 0f -> 1f
@@ -101,8 +105,7 @@ object AnimationController {
   internal fun register(animation: FrameDrivenAnimation, forceFrame: Boolean = false) {
     ThreadUtils.assertMainThread()
     if (activeAnimations.add(animation) || forceFrame) {
-      if (isDispatchingFrame) frameRequested = true
-      scheduleFrame()
+      if (phase == FramePhase.Idle) scheduleFrame() else frameRequested = true
     }
   }
 
@@ -158,22 +161,19 @@ object AnimationController {
   }
 
   private fun scheduleFrame() {
-    if (frameScheduled || isDispatchingFrame) return
-    frameScheduled = true
+    if (frameRequested || phase != FramePhase.Idle) return
+    frameRequested = true
     frameDriver.postFrameCallback(frameCallback)
   }
 
   private fun cancelScheduledFrame() {
+    if (frameRequested && phase == FramePhase.Idle) frameDriver.removeFrameCallback(frameCallback)
     frameRequested = false
-    if (frameScheduled) {
-      frameDriver.removeFrameCallback(frameCallback)
-      frameScheduled = false
-    }
-    if (!isDispatchingFrame) freezeTime()
+    if (phase == FramePhase.Idle) freezeTime()
   }
 
   private fun resetControllerState() {
-    check(!isDispatchingFrame)
+    check(phase == FramePhase.Idle)
     cancelScheduledFrame()
     activeAnimations.clear()
     completions.clear()
@@ -204,11 +204,10 @@ object AnimationController {
   @MainThread
   private fun onFrame(frameTimeNanos: Long) {
     ThreadUtils.assertMainThread()
-    check(!isDispatchingFrame) { "AnimationController frame dispatch is not re-entrant" }
+    check(phase == FramePhase.Idle) { "AnimationController frame dispatch is not re-entrant" }
     if (activeAnimations.isNotEmpty()) systemDurationScale.initialize()
-    frameScheduled = false
     frameRequested = false
-    isDispatchingFrame = true
+    phase = FramePhase.Ticking
     if (segmentWallStartNanos == Long.MIN_VALUE) segmentWallStartNanos = frameTimeNanos
     lastWallTimeNanos = frameTimeNanos
     val animationTimeNanos = animationTime(frameTimeNanos)
@@ -225,18 +224,15 @@ object AnimationController {
           }
         }
       }
+      phase = FramePhase.Completing
       dispatchCompletions()
     } finally {
-      isDispatchingFrame = false
-      if (
+      val needsFrame =
           completions.isNotEmpty() ||
               (activeAnimations.isNotEmpty() && (durationScale > 0f || frameRequested))
-      ) {
-        scheduleFrame()
-      } else {
-        frameRequested = false
-        freezeTime()
-      }
+      frameRequested = false
+      phase = FramePhase.Idle
+      if (needsFrame) scheduleFrame() else freezeTime()
     }
   }
 
@@ -254,5 +250,14 @@ object AnimationController {
       }
     }
     failure?.let { throw it }
+  }
+
+  @JvmInline
+  private value class FramePhase private constructor(private val value: Int) {
+    companion object {
+      val Idle = FramePhase(0)
+      val Ticking = FramePhase(1)
+      val Completing = FramePhase(2)
+    }
   }
 }

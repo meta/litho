@@ -57,6 +57,11 @@ internal abstract class AnimationDriver : AnimationClock(), FrameDrivenAnimation
     updatePendingWork(false)
   }
 
+  fun anchorInCompletionFrame() {
+    val frameTimeNanos = AnimationController.completionFrameTimeNanos
+    if (frameTimeNanos != Long.MIN_VALUE) anchor(frameTimeNanos)
+  }
+
   fun unmount() {
     stop()
     playback?.detach(this)

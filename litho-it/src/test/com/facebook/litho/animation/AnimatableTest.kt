@@ -197,6 +197,42 @@ class AnimatableTest {
   }
 
   @Test
+  fun completionChainsAdvanceOnTheNextFrameAtSystemScaledTime() {
+    for (scale in listOf(1f, 2f)) {
+      for (finishExplicitly in listOf(false, true)) {
+        val view = lithoTestRule.render { ImperativeAlphaComponent() }
+        shadowOf(getMainLooper()).idle()
+        animationRule.durationScale = scale
+        val animatable = checkNotNull(capturedAnimatable)
+        val outcomes = mutableListOf<AnimationEnd>()
+        val spec = tween<Float>(100.ms, Easing.Linear)
+        animatable.animateTo(1f, spec) { outcome ->
+          outcomes.add(outcome)
+          if (outcome == AnimationEnd.Finished) {
+            animatable.animateTo(2f, spec) { outcomes.add(it) }
+          }
+        }
+        if (finishExplicitly) {
+          animationRule.advanceBy(50.ms * scale.toDouble())
+          animatable.finish()
+          animationRule.runNextFrame()
+        } else {
+          animationRule.advanceBy(100.ms * scale.toDouble())
+        }
+        assertThat(animatable.value.value).isEqualTo(1f)
+        assertThat(outcomes).containsExactly(AnimationEnd.Finished)
+        animationRule.runNextFrame(16.ms * scale.toDouble())
+        assertThat(animatable.value.value).isEqualTo(1.16f)
+        animationRule.runNextFrame(84.ms * scale.toDouble())
+        assertThat(animatable.value.value).isEqualTo(2f)
+        assertThat(outcomes).containsExactly(AnimationEnd.Finished, AnimationEnd.Finished)
+        assertThat(animationRule.hasScheduledFrames()).isFalse()
+        view.release()
+      }
+    }
+  }
+
+  @Test
   fun useAnimatable_insideNestedTree_updatesMountedValue() {
     val testView =
         lithoTestRule.render(widthPx = 100, heightPx = 100) {

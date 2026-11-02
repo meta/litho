@@ -75,6 +75,7 @@ internal constructor(
   fun animateTo(target: T, spec: FiniteAnimationSpec<T>, onEnd: ((AnimationEnd) -> Unit)? = null) {
     ThreadUtils.assertMainThread()
     animatedValue.retarget(target, spec, preserveEqualTargetTiming = true)
+    driver.anchorInCompletionFrame()
     completeCommand(AnimationEnd.Interrupted)
     this.target = target
     this.onEnd = onEnd

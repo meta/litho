@@ -38,6 +38,11 @@ internal open class AnimationClock {
     lastFrameTimeNanos = UNSET_FRAME_TIME
   }
 
+  /** Sets the next tick's frame origin without advancing play time. */
+  protected fun anchor(frameTimeNanos: Long) {
+    lastFrameTimeNanos = frameTimeNanos
+  }
+
   private companion object {
     const val UNSET_FRAME_TIME = Long.MIN_VALUE
   }
