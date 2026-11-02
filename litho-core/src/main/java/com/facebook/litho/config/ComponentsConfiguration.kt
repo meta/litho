@@ -212,6 +212,13 @@ internal constructor(
     @JvmField
     val usePostAtFrontForLayoutPromotionOnlyFirstLayout: Boolean = false,
     /**
+     * When true, a measure that reuses the main-thread layout because its size specs are exactly
+     * the same does not request another async layout when the tree's own size specs are unchanged.
+     * The pending render already covers them, and the extra request only repeats it, for example
+     * after a state update cloned the root.
+     */
+    @property:ExperimentalLithoApi @JvmField val skipRedundantAsyncMeasureLayout: Boolean = false,
+    /**
      * When true, the legacy `Row`/`Column` builder's `build()` returns a KRow/KColumn
      * ([com.facebook.litho.layout.flexbox.FlexboxContainerComponent]) carrying a [Style], instead
      * of a legacy SpecGenerated `Row`/`Column`. Guards the migration of the legacy builders onto
@@ -674,6 +681,11 @@ internal constructor(
     @ExperimentalLithoApi
     fun usePostAtFrontForLayoutPromotionOnlyFirstLayout(enabled: Boolean): Builder = apply {
       config = config.copy(usePostAtFrontForLayoutPromotionOnlyFirstLayout = enabled)
+    }
+
+    @ExperimentalLithoApi
+    fun skipRedundantAsyncMeasureLayout(enabled: Boolean): Builder = apply {
+      config = config.copy(skipRedundantAsyncMeasureLayout = enabled)
     }
 
     fun useKComponentForLegacyRowColumn(enabled: Boolean): Builder = apply {

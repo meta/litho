@@ -664,6 +664,164 @@ class ComponentTreeTest {
   }
 
   @Test
+  fun `measure with the same specs during a state update's layout does not lay out again`() {
+    val caller = SimpleStateUpdateEmulatorSpec.Caller()
+    val componentTree = stateUpdateTree(caller, skipRedundantAsyncMeasureLayout = true)
+
+    measureWhileStateUpdateLayoutRuns(componentTree, caller)
+
+    assertThat(lithoStatsRule.componentCalculateLayoutCount)
+        .describedAs("The initial layout and the state update's layout.")
+        .isEqualTo(2)
+    assertThat(componentTree.mainThreadLayoutState?.rootComponent?.instanceId)
+        .isEqualTo(componentTree.root?.instanceId)
+  }
+
+  @Test
+  fun `measure with the same specs during a state update's layout lays out again without the config`() {
+    val caller = SimpleStateUpdateEmulatorSpec.Caller()
+    val componentTree = stateUpdateTree(caller, skipRedundantAsyncMeasureLayout = false)
+
+    measureWhileStateUpdateLayoutRuns(componentTree, caller)
+
+    assertThat(lithoStatsRule.componentCalculateLayoutCount)
+        .describedAs(
+            "The initial layout, the state update's layout, and the measure's async layout.",
+        )
+        .isEqualTo(3)
+    assertThat(componentTree.mainThreadLayoutState?.rootComponent?.instanceId)
+        .isEqualTo(componentTree.root?.instanceId)
+  }
+
+  @Test
+  fun `same-spec measure while the tree targets other specs still lays out at the measured specs`() {
+    val caller = SimpleStateUpdateEmulatorSpec.Caller()
+    val componentTree = stateUpdateTree(caller, skipRedundantAsyncMeasureLayout = true)
+
+    measureWhileStateUpdateLayoutRuns(componentTree, caller) {
+      componentTree.setSizeSpecAsync(widthSpec2, heightSpec2)
+    }
+
+    assertThat(componentTree.mainThreadLayoutState?.isCompatibleSpec(widthSpec, heightSpec))
+        .describedAs("The tree ends at the specs it was last measured with.")
+        .isTrue
+    assertThat(componentTree.mainThreadLayoutState?.rootComponent?.instanceId)
+        .isEqualTo(componentTree.root?.instanceId)
+  }
+
+  @Test
+  fun `same-spec measure re-renders the current root when an older root's layout was promoted`() {
+    val componentTree =
+        ComponentTree.create(context, SimpleMountSpecTester(color = 1))
+            .componentsConfiguration(
+                ComponentsConfiguration.defaultInstance.copy(
+                    skipRedundantAsyncMeasureLayout = true,
+                ),
+            )
+            .build()
+    componentTree.setLithoView(LithoView(context))
+    componentTree.attach()
+    componentTree.measure(widthSpec, heightSpec, IntArray(2), false)
+
+    // The older root stays queued on the previous handler, resolves later with a newer version,
+    // and its layout is promoted while the newer root is the tree's root.
+    val olderRoot = SimpleMountSpecTester(color = 2)
+    val newerRoot = SimpleMountSpecTester(color = 3)
+    componentTree.setRootAsync(olderRoot)
+    val newLayoutThread = createAndStartNewHandlerThread()
+    componentTree.updateLayoutThreadHandler(RunnableHandler.DefaultHandler(newLayoutThread.looper))
+    componentTree.setRootAsync(newerRoot)
+    val newLayoutLooper = Shadow.extract<ShadowLooper>(newLayoutThread.looper)
+    newLayoutLooper.runToEndOfTasks()
+    runToEndOfTasks()
+    ShadowLooper.runUiThreadTasks()
+    assertThat(componentTree.mainThreadLayoutState?.isForComponentId(olderRoot.instanceId))
+        .describedAs("Asserting test setup: the older root's layout was promoted.")
+        .isTrue
+
+    componentTree.measure(widthSpec, heightSpec, IntArray(2), false)
+    newLayoutLooper.runToEndOfTasks()
+    ShadowLooper.runUiThreadTasks()
+
+    assertThat(componentTree.mainThreadLayoutState?.isForComponentId(newerRoot.instanceId)).isTrue
+    newLayoutThread.quit()
+  }
+
+  /** An attached tree with one committed layout at [widthSpec] x [heightSpec]. */
+  private fun stateUpdateTree(
+      caller: SimpleStateUpdateEmulatorSpec.Caller,
+      skipRedundantAsyncMeasureLayout: Boolean,
+  ): ComponentTree {
+    val componentTree =
+        ComponentTree.create(
+                context,
+                SimpleStateUpdateEmulator.create(context).caller(caller).build(),
+            )
+            .componentsConfiguration(
+                ComponentsConfiguration.defaultInstance.copy(
+                    skipRedundantAsyncMeasureLayout = skipRedundantAsyncMeasureLayout,
+                ),
+            )
+            .build()
+    componentTree.setLithoView(LithoView(context))
+    componentTree.attach()
+    componentTree.measure(widthSpec, heightSpec, IntArray(2), false)
+    assertThat(lithoStatsRule.componentCalculateLayoutCount)
+        .describedAs("Asserting test setup: one initial layout.")
+        .isEqualTo(1)
+    return componentTree
+  }
+
+  /**
+   * Measures with the tree's specs while the state update's layout is running on the layout thread,
+   * after the update cloned the root: the order seen on device when a parent measures the LithoView
+   * mid-update.
+   */
+  private fun measureWhileStateUpdateLayoutRuns(
+      componentTree: ComponentTree,
+      caller: SimpleStateUpdateEmulatorSpec.Caller,
+      beforeMeasure: () -> Unit = {},
+  ) {
+    val layoutStarted = CountDownLatch(1)
+    val measureDone = CountDownLatch(1)
+    componentTree.setFutureExecutionListener(
+        object : TreeFuture.FutureExecutionListener {
+          override fun onPreExecution(
+              version: Int,
+              futureExecutionType: TreeFuture.FutureExecutionType,
+              attribution: String,
+          ) {
+            if (attribution != LayoutTreeFuture.DESCRIPTION) {
+              return
+            }
+            componentTree.setFutureExecutionListener(null)
+            layoutStarted.countDown()
+            measureDone.await(5, TimeUnit.SECONDS)
+          }
+
+          override fun onPostExecution(version: Int, released: Boolean, attribution: String) = Unit
+        },
+    )
+
+    caller.incrementAsync()
+    val stateUpdateLayout = runOnBackgroundThread { runToEndOfTasks() }
+    assertThat(layoutStarted.await(5, TimeUnit.SECONDS)).isTrue
+
+    // Measure posts to the layout thread, which the blocked looper above cannot take.
+    val measureLayoutThread = createAndStartNewHandlerThread()
+    componentTree.updateLayoutThreadHandler(
+        RunnableHandler.DefaultHandler(measureLayoutThread.looper),
+    )
+    beforeMeasure()
+    componentTree.measure(widthSpec, heightSpec, IntArray(2), false)
+    measureDone.countDown()
+
+    stateUpdateLayout.acquire()
+    Shadow.extract<ShadowLooper>(measureLayoutThread.looper).runToEndOfTasks()
+    ShadowLooper.runUiThreadTasks()
+  }
+
+  @Test
   fun renderOnMainThreadStartedIncludesAllDiagnosticsForSizeSpecMismatch() {
     val componentTree = ComponentTree.create(context, component).build()
     componentTree.setLithoView(LithoView(context))

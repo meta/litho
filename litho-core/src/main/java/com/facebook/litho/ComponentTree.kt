@@ -906,6 +906,7 @@ open class ComponentTree protected constructor(builder: Builder) :
       }
 
       val needsSyncLayout: Boolean
+      var isAsyncMeasureLayoutRedundant = false
       synchronized(this) {
         if (isCompatibleSpec(committedLayoutState, widthSpec, heightSpec)) {
           maybePromoteCommittedLayoutStateToUI()
@@ -932,6 +933,9 @@ open class ComponentTree protected constructor(builder: Builder) :
           measureOutput[0] = mainThreadLayoutState.width
           measureOutput[1] = mainThreadLayoutState.height
           needsSyncLayout = false
+          isAsyncMeasureLayoutRedundant =
+              hasExactSameSpecs &&
+                  isAsyncMeasureLayoutRedundant(mainThreadLayoutState, widthSpec, heightSpec)
         } else {
           needsSyncLayout = true
 
@@ -994,7 +998,7 @@ open class ComponentTree protected constructor(builder: Builder) :
             measureOutput[1] = output.height
           }
         }
-      } else {
+      } else if (!isAsyncMeasureLayoutRedundant) {
         setSizeSpecForMeasureAsync(widthSpec, heightSpec)
       }
     } finally {
@@ -2806,6 +2810,24 @@ open class ComponentTree protected constructor(builder: Builder) :
 
     return treePropContainer
   }
+
+  /**
+   * Whether the async layout a compatible measure would request duplicates work already covered:
+   * the committed resolve is for the current root and the tree already targets these specs, so any
+   * pending render produces this layout.
+   */
+  @GuardedBy("this")
+  private fun isAsyncMeasureLayoutRedundant(
+      mainThreadLayoutState: LayoutState,
+      widthSpec: Int,
+      heightSpec: Int,
+  ): Boolean =
+      context.lithoConfiguration.componentsConfig.skipRedundantAsyncMeasureLayout &&
+          committedResolveResult?.component === _root &&
+          this.widthSpec == widthSpec &&
+          this.heightSpec == heightSpec &&
+          AccessibilityUtils.isAccessibilityEnabled(accessibilityManager) ==
+              mainThreadLayoutState.isAccessibilityEnabled
 
   private fun isCompatibleSpec(
       layoutState: LayoutState?,
