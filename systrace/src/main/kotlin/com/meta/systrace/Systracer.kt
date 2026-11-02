@@ -70,7 +70,7 @@ interface Systracer {
   }
 }
 
-fun <T> Systracer.trace(name: () -> String, block: () -> T): T {
+inline fun <T> Systracer.trace(name: () -> String, block: () -> T): T {
   return if (isTracing()) {
     beginSection(name())
     try {
