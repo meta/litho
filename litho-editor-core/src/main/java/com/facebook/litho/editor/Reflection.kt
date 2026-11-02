@@ -73,6 +73,7 @@ object Reflection {
         null
       }
 
+  @Suppress("UNCHECKED_CAST")
   fun <T> getValueUNSAFE(f: Field, node: Any?): T? {
     return try {
       val oldAccessibility = f.isAccessible

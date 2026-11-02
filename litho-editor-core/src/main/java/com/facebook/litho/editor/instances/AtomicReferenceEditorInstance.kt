@@ -25,6 +25,7 @@ import java.lang.reflect.Field
 import java.util.concurrent.atomic.AtomicReference
 
 class AtomicReferenceEditorInstance : Editor {
+  @Suppress("UNCHECKED_CAST")
   override fun read(f: Field, node: Any?): EditorValue {
     val reference =
         getValueUNSAFE<AtomicReference<Any>>(f, node) ?: return EditorValue.string("null")

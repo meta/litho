@@ -80,9 +80,9 @@ object SimpleEditor {
       value: T,
   ): DefaultEditorVisitor {
     return object : DefaultEditorVisitor() {
-      override fun isShape(shape: EditorShape): Void? {
+      override fun isShape(`object`: EditorShape): Void? {
         val properties = propertyEditor.readProperties(value)
-        val updates = shape.value
+        val updates = `object`.value
         for ((key, value1) in updates) {
           val newValue = SimpleEditorValue.fromEditorValueOrNull(value1)
           val oldValue = properties[key]
@@ -132,7 +132,7 @@ object SimpleEditor {
       value: T,
   ): EditorValue.EditorVisitor<Void?> {
     return object : DefaultEditorVisitor() {
-      override fun isShape(shape: EditorShape): Void? {
+      override fun isShape(`object`: EditorShape): Void? {
         val properties = propertyEditor.readProperties(value)
         val stringProperties: MutableMap<String, String> = HashMap()
         val numberProperties: MutableMap<String, Number> = HashMap()
@@ -149,7 +149,7 @@ object SimpleEditor {
               ),
           )
         }
-        val updates = shape.value
+        val updates = `object`.value
         for ((propertyKey, value1) in updates) {
           val newValue = SimpleEditorValue.fromEditorValueOrNull(value1)
           val oldValue = properties[propertyKey]
@@ -336,8 +336,8 @@ object SimpleEditor {
               return number(number.value)
             }
 
-            override fun isColor(color: EditorColor): SimpleEditorValue? {
-              return color(color.color)
+            override fun isColor(number: EditorColor): SimpleEditorValue? {
+              return color(number.color)
             }
 
             override fun isString(string: EditorString): SimpleEditorValue? {

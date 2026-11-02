@@ -59,7 +59,7 @@ abstract class EditorValue {
       return null
     }
 
-    override fun isColor(color: EditorColor): Void? {
+    override fun isColor(number: EditorColor): Void? {
       return null
     }
 
@@ -146,8 +146,8 @@ abstract class EditorValue {
             return visitor.isNumber(path.toTypedArray(), number)
           }
 
-          override fun isColor(color: EditorColor): Boolean {
-            return visitor.isColor(path.toTypedArray(), color)
+          override fun isColor(number: EditorColor): Boolean {
+            return visitor.isColor(path.toTypedArray(), number)
           }
 
           override fun isString(string: EditorString): Boolean {
@@ -186,8 +186,8 @@ abstract class EditorValue {
             return false
           }
 
-          override fun isColor(color: EditorColor): Boolean {
-            ref.set(aggregator.addColor(ref.get(), color))
+          override fun isColor(number: EditorColor): Boolean {
+            ref.set(aggregator.addColor(ref.get(), number))
             return false
           }
 
