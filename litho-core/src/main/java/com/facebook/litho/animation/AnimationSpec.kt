@@ -111,8 +111,11 @@ interface FiniteAnimationSpec<T> : AnimationSpec<T>
  * only duration-based specs (springs, which have no fixed cycle, are excluded).
  */
 interface DurationBasedAnimationSpec<T> : FiniteAnimationSpec<T> {
-  /** The duration of one forward cycle, including any initial delay baked into the spec. */
-  val totalDuration: Duration
+  /**
+   * Playback nanoseconds of one forward cycle, including any initial delay baked into the spec.
+   * Nonnegative, and equal to the [Animator.durationNanos] of the animators this spec creates.
+   */
+  val totalDurationNanos: Long
 }
 
 /**

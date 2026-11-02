@@ -58,15 +58,14 @@ private data class TweenSpec<T>(
     val delay: Duration = ZERO,
 ) : DurationBasedAnimationSpec<T> {
 
-  init {
+  override val totalDurationNanos: Long = run {
     val durationNanos = duration.toFiniteNanos()
     val delayNanos = delay.toFiniteNanos()
     require(delayNanos <= Long.MAX_VALUE - durationNanos) {
       "Tween duration and delay must fit in Long nanoseconds."
     }
+    durationNanos + delayNanos
   }
-
-  override val totalDuration: Duration = duration + delay
 
   override fun createAnimator(
       initialValue: T,

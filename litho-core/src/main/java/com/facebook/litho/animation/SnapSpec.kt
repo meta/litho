@@ -16,9 +16,6 @@
 
 package com.facebook.litho.animation
 
-import kotlin.time.Duration
-import kotlin.time.Duration.Companion.ZERO
-
 /**
  * Creates a [SnapSpec] that instantly jumps to the target value.
  *
@@ -40,7 +37,7 @@ fun <T> snap(): DurationBasedAnimationSpec<T> = SnapSpec()
  */
 private class SnapSpec<T> : DurationBasedAnimationSpec<T> {
 
-  override val totalDuration: Duration = ZERO
+  override val totalDurationNanos: Long = 0L
 
   override fun createAnimator(
       initialValue: T,

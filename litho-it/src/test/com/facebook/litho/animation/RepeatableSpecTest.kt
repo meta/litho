@@ -27,8 +27,8 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class RepeatableSpecTest {
 
-  // Cycle length now comes from DurationBasedAnimationSpec.totalDuration, so iteration boundaries
-  // are exact; the small tolerance only absorbs float rounding.
+  // Cycle length now comes from DurationBasedAnimationSpec.totalDurationNanos, so iteration
+  // boundaries are exact; the small tolerance only absorbs float rounding.
   private val tolerance = Offset.offset(0.5f)
 
   private fun ms(millis: Long): Long = millis * 1_000_000L
@@ -194,7 +194,7 @@ class RepeatableSpecTest {
 
   @Test
   fun childDelay_repeatsEveryCycle() {
-    // A tween's own delay is part of the cycle (totalDuration = duration + delay), so unlike a
+    // A tween's own delay is part of the cycle (totalDurationNanos = duration + delay), so unlike a
     // StartOffset it repeats: every cycle holds at `from` for the delay before animating.
     val spec = infiniteRepeatable<Float>(
         animation = tween(duration = 800.ms, delay = 200.ms, easing = Easing.Linear),

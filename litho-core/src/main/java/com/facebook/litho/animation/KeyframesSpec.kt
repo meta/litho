@@ -106,11 +106,7 @@ private data class KeyframesSpec<T>(
     internal val keyframes: List<Keyframe<T>>,
 ) : DurationBasedAnimationSpec<T> {
 
-  init {
-    duration.toFiniteNanos()
-  }
-
-  override val totalDuration: Duration = duration
+  override val totalDurationNanos: Long = duration.toFiniteNanos()
 
   override fun createAnimator(
       initialValue: T,

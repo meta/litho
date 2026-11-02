@@ -119,21 +119,23 @@ class AnimatorTest {
         (Long.MAX_VALUE / 1_000_000L + 1L).milliseconds,
     )
     for (duration in invalidDurations) {
-      val invalidCycle =
-          object : DurationBasedAnimationSpec<Float> by tween<Float>(1.ms) {
-            override val totalDuration: Duration = duration
-          }
       for (createSpec in
           listOf(
               { tween<Float>(duration) },
               { tween<Float>(delay = duration) },
               { keyframes<Float>(duration) {} },
-              { repeatable(2, invalidCycle) },
-              { infiniteRepeatable(invalidCycle) },
           )) {
         assertThatThrownBy { createSpec() }.isInstanceOf(IllegalArgumentException::class.java)
       }
     }
+    val negativeCycle =
+        object : DurationBasedAnimationSpec<Float> by tween<Float>(1.ms) {
+          override val totalDurationNanos: Long = -1L
+        }
+    assertThatThrownBy { repeatable(2, negativeCycle) }
+        .isInstanceOf(IllegalArgumentException::class.java)
+    assertThatThrownBy { infiniteRepeatable(negativeCycle) }
+        .isInstanceOf(IllegalArgumentException::class.java)
     val largest = Long.MAX_VALUE.nanoseconds
     val overflowFactories = listOf(
         { tween<Float>(largest, delay = 1.ms) },

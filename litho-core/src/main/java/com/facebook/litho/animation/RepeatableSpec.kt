@@ -84,7 +84,10 @@ private data class RepeatableSpec<T>(
 
   private val durationNanos: Long = run {
     require(iterations > 0) { "iterations must be positive, but was $iterations" }
-    val cycleDurationNanos = animation.totalDuration.toFiniteNanos()
+    val cycleDurationNanos = animation.totalDurationNanos
+    require(cycleDurationNanos >= 0L) {
+      "Repeated cycles need a nonnegative totalDurationNanos, but was $cycleDurationNanos."
+    }
     require(cycleDurationNanos <= Long.MAX_VALUE / iterations) {
       "Repeated cycles must fit in Long nanoseconds."
     }
@@ -126,9 +129,10 @@ private data class InfiniteRepeatableSpec<T>(
 ) : InfiniteAnimationSpec<T> {
 
   init {
-    require(animation.totalDuration.toFiniteNanos() > 0L) {
-      "infiniteRepeatable requires a positive cycle duration, but the animation's totalDuration " +
-          "is zero (e.g. snap() or a zero-length tween) — it would loop forever with no progress."
+    require(animation.totalDurationNanos > 0L) {
+      "infiniteRepeatable requires a positive cycle duration, but the animation's " +
+          "totalDurationNanos is ${animation.totalDurationNanos}. A zero-length cycle " +
+          "(e.g. snap() or a zero-length tween) would loop forever with no progress."
     }
   }
 
@@ -172,7 +176,7 @@ private fun <T> repeatableAnimator(
       innerAnimator = inner,
       reverseAnimator = reverse,
       iterations = iterations,
-      cycleDurationNanos = animation.totalDuration.inWholeNanoseconds,
+      cycleDurationNanos = animation.totalDurationNanos,
       startShiftNanos = startOffset.signedNanos,
       durationNanos = durationNanos,
       initialValue = initialValue,
