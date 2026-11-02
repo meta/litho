@@ -190,6 +190,37 @@ class DebugLayoutNode internal constructor(private val result: LithoLayoutResult
   val touchHandler: EventHandler<TouchEvent>?
     get() = node.nodeInfo?.touchHandler
 
+  /** The class name a screen reader announces this node as, e.g. [AccessibilityRole.SWITCH]. */
+  val accessibilityRole: String?
+    get() = node.nodeInfo?.accessibilityRole
+
+  val accessibilityRoleDescription: CharSequence?
+    get() = node.nodeInfo?.accessibilityRoleDescription
+
+  val stateDescription: CharSequence?
+    get() = node.nodeInfo?.stateDescription
+
+  /** Null when not declared. */
+  val selected: Boolean?
+    get() =
+        when (node.nodeInfo?.selectedState) {
+          NodeInfo.SELECTED_SET_TRUE -> true
+          NodeInfo.SELECTED_SET_FALSE -> false
+          else -> null
+        }
+
+  /** Null when not declared. */
+  val enabled: Boolean?
+    get() =
+        when (node.nodeInfo?.enabledState) {
+          NodeInfo.ENABLED_SET_TRUE -> true
+          NodeInfo.ENABLED_SET_FALSE -> false
+          else -> null
+        }
+
+  val accessibilityHeading: Boolean
+    get() = node.nodeInfo?.accessibilityHeadingState == NodeInfo.ACCESSIBILITY_HEADING_SET_TRUE
+
   // The laid-out geometry is read from the result, not its Yoga node: a `Layout`'s output has its
   // own, and a `Layout` child's margins are applied by its container.
 
