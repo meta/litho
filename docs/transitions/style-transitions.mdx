@@ -36,6 +36,9 @@ When `expanded` or `enabled` changes, Litho starts the relevant animations from
 the previous mounted value or in-flight animated value and retargets them to the
 new mounted value. You do not provide explicit `from` or `to` values.
 
+Style transitions follow the [system duration scale](state-based-animations.mdx#system-duration-scale),
+including reflow. When animations are disabled, they apply the declared target on the next frame.
+
 ## When to use it
 
 Use `Style.transition {}` when the final layout should be applied immediately

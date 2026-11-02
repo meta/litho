@@ -250,7 +250,9 @@ internal constructor(
     val anim = currentAnimator ?: return 0
     if (runOriginNanos == UNSET_RUN_ORIGIN) runOriginNanos = playTimeNanos
     isActive = true
-    val playTime = playTimeNanos - runOriginNanos
+    val playTime =
+        if (AnimationController.durationScale == 0f && anim.durationNanos >= 0L) anim.durationNanos
+        else playTimeNanos - runOriginNanos
     val newValue = anim.getValue(playTime)
     val changed = _currentValue != newValue
     _currentValue = newValue
@@ -264,6 +266,13 @@ internal constructor(
             (if (changed) FRAME_CHANGED else 0) or
             (if (finished) FRAME_FINISHED else 0)
     return frameUpdate
+  }
+
+  internal fun prepareDisabledValue(value: T) {
+    frameUpdate = if (_currentValue != value) FRAME_CHANGED else 0
+    _currentValue = value
+    resetFrameState()
+    isActive = false
   }
 
   @MainThread

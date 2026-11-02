@@ -42,7 +42,10 @@ internal interface AnimationFrameDriver {
 }
 
 internal fun interface FrameDrivenAnimation {
-  /** Ticks this animation and returns true if it should stay registered for the next frame. */
+  /**
+   * Ticks in system-scaled animation time and returns whether to stay registered. These timestamps
+   * must not be compared with wall time; disabled owners may stay registered without ticking.
+   */
   fun onFrame(frameTimeNanos: Long): Boolean
 }
 

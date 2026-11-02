@@ -16,8 +16,10 @@
 
 package com.facebook.litho.animation
 
+import android.content.Context
 import android.view.Choreographer
 import androidx.annotation.MainThread
+import androidx.annotation.VisibleForTesting
 import com.facebook.rendercore.thread.utils.ThreadUtils
 import java.util.ArrayDeque
 
@@ -26,7 +28,7 @@ import java.util.ArrayDeque
  *
  * On each frame, all registered animations are ticked via [FrameDrivenAnimation.onFrame]. Terminal
  * notifications are delivered after value invalidations flush. A frame remains scheduled while
- * either animations or notifications need work.
+ * either motion or notifications need work.
  *
  * ## Frame Coalescing
  *
@@ -46,21 +48,60 @@ object AnimationController {
   private val completions = ArrayDeque<PostFrameCallback>()
   private val frameCallback = Choreographer.FrameCallback(::onFrame)
   private var frameScheduled = false
+  private var frameRequested = false
   private var isDispatchingFrame = false
   private var frameDriver: AnimationFrameDriver = ChoreographerAnimationFrameDriver
+  private val systemDurationScale = SystemDurationScale(::updateDurationScale)
+  private var segmentWallStartNanos = Long.MIN_VALUE
+  private var segmentAnimationStartNanos = 0L
+  private var lastWallTimeNanos = Long.MIN_VALUE
 
-  /** Returns true if any animations are currently running. */
+  internal var durationScale: Float = 1f
+    private set
+
+  /** Running motion excludes system-disabled animations; false does not imply callbacks drained. */
   val hasRunningAnimations: Boolean
-    get() = activeAnimations.isNotEmpty()
+    get() = durationScale > 0f && activeAnimations.isNotEmpty()
+
+  @MainThread
+  internal fun bindContext(context: Context) {
+    systemDurationScale.bind(context)
+  }
+
+  private fun updateDurationScale(scale: Float) {
+    ThreadUtils.assertMainThread()
+    check(!isDispatchingFrame)
+    val normalized =
+        when {
+          !scale.isFinite() || scale < 0f -> 1f
+          scale == 0f -> 0f
+          else -> scale.coerceAtLeast(0.01f)
+        }
+    if (durationScale == normalized) return
+    if (lastWallTimeNanos != Long.MIN_VALUE) {
+      segmentAnimationStartNanos = animationTime(lastWallTimeNanos)
+      segmentWallStartNanos = lastWallTimeNanos
+    }
+    durationScale = normalized
+    if (activeAnimations.isNotEmpty() || completions.isNotEmpty()) scheduleFrame()
+  }
+
+  @MainThread
+  @VisibleForTesting
+  internal fun setDurationScaleForTest(scale: Float) {
+    check(systemDurationScale.isOverridden)
+    updateDurationScale(scale)
+  }
 
   /**
    * Registers an animation for frame callbacks. Called when an animation starts. Must be called on
    * the main thread.
    */
   @MainThread
-  internal fun register(animation: FrameDrivenAnimation) {
+  internal fun register(animation: FrameDrivenAnimation, forceFrame: Boolean = false) {
     ThreadUtils.assertMainThread()
-    if (activeAnimations.add(animation)) {
+    if (activeAnimations.add(animation) || forceFrame) {
+      if (isDispatchingFrame) frameRequested = true
       scheduleFrame()
     }
   }
@@ -89,21 +130,30 @@ object AnimationController {
    *
    * Any previously scheduled frame is cleared before the driver swap and after [block] completes so
    * tests start from and restore a clean controller state.
+   *
+   * @param observeSystemDurationScale Read and observe Android's animator duration scale. When
+   *   false, use scale 1 unless explicitly overridden by the test.
    */
   @MainThread
   internal inline fun <T> withFrameDriverForTest(
       driver: AnimationFrameDriver,
+      observeSystemDurationScale: Boolean = false,
       block: () -> T,
   ): T {
     ThreadUtils.assertMainThread()
-    val previousDriver = frameDriver
-    resetControllerState()
-    frameDriver = driver
-    return try {
-      block()
-    } finally {
+    return systemDurationScale.withOverride(observeSystemDurationScale) {
+      val previousDriver = frameDriver
+      val previousScale = durationScale
       resetControllerState()
-      frameDriver = previousDriver
+      frameDriver = driver
+      durationScale = 1f
+      try {
+        block()
+      } finally {
+        resetControllerState()
+        durationScale = previousScale
+        frameDriver = previousDriver
+      }
     }
   }
 
@@ -114,9 +164,12 @@ object AnimationController {
   }
 
   private fun cancelScheduledFrame() {
-    if (!frameScheduled) return
-    frameDriver.removeFrameCallback(frameCallback)
-    frameScheduled = false
+    frameRequested = false
+    if (frameScheduled) {
+      frameDriver.removeFrameCallback(frameCallback)
+      frameScheduled = false
+    }
+    if (!isDispatchingFrame) freezeTime()
   }
 
   private fun resetControllerState() {
@@ -125,14 +178,40 @@ object AnimationController {
     activeAnimations.clear()
     completions.clear()
     AnimationInvalidationDispatcher.clear()
+    segmentWallStartNanos = Long.MIN_VALUE
+    segmentAnimationStartNanos = 0L
+    lastWallTimeNanos = Long.MIN_VALUE
+  }
+
+  private fun animationTime(wallTimeNanos: Long): Long {
+    val elapsed = wallTimeNanos - segmentWallStartNanos
+    val scaled =
+        when (durationScale) {
+          0f -> 0L
+          1f -> elapsed
+          else -> (elapsed / durationScale.toDouble()).toLong()
+        }
+    return segmentAnimationStartNanos + scaled
+  }
+
+  private fun freezeTime() {
+    if (lastWallTimeNanos == Long.MIN_VALUE) return
+    segmentAnimationStartNanos = animationTime(lastWallTimeNanos)
+    segmentWallStartNanos = Long.MIN_VALUE
+    lastWallTimeNanos = Long.MIN_VALUE
   }
 
   @MainThread
   private fun onFrame(frameTimeNanos: Long) {
     ThreadUtils.assertMainThread()
     check(!isDispatchingFrame) { "AnimationController frame dispatch is not re-entrant" }
+    if (activeAnimations.isNotEmpty()) systemDurationScale.initialize()
     frameScheduled = false
+    frameRequested = false
     isDispatchingFrame = true
+    if (segmentWallStartNanos == Long.MIN_VALUE) segmentWallStartNanos = frameTimeNanos
+    lastWallTimeNanos = frameTimeNanos
+    val animationTimeNanos = animationTime(frameTimeNanos)
     try {
       if (activeAnimations.isNotEmpty()) {
         // Ticking may change registrations; completion delivery happens after the batch flush.
@@ -140,7 +219,7 @@ object AnimationController {
         AnimationInvalidationDispatcher.batch {
           for (animation in snapshot) {
             if (!activeAnimations.contains(animation)) continue
-            if (!animation.onFrame(frameTimeNanos)) {
+            if (!animation.onFrame(animationTimeNanos)) {
               activeAnimations.remove(animation)
             }
           }
@@ -149,7 +228,15 @@ object AnimationController {
       dispatchCompletions()
     } finally {
       isDispatchingFrame = false
-      if (activeAnimations.isNotEmpty() || completions.isNotEmpty()) scheduleFrame()
+      if (
+          completions.isNotEmpty() ||
+              (activeAnimations.isNotEmpty() && (durationScale > 0f || frameRequested))
+      ) {
+        scheduleFrame()
+      } else {
+        frameRequested = false
+        freezeTime()
+      }
     }
   }
 

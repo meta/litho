@@ -32,7 +32,7 @@ internal abstract class AnimationDriver : AnimationClock(), FrameDrivenAnimation
     }
     hasPendingWork = advance(tick(frameTimeNanos))
     val ticking = hasPendingWork && playback?.state != PlaybackState.Paused
-    if (!ticking) freeze()
+    if (!ticking || AnimationController.durationScale == 0f) freeze()
     return ticking
   }
 
@@ -47,10 +47,10 @@ internal abstract class AnimationDriver : AnimationClock(), FrameDrivenAnimation
     reconcilePlayback()
   }
 
-  fun updatePendingWork(pending: Boolean) {
+  fun updatePendingWork(pending: Boolean, forceFrame: Boolean = false) {
     ThreadUtils.assertMainThread()
     hasPendingWork = pending
-    reconcilePlayback()
+    reconcilePlayback(forceFrame)
   }
 
   fun stop() {
@@ -63,9 +63,9 @@ internal abstract class AnimationDriver : AnimationClock(), FrameDrivenAnimation
     playback = null
   }
 
-  internal fun reconcilePlayback() {
+  internal fun reconcilePlayback(forceFrame: Boolean = false) {
     if (hasPendingWork && playback?.state != PlaybackState.Paused) {
-      AnimationController.register(this)
+      AnimationController.register(this, forceFrame)
     } else {
       AnimationController.unregister(this)
       freeze()

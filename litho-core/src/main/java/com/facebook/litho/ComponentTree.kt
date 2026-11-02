@@ -46,6 +46,7 @@ import com.facebook.litho.RenderSourceUtils.getSource
 import com.facebook.litho.StateContainer.StateUpdate
 import com.facebook.litho.ThreadUtils.assertMainThread
 import com.facebook.litho.ThreadUtils.isMainThread
+import com.facebook.litho.animation.AnimationController
 import com.facebook.litho.animation.AnimationFrameInvalidation
 import com.facebook.litho.annotations.ExperimentalLithoApi
 import com.facebook.litho.config.ComponentsConfiguration
@@ -832,6 +833,7 @@ open class ComponentTree protected constructor(builder: Builder) :
     val layoutState =
         requireNotNull(_mainThreadLayoutState) { "mainThreadLayoutState should not be null" }
 
+    AnimationController.bindContext(layoutState.componentContext.androidContext)
     val isReadTrackingEnabled = context.isReadTrackingEnabled
     val treeState: TreeState? = uiTreeState
     val committedState = getCommittedTreeStateSync()

@@ -238,7 +238,9 @@ internal class StyleTransitionManager {
       if (startTimeNanos == Long.MIN_VALUE || startTimeNanos > frameTimeNanos) {
         startTimeNanos = frameTimeNanos
       }
-      lastPlayTimeNanos = frameTimeNanos - startTimeNanos
+      lastPlayTimeNanos =
+          if (AnimationController.durationScale == 0f) animator.durationNanos
+          else frameTimeNanos - startTimeNanos
       lastValue = animator.getValue(lastPlayTimeNanos)
       return lastValue
     }

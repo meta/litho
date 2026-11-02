@@ -27,11 +27,11 @@ import org.junit.runners.model.Statement
  * JUnit rule that installs a deterministic animation frame driver for the duration of a test.
  *
  * This rule keeps [AnimationController] global while giving animation tests explicit control over
- * frame delivery and frame timestamps. [advanceBy] and [advanceTo] advance animation elapsed time:
- * if an animation is scheduled but has not received its first frame yet, the rule first dispatches
- * a frame at the current test time, then advances to the requested time. Tests that need Litho or
- * Robolectric work flushed after each frame can provide [afterFrame], for example
- * `shadowOf(getMainLooper()).idle()`.
+ * frame delivery and frame timestamps. Tests use duration scale 1 unless [durationScale] is set.
+ * [advanceBy] and [advanceTo] advance wall time: if an animation is scheduled but has not received
+ * its first frame yet, the rule first dispatches a frame at the current test time, then advances to
+ * the requested time. Tests that need Litho or Robolectric work flushed after each frame can
+ * provide [afterFrame], for example `shadowOf(getMainLooper()).idle()`.
  */
 class LithoAnimationTestRule(
     private val afterFrame: () -> Unit = {},
@@ -42,6 +42,13 @@ class LithoAnimationTestRule(
   val currentTimeNanos: Long
     get() = frameDriver.currentFrameTimeNanos
 
+  /** Override during a test; defaults to 1. Zero disables motion; positive scales floor at 0.01. */
+  var durationScale: Float
+    get() = AnimationController.durationScale
+    set(value) {
+      AnimationController.setDurationScaleForTest(value)
+    }
+
   fun hasScheduledFrames(): Boolean = frameDriver.hasScheduledFrameCallbacks()
 
   /** Runs one raw frame after [frameDelay]. New duration-based animations start on this frame. */
@@ -49,19 +56,17 @@ class LithoAnimationTestRule(
     frameDriver.runNextFrame(frameDelay, afterFrame)
   }
 
-  /** Advances animation elapsed time by [duration], bootstrapping newly scheduled animations. */
+  /** Advances wall time by [duration], bootstrapping newly scheduled animations. */
   fun advanceBy(duration: Duration) {
     frameDriver.advanceBy(duration, afterFrame)
   }
 
-  /**
-   * Advances animation elapsed time until [frameTime], bootstrapping newly scheduled animations.
-   */
+  /** Advances wall time until [frameTime], bootstrapping newly scheduled animations. */
   fun advanceTo(frameTime: Duration) {
     frameDriver.advanceTo(frameTime, afterFrame)
   }
 
-  /** Advances animation elapsed time until [frameTimeNanos], bootstrapping scheduled animations. */
+  /** Advances wall time until [frameTimeNanos], bootstrapping scheduled animations. */
   fun advanceTo(frameTimeNanos: Long) {
     frameDriver.advanceTo(frameTimeNanos, afterFrame)
   }

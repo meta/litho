@@ -46,6 +46,16 @@ example above, when the alpha animates, layout and resolve are skipped entirely.
 because `Value<T>` integrates with Litho's state read tracking: the framework knows exactly which
 phases read the value and only re-runs those. As a result, updates are smooth and efficient.
 
+## System duration scale
+
+Modern Litho animations follow Android's animator duration scale, including springs and
+`Style.transition`. Changes preserve progress. Positive scales below `0.01` use `0.01`.
+
+When animations are disabled, finite runs reach their natural endpoint on the next eligible
+frame and deliver normal completion callbacks. Reverse repeats can end at their starting value.
+Infinite groups show each slot's `from` value and restart when animations are enabled again.
+Explicitly paused animations hold until played.
+
 ## Quick Start
 
 ```kotlin

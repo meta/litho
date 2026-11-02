@@ -18,6 +18,7 @@ package com.facebook.litho.animation
 
 import com.facebook.rendercore.ms
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.nanoseconds
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.Test
@@ -44,14 +45,72 @@ class AnimationControllerTest {
       assertThat(frameDriver.hasScheduledFrameCallbacks()).isTrue()
 
       frameDriver.runNextFrame(100.ms)
-      assertThat(frames).containsExactly(100.ms.inWholeNanoseconds)
+      assertThat(frames).containsExactly(0L)
       assertThat(AnimationController.hasRunningAnimations).isTrue()
       assertThat(frameDriver.hasScheduledFrameCallbacks()).isTrue()
 
       frameDriver.runNextFrame(150.ms)
-      assertThat(frames).containsExactly(100.ms.inWholeNanoseconds, 250.ms.inWholeNanoseconds)
+      assertThat(frames).containsExactly(0L, 150.ms.inWholeNanoseconds)
       assertThat(AnimationController.hasRunningAnimations).isFalse()
       assertThat(frameDriver.hasScheduledFrameCallbacks()).isFalse()
+    }
+  }
+
+  @Test
+  fun scaledSegmentsPreserveContinuityAndExcludeIdle() {
+    val driver = TestAnimationFrameDriver()
+    val times = mutableListOf<Long>()
+    val animation = FrameDrivenAnimation { timeNanos ->
+      times.add(timeNanos)
+      true
+    }
+    AnimationController.withFrameDriverForTest(driver) {
+      AnimationController.register(animation)
+      driver.runNextFrame(100.ms)
+      driver.runNextFrame(200.ms)
+      AnimationController.setDurationScaleForTest(2f)
+      driver.runNextFrame(200.ms)
+      AnimationController.setDurationScaleForTest(1f)
+      driver.runNextFrame(1.nanoseconds)
+      assertThat(times).containsExactly(0L, 200_000_000L, 300_000_000L, 300_000_001L)
+
+      AnimationController.unregister(animation)
+      driver.runNextFrame(60_000.ms)
+      AnimationController.register(animation)
+      driver.runNextFrame(16.ms)
+      assertThat(times.last()).isEqualTo(300_000_001L)
+      driver.runNextFrame(1.nanoseconds)
+      assertThat(times.last()).isEqualTo(300_000_002L)
+    }
+  }
+
+  @Test
+  fun scaleNormalizationPreservesZeroAndBoundsPositiveSpeed() {
+    val driver = TestAnimationFrameDriver()
+    val times = mutableListOf<Long>()
+    AnimationController.withFrameDriverForTest(driver) {
+      for (scale in listOf(-1f, Float.NaN, Float.POSITIVE_INFINITY)) {
+        AnimationController.setDurationScaleForTest(scale)
+        assertThat(AnimationController.durationScale).isEqualTo(1f)
+      }
+      AnimationController.setDurationScaleForTest(Float.MIN_VALUE)
+      assertThat(AnimationController.durationScale).isEqualTo(0.01f)
+      AnimationController.register(
+          FrameDrivenAnimation { timeNanos ->
+            times.add(timeNanos)
+            true
+          },
+      )
+      driver.runNextFrame(1.ms)
+      driver.runNextFrame(1.ms)
+      assertThat(times).containsExactly(0L, (1_000_000L / 0.01f.toDouble()).toLong())
+
+      AnimationController.setDurationScaleForTest(0f)
+      assertThat(AnimationController.durationScale).isZero()
+      assertThat(AnimationController.hasRunningAnimations).isFalse()
+      driver.runNextFrame(1.ms)
+      assertThat(times.last()).isEqualTo(times[times.lastIndex - 1])
+      assertThat(driver.hasScheduledFrameCallbacks()).isFalse()
     }
   }
 

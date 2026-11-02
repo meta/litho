@@ -201,23 +201,36 @@ internal class InfiniteAnimationGroupState(
     val runStateChanged = running != wasRunning
     wasRunning = running
 
+    var restarted = false
     for (slot in animatedValues.indices) {
       val configChanged = !firstReconcile && !record.slots[slot].configEquals(previous.slots[slot])
       if (!runStateChanged && !configChanged) continue
       when {
-        running -> restartSlot(slot)
+        running -> {
+          restartSlot(slot)
+          restarted = true
+        }
         configChanged -> snapSlot(slot)
         else -> stopSlot(slot)
       }
     }
-    driver.updatePendingWork(animatedValues.hasAnimator())
+    driver.updatePendingWork(animatedValues.hasAnimator(), forceFrame = restarted)
   }
 
   private fun onFrame(playTimeNanos: Long): Boolean {
     val values = animatedValues
-    for (slot in values.indices) values[slot].evaluateFrame(playTimeNanos)
+    for (slot in values.indices) {
+      if (AnimationController.durationScale == 0f) prepareDisabledSlot(slot)
+      else values[slot].evaluateFrame(playTimeNanos)
+    }
     for (slot in values.indices) values[slot].publishFrame()
     return animatedValues.hasAnimator()
+  }
+
+  @Suppress("UNCHECKED_CAST")
+  private fun prepareDisabledSlot(slot: Int) {
+    val value = animatedValues[slot] as AnimatedValue<Any?>
+    value.prepareDisabledValue(record.slots[slot].from)
   }
 
   private fun createSlotValue(description: InfiniteSlotDescriptor<*>): AnimatedValue<*> {

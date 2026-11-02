@@ -20,6 +20,7 @@ import android.view.View
 import androidx.annotation.UiThread
 import com.facebook.kotlin.compilerplugins.dataclassgenerate.annotation.DataClassGenerate
 import com.facebook.kotlin.compilerplugins.dataclassgenerate.annotation.Mode
+import com.facebook.litho.animation.AnimationController
 import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.state.StateId
 import com.facebook.litho.state.TreeStateProvider
@@ -126,6 +127,7 @@ object NestedLithoTree {
   }
 
   fun LayoutState.commit() {
+    AnimationController.bindContext(componentContext.androidContext)
     val components = consumeComponentScopes()
     val stateUpdater = checkNotNull(componentContext.stateUpdater)
     val mountedView = checkNotNull(componentContext.lithoTree).rootHost
