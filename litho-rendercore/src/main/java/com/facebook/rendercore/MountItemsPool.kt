@@ -45,6 +45,7 @@ object MountContentPools {
   private var mountItemPoolsReleaseValidator: MountItemPoolsReleaseValidator? = null
 
   const val ATTACHED_VIEW_RELEASED_CATEGORY: String = "MountContentPools:ReleasedAttachedView"
+  const val ATTACHED_VIEW_ACQUIRED_CATEGORY: String = "MountContentPools:AcquiredAttachedView"
   private const val MAX_REPORTED_PARENTS: Int = 4
 
   /** A factory used to create [MountContentPools.ContentPool]s. */
@@ -104,7 +105,9 @@ object MountContentPools {
               allocator = poolableMountContent,
               poolScope = poolScope,
           )
-          pool?.acquire(poolableMountContent)
+          pool?.acquire(poolableMountContent)?.let { content ->
+            discardIfAttached(content, poolableMountContent)
+          }
         } else {
           null
         }
@@ -130,6 +133,27 @@ object MountContentPools {
             mountItemPoolsReleaseValidator?.registerAcquiredViewState(content)
           }
         }
+  }
+
+  /**
+   * Something outside the pool can still hold a pooled View and give it a parent: an Android
+   * `Visibility` transition re-parents Views it saw disappear into the scene root's overlay, even
+   * after they were cleanly unmounted and released. Mounting such a View throws in `addView`, so
+   * the pool drops it and the caller creates new content. The holder that attached it keeps owning
+   * it, so `onContentDiscarded` is not called: it would release resources that holder is still
+   * drawing.
+   */
+  private fun discardIfAttached(content: Any, allocator: ContentAllocator<*>): Any? {
+    if (content !is View || content.parent == null) {
+      return content
+    }
+    reportAttachedView(
+        ATTACHED_VIEW_ACQUIRED_CATEGORY,
+        "Acquired",
+        content,
+        allocator.poolKeyTypeName,
+    )
+    return null
   }
 
   @JvmStatic
@@ -173,7 +197,14 @@ object MountContentPools {
       }
 
       if (mountContent is View && mountContent.parent != null) {
-        reportAttachedViewReleased(mountContent, poolableMountContent.poolKeyTypeName)
+        reportAttachedView(
+            ATTACHED_VIEW_RELEASED_CATEGORY,
+            "Released",
+            mountContent,
+            poolableMountContent.poolKeyTypeName,
+        )
+        // Owned by whoever attached it; see discardIfAttached.
+        return
       }
 
       if (mountItemPoolsReleaseValidator != null && mountContent is View) {
@@ -200,19 +231,14 @@ object MountContentPools {
   /**
    * A pooled View that still has a parent crashes the next mount that acquires it, in
    * `ViewGroup.addView` ("The specified child already has a parent"), far from the code that
-   * released it. Reporting here captures the release stack instead.
+   * attached it. Reporting here captures the stack of the release or acquire instead.
    */
-  private fun reportAttachedViewReleased(view: View, poolKey: String) {
+  private fun reportAttachedView(category: String, action: String, view: View, poolKey: String) {
     val message =
-        "Released a View to the mount content pool while it is still attached: " +
+        "$action a View from the mount content pool while it is still attached: " +
             "content=${view.javaClass.name}, pool=$poolKey, " +
             "attachedToWindow=${view.isAttachedToWindow}, parents=${describeParents(view)}"
-    ErrorReporter.report(
-        LogLevel.ERROR,
-        ATTACHED_VIEW_RELEASED_CATEGORY,
-        message,
-        IllegalStateException(message),
-    )
+    ErrorReporter.report(LogLevel.ERROR, category, message, IllegalStateException(message))
   }
 
   private fun describeParents(view: View): String {

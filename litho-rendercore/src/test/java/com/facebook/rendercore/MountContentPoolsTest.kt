@@ -93,6 +93,39 @@ class MountContentPoolsTest {
   }
 
   @Test
+  fun testAttachedViewIsDroppedWithoutDiscardingItsContent() {
+    captureReports()
+    val testRenderUnit = TestRenderUnit(0)
+    val content = acquireMountContent(context, testRenderUnit) as View
+    FrameLayout(context).addView(content)
+
+    recycle(context, testRenderUnit, content)
+
+    Assertions.assertThat(getContentPoolItemCount(context, testRenderUnit)).isZero
+    Assertions.assertThat(testRenderUnit.contentDiscardedCount).isZero
+    Assertions.assertThat(acquireMountContent(context, testRenderUnit)).isNotSameAs(content)
+  }
+
+  @Test
+  fun testViewAttachedWhilePooledIsReportedAndNotReused() {
+    val reports = captureReports()
+    val testRenderUnit = TestRenderUnit(0)
+    val content = acquireMountContent(context, testRenderUnit) as View
+    recycle(context, testRenderUnit, content)
+    // Something outside the pool, e.g. a transition overlay, re-parents the pooled View.
+    FrameLayout(context).addView(content)
+
+    val acquired = acquireMountContent(context, testRenderUnit)
+
+    Assertions.assertThat(acquired).isNotSameAs(content)
+    Assertions.assertThat(testRenderUnit.contentDiscardedCount).isZero
+    Assertions.assertThat(reports).hasSize(1)
+    Assertions.assertThat(reports[0].second)
+        .isEqualTo(MountContentPools.ATTACHED_VIEW_ACQUIRED_CATEGORY)
+    Assertions.assertThat(reports[0].third).contains("parents=${FrameLayout::class.java.name}")
+  }
+
+  @Test
   fun testReleasingDetachedViewDoesNotReportError() {
     val reports = captureReports()
     val testRenderUnit = TestRenderUnit(0)
