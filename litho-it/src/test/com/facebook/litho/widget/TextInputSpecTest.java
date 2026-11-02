@@ -23,6 +23,7 @@ import static org.mockito.Mockito.mock;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.drawable.Drawable;
+import android.text.Editable;
 import android.text.Layout;
 import android.text.Selection;
 import android.text.method.ArrowKeyMovementMethod;
@@ -301,6 +302,30 @@ public class TextInputSpecTest {
     final CharSequence text = TextInput.getText(lithoTestRule.context, handle);
     assertThat(text).isNotNull();
     assertThat(text.toString()).isEqualTo("text for test");
+  }
+
+  @Test
+  public void textInput_onTextChanged_whenSnapshotEnabled_savesDetachedText() {
+    final boolean previousValue = ComponentsConfiguration.snapshotTextInputTextOnTextChanged;
+    try {
+      ComponentsConfiguration.snapshotTextInputTextOnTextChanged = true;
+      final Handle handle = new Handle();
+      final TestLithoView testLithoView =
+          lithoTestRule.render(
+              componentScope -> TextInput.create(lithoTestRule.context).handle(handle).build());
+      final EditText editText = getEditText(testLithoView.getLithoView());
+
+      editText.getText().append("before");
+      final Editable liveText = editText.getText();
+      testLithoView.getLithoView().unmountAllItems();
+      liveText.append(" after");
+
+      final CharSequence savedText = TextInput.getText(lithoTestRule.context, handle);
+      assertThat(savedText).isNotSameAs(liveText);
+      assertThat(savedText.toString()).isEqualTo("before");
+    } finally {
+      ComponentsConfiguration.snapshotTextInputTextOnTextChanged = previousValue;
+    }
   }
 
   @Test
