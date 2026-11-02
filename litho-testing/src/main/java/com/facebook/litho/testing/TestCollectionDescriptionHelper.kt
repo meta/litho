@@ -76,7 +76,7 @@ object TestCollectionDescriptionHelper {
   private fun viewExtraTextExtractor(view: View?): String? {
     if (view is TextView || view is ComponentHost) {
       val textOutput =
-          ViewExtractors.GET_TEXT_FUNCTION.apply(view)?.takeUnless {
+          ViewExtractors.GET_TEXT_FUNCTION.apply(view).takeUnless {
             it.startsWith("No text found")
           }
       if (textOutput != null) {
@@ -86,7 +86,7 @@ object TestCollectionDescriptionHelper {
 
     if (view is ImageView || view is ComponentHost) {
       val textOutput =
-          ViewExtractors.GET_DRAWABLE_FUNCTION.apply(view)?.takeUnless {
+          ViewExtractors.GET_DRAWABLE_FUNCTION.apply(view).takeUnless {
             it.startsWith("No drawable found")
           }
       if (textOutput != null) {
