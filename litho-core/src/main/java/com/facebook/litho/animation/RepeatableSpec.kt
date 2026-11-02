@@ -80,9 +80,9 @@ private data class RepeatableSpec<T>(
     val animation: DurationBasedAnimationSpec<T>,
     val repeatMode: RepeatMode,
     val initialStartOffset: StartOffset,
-) : FiniteAnimationSpec<T> {
+) : FiniteAnimationSpec<T>, DeclaredDurationSpec {
 
-  private val durationNanos: Long = run {
+  override val declaredDurationNanos: Long = run {
     require(iterations > 0) { "iterations must be positive, but was $iterations" }
     val cycleDurationNanos = animation.totalDurationNanos
     require(cycleDurationNanos >= 0L) {
@@ -109,7 +109,7 @@ private data class RepeatableSpec<T>(
       repeatMode,
       iterations,
       initialStartOffset,
-      durationNanos,
+      declaredDurationNanos,
       initialValue,
       targetValue,
       typeConverter,

@@ -239,19 +239,34 @@ class AnimatableTest {
 
   @Test
   fun equalEndpointCommand_preservesTimedWork() {
-    lithoTestRule.render { ImperativeAlphaComponent() }
-    lithoTestRule.idle()
-    val outcomes = mutableListOf<AnimationEnd>()
-    val animatable = checkNotNull(capturedAnimatable)
+    val specs = listOf(
+        tween<Float>(1_000.ms) to 0f,
+        chain<Float> {
+          animateTo(1f, tween(400.ms, Easing.Linear))
+          wait(200.ms)
+          animateToTarget(tween(400.ms, Easing.Linear))
+        } to 1f,
+    )
+    for ((spec, midpoint) in specs) {
+      val view = lithoTestRule.render { ImperativeAlphaComponent() }
+      lithoTestRule.idle()
+      val outcomes = mutableListOf<AnimationEnd>()
+      val animatable = checkNotNull(capturedAnimatable)
 
-    animatable.animateTo(0f, tween(duration = 1_000.ms)) { outcomes.add(it) }
-    animationRule.advanceBy(500.ms)
+      animatable.animateTo(0f, spec) { outcomes.add(it) }
+      assertThat(animatable.value.value).isZero()
+      assertThat(outcomes).isEmpty()
+      animationRule.advanceBy(500.ms)
 
-    assertThat(animatable.isRunning).isTrue()
-    assertThat(outcomes).isEmpty()
-    animationRule.advanceBy(500.ms)
-    assertThat(outcomes).containsExactly(AnimationEnd.Finished)
-    assertThat(animationRule.hasScheduledFrames()).isFalse()
+      assertThat(animatable.value.value).isEqualTo(midpoint)
+      assertThat(animatable.isRunning).isTrue()
+      assertThat(outcomes).isEmpty()
+      animationRule.advanceBy(500.ms)
+      assertThat(animatable.value.value).isZero()
+      assertThat(outcomes).containsExactly(AnimationEnd.Finished)
+      assertThat(animationRule.hasScheduledFrames()).isFalse()
+      view.release()
+    }
   }
 
   @Test

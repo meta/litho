@@ -139,7 +139,7 @@ internal fun FiniteAnimationSpec<Float>.withDefaultVisibilityThreshold(
 ): FiniteAnimationSpec<Float> =
     if (this is SpringSpec<Float> && visibilityThreshold == null)
         copy(visibilityThreshold = threshold)
-    else this
+    else withCompositionVisibilityThreshold(threshold)
 
 private fun AnimationVector?.isNullOrZero(): Boolean {
   if (this == null) return true

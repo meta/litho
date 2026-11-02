@@ -119,12 +119,24 @@ class SystemDurationScaleTest {
     animationRule.durationScale = 0f
     view.setRoot(Mixed(1f, playback, onSettled = { settled.add(it) }))
     lithoTestRule.idle()
-    command.animateTo(1f, tween(1_000.ms, delay = 500.ms)) { ends.add(it) }
-    assertThat(ends).isEmpty()
-    animationRule.runNextFrame()
-    view.measure().layout()
-    assertThat(command.value.value).isEqualTo(1f)
-    assertThat(ends).containsExactly(AnimationEnd.Finished)
+    val specs = listOf(
+        tween<Float>(1_000.ms, delay = 500.ms),
+        chain<Float> {
+              animateTo(2f, tween(300.ms))
+              wait(500.ms)
+              animateToTarget(spring())
+            }
+            .delayed(200.ms),
+    )
+    for (spec in specs) {
+      ends.clear()
+      command.animateTo(1f, spec) { ends.add(it) }
+      assertThat(ends).isEmpty()
+      animationRule.runNextFrame()
+      view.measure().layout()
+      assertThat(command.value.value).isEqualTo(1f)
+      assertThat(ends).containsExactly(AnimationEnd.Finished)
+    }
     assertThat(single.value).isEqualTo(0f)
     assertThat(settled).isEmpty()
     assertThat(view.findViewWithTag("style").rotation).isEqualTo(100f)

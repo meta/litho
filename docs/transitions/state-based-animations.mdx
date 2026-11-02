@@ -309,6 +309,33 @@ APIs (`useAnimated*`, `useAnimationGroup`, `Style.transition`, `AnimatedVisibili
 `AnimatedContent`) require a `FiniteAnimationSpec`, so an infinite spec can only be used with
 [`useInfiniteAnimationGroup`](#infinite-animations).
 
+### delayed and chain
+
+Use `delayed` to wait before running any finite spec, including springs:
+
+```kotlin
+val entrance = spring<Float>().delayed(80.ms)
+```
+
+Use `chain` for absolute intermediate targets and waits. End with `animateToTarget`, which uses the
+target supplied to the animation:
+
+```kotlin
+val pulse = chain<Float> {
+  animateTo(1.2f, spring(stiffness = Stiffness.High))
+  wait(80.ms)
+  animateToTarget(tween(200.ms))
+}
+scale.animateTo(1f, pulse)
+```
+
+A chain can move even when its initial and target values are equal. Each leg keeps its
+natural endpoint; velocity does not carry between legs. Delays and waits follow playback
+pause and system duration scale. A positive delay discards incoming velocity; zero delay
+preserves it. Delayed duration-based specs remain usable with repeat combinators.
+Repeating a delayed spec holds at the start of each forward or reverse leg. Use `keyframes`
+for repeated motion through several intermediate values.
+
 ### spring
 
 Physics-based spring animation. Produces natural, interruptible motion.

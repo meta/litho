@@ -329,6 +329,12 @@ class AnimationSettlementTest {
         tween<Float>(duration = 1_000.ms) to 1f,
         repeatable<Float>(iterations = 2, animation = tween(500.ms)) to 1f,
         keyframes<Float>(1_000.ms) { 0.5f at 500.ms } to 0.5f,
+        spring<Float>().delayed(1_000.ms) to 1f,
+        chain<Float> {
+          animateTo(0.5f, tween(400.ms, Easing.Linear))
+          wait(200.ms)
+          animateToTarget(tween(400.ms, Easing.Linear))
+        } to 0.5f,
     )
     for ((spec, midpoint) in specs) {
       val notifications = mutableListOf<Boolean>()
