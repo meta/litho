@@ -24,15 +24,29 @@ import com.facebook.litho.state.StateId
  * be used during creation of [ComponentTree]
  */
 class StateUpdaterDelegator : StateUpdater {
+  @Volatile
   var delegate: StateUpdater? = null
     private set
 
+  @Synchronized
   fun attachStateUpdater(stateUpdater: StateUpdater) {
     this.delegate = stateUpdater
   }
 
   fun detachStateUpdater() {
     this.delegate = null
+  }
+
+  /**
+   * Stops routing to [expected] if it is still the delegate, so a released [ComponentTree] can be
+   * garbage collected without detaching another tree attached since. Until another updater is
+   * attached, calls behave as they would on a released tree.
+   */
+  @Synchronized
+  fun detachStateUpdater(expected: StateUpdater) {
+    if (delegate === expected) {
+      delegate = DetachedStateUpdater
+    }
   }
 
   override var isFirstMount: Boolean
@@ -133,5 +147,83 @@ class StateUpdaterDelegator : StateUpdater {
 
   private fun <T> applyOnStateUpdater(body: StateUpdater.() -> T): T {
     return body(delegate ?: error("Delegate StateUpdater not set"))
+  }
+
+  // Mirrors a released ComponentTree: updates are dropped and lookups return nothing.
+  private object DetachedStateUpdater : StateUpdater {
+    override var isFirstMount: Boolean
+      get() = false
+      set(_) {}
+
+    override fun updateStateSync(
+        globalKey: GlobalKey,
+        stateUpdate: StateContainer.StateUpdate,
+        attribution: String?,
+        isLayoutState: Boolean,
+    ) = Unit
+
+    override fun updateStateAsync(
+        globalKey: GlobalKey,
+        stateUpdate: StateContainer.StateUpdate,
+        attribution: String?,
+        isLayoutState: Boolean,
+    ) = Unit
+
+    override fun updateStateLazy(
+        globalKey: GlobalKey,
+        stateUpdate: StateContainer.StateUpdate,
+        isLayoutState: Boolean,
+    ) = Unit
+
+    override fun updateHookStateAsync(
+        stateId: StateId,
+        updateBlock: HookUpdater,
+        attribution: String?,
+        isLayoutState: Boolean,
+    ) = Unit
+
+    override fun updateHookStateSync(
+        stateId: StateId,
+        updateBlock: HookUpdater,
+        attribution: String?,
+        isLayoutState: Boolean,
+    ) = Unit
+
+    override fun applyLazyStateUpdatesForContainer(
+        globalKey: GlobalKey,
+        container: StateContainer,
+        isLayoutState: Boolean,
+    ): StateContainer = container
+
+    override fun getCachedValue(
+        cacheKey: HookGlobalKey,
+        cachedValueInputs: Any,
+        isLayoutState: Boolean,
+    ): Any? = null
+
+    override fun putCachedValue(
+        cacheKey: HookGlobalKey,
+        cachedValueInputs: Any,
+        cachedValue: Any?,
+        isLayoutState: Boolean,
+    ) = Unit
+
+    override fun removePendingStateUpdate(key: GlobalKey, isLayoutState: Boolean) = Unit
+
+    override fun <T> canSkipStateUpdate(
+        stateId: StateId,
+        newValue: T?,
+        isLayoutState: Boolean,
+    ): Boolean = false
+
+    override fun <T> canSkipStateUpdate(
+        newValueFunction: (T) -> T,
+        stateId: StateId,
+        isLayoutState: Boolean,
+    ): Boolean = false
+
+    override fun getEventTrigger(key: Any): EventTrigger<*>? = null
+
+    override fun getEventTrigger(handle: Handle, id: Int): EventTrigger<*>? = null
   }
 }

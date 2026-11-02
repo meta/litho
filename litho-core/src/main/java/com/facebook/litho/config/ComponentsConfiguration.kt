@@ -104,6 +104,12 @@ internal constructor(
      */
     @JvmField val enableFixForIM: Boolean = false,
     /**
+     * When true, a released [com.facebook.litho.ComponentTree] detaches itself from its
+     * [com.facebook.litho.StateUpdaterDelegator], so it can be garbage collected while the
+     * delegator's owner (such as a ComponentTreeHolder) is alive.
+     */
+    @JvmField val detachStateUpdaterOnTreeRelease: Boolean = false,
+    /**
      * When true, [com.facebook.litho.BaseMountingView.notifyVisibleBoundsChanged] returns early
      * when the view is fully visible and its last mount already covered all of it, so a parent can
      * notify every nested view on each scroll frame (e.g. through a
@@ -627,6 +633,10 @@ internal constructor(
 
     fun enableFixForIM(enabled: Boolean): Builder = apply {
       config = config.copy(enableFixForIM = enabled)
+    }
+
+    fun detachStateUpdaterOnTreeRelease(enabled: Boolean): Builder = apply {
+      config = config.copy(detachStateUpdaterOnTreeRelease = enabled)
     }
 
     fun skipMountWhenFullyShownAndMounted(enabled: Boolean): Builder = apply {

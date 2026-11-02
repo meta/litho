@@ -3612,6 +3612,45 @@ class RecyclerBinderTest {
   }
 
   @Test
+  fun testDetachStateUpdaterOnTreeReleaseReachesHolders() {
+    val holderConfigurations = mutableListOf<ComponentsConfiguration>()
+    val holderFactory =
+        RecyclerBinder.ComponentTreeHolderFactory {
+            renderInfo,
+            layoutHandler,
+            measureListenerFactory,
+            componentsConfiguration,
+            lifecycleProvider ->
+          holderConfigurations.add(componentsConfiguration)
+          ComponentTreeHolder.create(componentsConfiguration)
+              .renderInfo(renderInfo)
+              .layoutHandler(layoutHandler)
+              .componentTreeMeasureListenerFactory(measureListenerFactory)
+              .lithoVisibilityEventsController(lifecycleProvider)
+              .build()
+        }
+    val recyclerBinder =
+        RecyclerBinder.Builder()
+            .componentTreeHolderFactory(holderFactory)
+            .recyclerBinderConfig(
+                RecyclerBinderConfig.create()
+                    .componentsConfiguration(
+                        ComponentsConfiguration.create()
+                            .detachStateUpdaterOnTreeRelease(true)
+                            .build(),
+                    )
+                    .build(),
+            )
+            .build(componentContext)
+
+    recyclerBinder.insertItemAt(0, createTestComponentRenderInfo())
+    recyclerBinder.insertItemAt(1, createTestComponentRenderInfo())
+
+    assertThat(holderConfigurations).hasSize(2)
+    assertThat(holderConfigurations).allMatch { it.detachStateUpdaterOnTreeRelease }
+  }
+
+  @Test
   fun testPendingAsyncBatchesDebugInfo_doesNotHoldBinderLockWhileInspectingHolder() {
     lateinit var pendingHolder: ComponentTreeHolder
     val holderFactory =

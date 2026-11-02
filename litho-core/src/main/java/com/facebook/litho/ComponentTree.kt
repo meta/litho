@@ -2696,6 +2696,10 @@ open class ComponentTree protected constructor(builder: Builder) :
 
     ComponentTreeRegistry.markReleased(this)
 
+    if (context.lithoConfiguration.componentsConfig.detachStateUpdaterOnTreeRelease) {
+      (stateUpdater as? StateUpdaterDelegator)?.detachStateUpdater(this)
+    }
+
     if (shouldCloseLithoSaveableStateRegistry) {
       lithoSaveableStateRegistry?.close()
     }
