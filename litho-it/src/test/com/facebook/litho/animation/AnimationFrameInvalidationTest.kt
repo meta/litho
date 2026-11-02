@@ -62,7 +62,6 @@ class AnimationFrameInvalidationTest {
   @JvmField
   val lithoTestRule = LithoTestRule(
       ComponentsConfiguration.defaultInstance.copy(
-          enableStateReadTracking = true,
           enableAnimationFrameInvalidation = true,
       ),
   )

@@ -21,7 +21,6 @@ package com.facebook.litho
 
 import android.annotation.SuppressLint
 import com.facebook.litho.annotations.ExperimentalLithoApi
-import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.core.height
 import com.facebook.litho.core.width
 import com.facebook.litho.editor.instances.StyleEditorInstance
@@ -42,8 +41,6 @@ import com.facebook.rendercore.px
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import org.assertj.core.api.Assertions.assertThat
-import org.junit.After
-import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -145,18 +142,6 @@ private class Slider(
 class LayoutPropsTest {
 
   @JvmField @Rule val lithoTestRule = LithoTestRule()
-
-  private val defaultConfig = ComponentsConfiguration.defaultInstance
-
-  @Before
-  fun setup() {
-    ComponentsConfiguration.defaultInstance = defaultConfig.copy(enableStateReadTracking = true)
-  }
-
-  @After
-  fun teardown() {
-    ComponentsConfiguration.defaultInstance = defaultConfig
-  }
 
   @Test
   fun `a value set in Style reaches the layout function`() {

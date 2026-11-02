@@ -20,7 +20,6 @@ import com.facebook.litho.Component
 import com.facebook.litho.ComponentScope
 import com.facebook.litho.KComponent
 import com.facebook.litho.Style
-import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.kotlin.widget.Text
 import com.facebook.litho.layout.flexbox.Column
 import com.facebook.litho.testing.LithoTestRule
@@ -36,10 +35,7 @@ import org.junit.runner.RunWith
 @RunWith(LithoTestRunner::class)
 class StateReadTrackingUpdateTest {
 
-  @Rule
-  @JvmField
-  val lithoTestRule =
-      LithoTestRule(ComponentsConfiguration.defaultInstance.copy(enableStateReadTracking = true))
+  @Rule @JvmField val lithoTestRule = LithoTestRule()
 
   @Test
   fun `resolve result stores updated root component when resolve exits early`() {

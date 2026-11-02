@@ -63,10 +63,14 @@ import org.robolectric.annotation.LooperMode
 @RunWith(LithoTestRunner::class)
 class StyleReflowTest {
 
+  // Same-frame invalidation off, so animation frames go through the deferred path.
   @JvmField
   @Rule
-  val lithoTestRule =
-      LithoTestRule(ComponentsConfiguration.defaultInstance.copy(enableStateReadTracking = true))
+  val lithoTestRule = LithoTestRule(
+      ComponentsConfiguration.defaultInstance.copy(
+          enableAnimationFrameInvalidation = false,
+      ),
+  )
 
   // Same feature with same-frame invalidation on, so animation frames go through the in-frame
   // flushAnimationLayout path instead of the deferred one — exercises the marker under that path.
@@ -74,7 +78,6 @@ class StyleReflowTest {
   @Rule
   val inFrameTestRule = LithoTestRule(
       ComponentsConfiguration.defaultInstance.copy(
-          enableStateReadTracking = true,
           enableAnimationFrameInvalidation = true,
       ),
   )

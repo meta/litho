@@ -21,7 +21,6 @@ import com.facebook.litho.ComponentScope
 import com.facebook.litho.KComponent
 import com.facebook.litho.Style
 import com.facebook.litho.annotations.ExperimentalLithoApi
-import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.core.height
 import com.facebook.litho.core.width
 import com.facebook.litho.layout.flexbox.Column
@@ -44,11 +43,7 @@ import org.robolectric.annotation.LooperMode
 @RunWith(LithoTestRunner::class)
 class AnimatedVisibilityTest {
 
-  @Rule
-  @JvmField
-  val lithoTestRule = LithoTestRule(
-      ComponentsConfiguration.defaultInstance.copy(enableStateReadTracking = true),
-  )
+  @Rule @JvmField val lithoTestRule = LithoTestRule()
 
   @Rule @JvmField val animationRule = LithoAnimationTestRule { lithoTestRule.idle() }
 

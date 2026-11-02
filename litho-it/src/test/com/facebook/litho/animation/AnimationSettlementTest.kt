@@ -53,7 +53,6 @@ class AnimationSettlementTest {
   @JvmField
   val lithoTestRule = LithoTestRule(
       ComponentsConfiguration.defaultInstance.copy(
-          enableStateReadTracking = true,
           errorEventHandler =
               object : ErrorEventHandler() {
                 override fun onError(cc: ComponentContext, e: Exception): Component? {

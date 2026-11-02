@@ -23,7 +23,6 @@ import com.facebook.litho.KComponent
 import com.facebook.litho.Style
 import com.facebook.litho.Value
 import com.facebook.litho.annotations.ExperimentalLithoApi
-import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.core.height
 import com.facebook.litho.core.width
 import com.facebook.litho.layout.flexbox.Row
@@ -50,13 +49,7 @@ import org.robolectric.annotation.LooperMode
 @RunWith(LithoTestRunner::class)
 class AnimationHookIdentityTest {
 
-  @Rule
-  @JvmField
-  val lithoTestRule = LithoTestRule(
-      ComponentsConfiguration.defaultInstance.copy(
-          enableStateReadTracking = true,
-      ),
-  )
+  @Rule @JvmField val lithoTestRule = LithoTestRule()
 
   private var firstValue: Value<Float>? = null
   private var secondValue: Value<Float>? = null

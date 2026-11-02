@@ -17,7 +17,6 @@
 package com.facebook.litho
 
 import com.facebook.litho.LifecycleStep.StepInfo
-import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.core.height
 import com.facebook.litho.core.width
 import com.facebook.litho.layout.flexbox.Column
@@ -45,13 +44,7 @@ import org.robolectric.annotation.LooperMode
 @RunWith(LithoTestRunner::class)
 class HookTransientStateTest {
 
-  @Rule
-  @JvmField
-  val lithoTestRule = LithoTestRule(
-      ComponentsConfiguration.defaultInstance.copy(
-          enableStateReadTracking = true,
-      ),
-  )
+  @Rule @JvmField val lithoTestRule = LithoTestRule()
 
   @Test
   fun useState_update_visibleAndPersistsAcrossReRender() {

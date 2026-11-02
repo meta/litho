@@ -28,7 +28,6 @@ import com.facebook.litho.LithoView
 import com.facebook.litho.PrimitiveComponent
 import com.facebook.litho.PrimitiveComponentScope
 import com.facebook.litho.components.StateReadingTestLayoutComponent
-import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.layout.RenderWithConstraints
 import com.facebook.litho.layout.flexbox.Column
 import com.facebook.litho.testing.LithoTestRule
@@ -49,10 +48,7 @@ import org.junit.runner.RunWith
 @RunWith(LithoTestRunner::class)
 class StateReadTrackingTest {
 
-  @Rule
-  @JvmField
-  val lithoTestRule =
-      LithoTestRule(ComponentsConfiguration.defaultInstance.copy(enableStateReadTracking = true))
+  @Rule @JvmField val lithoTestRule = LithoTestRule()
 
   @Test
   fun `no state is read in resolve`() {

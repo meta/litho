@@ -50,10 +50,7 @@ import org.robolectric.annotation.LooperMode
 @RunWith(LithoTestRunner::class)
 class InfiniteAnimationGroupTest {
 
-  @Rule
-  @JvmField
-  val lithoTestRule =
-      LithoTestRule(ComponentsConfiguration.defaultInstance.copy(enableStateReadTracking = true))
+  @Rule @JvmField val lithoTestRule = LithoTestRule()
 
   @Rule @JvmField val animationRule = LithoAnimationTestRule { shadowOf(getMainLooper()).idle() }
 
@@ -95,7 +92,7 @@ class InfiniteAnimationGroupTest {
   fun restoredTree_holderRebuild_restartsAnUnchangedLoop() {
     val component = LoopComponent()
     val holder =
-        ComponentTreeHolder.create(checkNotNull(lithoTestRule.componentsConfiguration))
+        ComponentTreeHolder.create(ComponentsConfiguration.defaultInstance)
             .renderInfo(
                 ComponentRenderInfo.create()
                     .component(component)

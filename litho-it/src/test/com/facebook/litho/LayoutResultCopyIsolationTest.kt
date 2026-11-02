@@ -22,7 +22,6 @@ import android.graphics.Color
 import android.graphics.Rect
 import androidx.collection.MutableScatterSet
 import com.facebook.litho.annotations.ExperimentalLithoApi
-import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.core.height
 import com.facebook.litho.core.maxHeight
 import com.facebook.litho.core.maxWidth
@@ -51,8 +50,6 @@ import java.lang.reflect.Field
 import java.lang.reflect.Modifier
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.SoftAssertions
-import org.junit.After
-import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -71,18 +68,6 @@ import org.junit.runner.RunWith
 class LayoutResultCopyIsolationTest {
 
   @JvmField @Rule val lithoTestRule = LithoTestRule()
-
-  private val defaultConfig = ComponentsConfiguration.defaultInstance
-
-  @Before
-  fun setup() {
-    ComponentsConfiguration.defaultInstance = defaultConfig.copy(enableStateReadTracking = true)
-  }
-
-  @After
-  fun teardown() {
-    ComponentsConfiguration.defaultInstance = defaultConfig
-  }
 
   @Test
   fun `every field of the record is classified`() {

@@ -24,7 +24,6 @@ import com.facebook.litho.LithoPrimitive
 import com.facebook.litho.PrimitiveComponent
 import com.facebook.litho.PrimitiveComponentScope
 import com.facebook.litho.Style
-import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.layout.flexbox.Column
 import com.facebook.litho.state.BinderUpdateTracer.BinderUpdateInfo
 import com.facebook.litho.testing.LithoTestRule
@@ -68,10 +67,7 @@ private const val ROOT_TAG = "root"
 @RunWith(LithoTestRunner::class)
 class StateReadRebindProfilingTest {
 
-  @Rule
-  @JvmField
-  val lithoTestRule =
-      LithoTestRule(ComponentsConfiguration.defaultInstance.copy(enableStateReadTracking = true))
+  @Rule @JvmField val lithoTestRule = LithoTestRule()
 
   private val drained: MutableList<BinderUpdateInfo> = mutableListOf()
 

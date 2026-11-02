@@ -24,7 +24,6 @@ import com.facebook.litho.ComponentTree
 import com.facebook.litho.KComponent
 import com.facebook.litho.Style
 import com.facebook.litho.annotations.ExperimentalLithoApi
-import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.core.height
 import com.facebook.litho.core.width
 import com.facebook.litho.flexbox.alignSelf
@@ -60,11 +59,7 @@ import org.robolectric.annotation.LooperMode
 @RunWith(LithoTestRunner::class)
 class AnimatedContentTest {
 
-  @Rule
-  @JvmField
-  val lithoTestRule = LithoTestRule(
-      ComponentsConfiguration.defaultInstance.copy(enableStateReadTracking = true),
-  )
+  @Rule @JvmField val lithoTestRule = LithoTestRule()
 
   private var flushAfterAnimationFrame = true
 
@@ -95,10 +90,7 @@ class AnimatedContentTest {
     ) { state ->
       CommitMarker(state, state.key == target.key, committedTargets, renders)
     }
-    val tree =
-        ComponentTree.create(lithoTestRule.context)
-            .componentsConfiguration(checkNotNull(lithoTestRule.componentsConfiguration))
-            .build()
+    val tree = ComponentTree.create(lithoTestRule.context).build()
     for (target in listOf(first, second)) {
       val resolved = resolveInBackground(tree, content(target))
       resolved.awaitResult()
@@ -190,7 +182,6 @@ class AnimatedContentTest {
         ComponentTree.create(lithoTestRule.context)
             .treeState(treeState)
             .overrideComponentTreeId(treeId)
-            .componentsConfiguration(checkNotNull(lithoTestRule.componentsConfiguration))
             .build()
     val restoredView =
         lithoTestRule.render(componentTree = restoredTree) {

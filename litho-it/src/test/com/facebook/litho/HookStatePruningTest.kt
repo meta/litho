@@ -16,7 +16,6 @@
 
 package com.facebook.litho
 
-import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.testing.LithoTestRule
 import com.facebook.litho.testing.testrunner.LithoTestRunner
 import org.assertj.core.api.Assertions.assertThat
@@ -38,13 +37,7 @@ import org.robolectric.annotation.LooperMode
 @RunWith(LithoTestRunner::class)
 class HookStatePruningTest {
 
-  @Rule
-  @JvmField
-  val lithoTestRule = LithoTestRule(
-      ComponentsConfiguration.defaultInstance.copy(
-          enableStateReadTracking = true,
-      ),
-  )
+  @Rule @JvmField val lithoTestRule = LithoTestRule()
 
   /**
    * Renders [count] useState hooks under a single call site (distinct runtime indices). The loop is

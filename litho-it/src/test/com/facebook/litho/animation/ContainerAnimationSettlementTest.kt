@@ -24,7 +24,6 @@ import com.facebook.litho.ComponentTree
 import com.facebook.litho.KComponent
 import com.facebook.litho.Style
 import com.facebook.litho.annotations.ExperimentalLithoApi
-import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.core.height
 import com.facebook.litho.core.width
 import com.facebook.litho.layout.flexbox.Row
@@ -49,11 +48,7 @@ import org.robolectric.annotation.LooperMode
 @LooperMode(LooperMode.Mode.PAUSED)
 @RunWith(LithoTestRunner::class)
 class ContainerAnimationSettlementTest {
-  @Rule
-  @JvmField
-  val lithoTestRule = LithoTestRule(
-      ComponentsConfiguration.defaultInstance.copy(enableStateReadTracking = true),
-  )
+  @Rule @JvmField val lithoTestRule = LithoTestRule()
 
   private var flushAfterFrame = true
 
@@ -225,7 +220,6 @@ class ContainerAnimationSettlementTest {
           ComponentTree.create(lithoTestRule.context)
               .treeState(treeState)
               .overrideComponentTreeId(treeId)
-              .componentsConfiguration(checkNotNull(lithoTestRule.componentsConfiguration))
               .build()
       val restored = lithoTestRule.render(componentTree = tree) { container(surface, 1, callback) }
       lithoTestRule.idle()

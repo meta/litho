@@ -1379,8 +1379,7 @@ class SubtreeCacheParityTest {
     ParityStateHolder.state = null
     ParityStateHolder.heightState = null
     ParityStateHolder.innerState = null
-    val config = ComponentsConfiguration.create().enableStateReadTracking(true).build()
-    return ComponentTree.create(lithoTestRule.context).componentsConfiguration(config).build()
+    return ComponentTree.create(lithoTestRule.context).build()
   }
 
   private fun captureLayoutState(ct: ComponentTree): LayoutState {

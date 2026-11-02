@@ -46,8 +46,6 @@ import com.facebook.rendercore.px
 import com.facebook.rendercore.sp
 import com.facebook.yoga.YogaAlign
 import org.assertj.core.api.Assertions.assertThat
-import org.junit.After
-import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -63,18 +61,6 @@ import org.junit.runner.RunWith
 class CustomLayoutStateReadTest {
 
   @JvmField @Rule val lithoTestRule = LithoTestRule()
-
-  private val defaultConfig = ComponentsConfiguration.defaultInstance
-
-  @Before
-  fun setup() {
-    ComponentsConfiguration.defaultInstance = defaultConfig.copy(enableStateReadTracking = true)
-  }
-
-  @After
-  fun teardown() {
-    ComponentsConfiguration.defaultInstance = defaultConfig
-  }
 
   /**
    * A layout function that reads state lays its container out again when that state changes.

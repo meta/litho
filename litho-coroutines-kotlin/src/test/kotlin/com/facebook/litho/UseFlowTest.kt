@@ -22,7 +22,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleObserver
 import androidx.lifecycle.LifecycleOwner
-import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.kotlin.widget.Text
 import com.facebook.litho.lifecycle.LifecycleOwnerTreeProp
 import com.facebook.litho.testing.LithoTestRule
@@ -326,8 +325,7 @@ class UseFlowTest {
       }
     }
 
-    val config = ComponentsConfiguration.defaultInstance.copy(enableStateReadTracking = true)
-    val tree = ComponentTree.create(lithoViewRule.context).componentsConfiguration(config).build()
+    val tree = ComponentTree.create(lithoViewRule.context).build()
 
     val lithoView = lithoViewRule.render(componentTree = tree) { TestComponent() }
     lithoViewRule.act(lithoView) { testDispatcher.scheduler.runCurrent() }

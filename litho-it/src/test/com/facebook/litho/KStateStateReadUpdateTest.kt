@@ -16,14 +16,11 @@
 
 package com.facebook.litho
 
-import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.layout.flexbox.Column
 import com.facebook.litho.testing.LithoTestRule
 import com.facebook.litho.testing.testrunner.LithoTestRunner
 import java.util.concurrent.atomic.AtomicInteger
 import org.assertj.core.api.Assertions
-import org.junit.After
-import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,18 +29,6 @@ import org.robolectric.shadows.ShadowLooper
 @RunWith(LithoTestRunner::class)
 class KStateStateReadUpdateTest {
   @Rule @JvmField val lithoTestRule = LithoTestRule()
-
-  private val defaultConfig = ComponentsConfiguration.defaultInstance
-
-  @Before
-  fun setup() {
-    ComponentsConfiguration.defaultInstance = defaultConfig.copy(enableStateReadTracking = true)
-  }
-
-  @After
-  fun teardown() {
-    ComponentsConfiguration.defaultInstance = defaultConfig
-  }
 
   @Test
   fun `skip subsequent resolve if updated state not read in resolve`() {
