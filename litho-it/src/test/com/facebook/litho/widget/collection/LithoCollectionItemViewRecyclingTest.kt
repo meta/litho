@@ -32,6 +32,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.spy
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
+import org.robolectric.annotation.GraphicsMode
 
 /**
  * Unit tests for LithoCollectionItem view recycling behavior, specifically testing the fix for
@@ -43,6 +44,7 @@ import org.mockito.kotlin.verify
  * 3. View tracking is properly maintained across bindings
  */
 @RunWith(LithoTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class LithoCollectionItemViewRecyclingTest {
 
   @Rule @JvmField val lithoTestRule = LithoTestRule()

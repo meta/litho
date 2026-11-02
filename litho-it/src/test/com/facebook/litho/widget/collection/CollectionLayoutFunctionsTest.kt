@@ -34,8 +34,10 @@ import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.spy
 import org.mockito.kotlin.whenever
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(LithoTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class CollectionLayoutFunctionsTest {
 
   @Rule @JvmField val lithoTestRule = LithoTestRule()

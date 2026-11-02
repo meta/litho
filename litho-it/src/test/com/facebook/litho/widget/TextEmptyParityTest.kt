@@ -41,9 +41,11 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
+import org.robolectric.annotation.GraphicsMode
 
 /** A Text with no text keeps its place in the layout for both legacy and primitive Text. */
 @RunWith(ParameterizedRobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class TextEmptyParityTest(private val usePrimitiveText: Boolean) {
 
   @JvmField @Rule val lithoTestRule = LithoTestRule()

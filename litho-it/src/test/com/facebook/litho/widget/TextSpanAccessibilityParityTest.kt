@@ -52,10 +52,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
 import org.robolectric.Shadows
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowAccessibilityManager
 
 /** Clickable spans reach screen readers the same way for legacy and primitive Text. */
 @RunWith(ParameterizedRobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class TextSpanAccessibilityParityTest(private val usePrimitiveText: Boolean) {
 
   @JvmField @Rule val lithoTestRule = LithoTestRule(attachToRealWindow = true)

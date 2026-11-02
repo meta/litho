@@ -33,11 +33,13 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 
 /** Primitive TextInput behaviour that intentionally differs from legacy TextInput. */
 @LooperMode(LooperMode.Mode.LEGACY)
 @RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class ExperimentalTextInputKeyUpTest {
 
   @JvmField @Rule val lithoTestRule = LithoTestRule()

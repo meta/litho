@@ -32,11 +32,13 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 
 /** Tests [TextInput]'s `shouldUseMatchParentLayoutParams` on both TextInput implementations. */
 @LooperMode(LooperMode.Mode.LEGACY)
 @RunWith(ParameterizedRobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class TextInputLayoutParamsTest(private val usePrimitiveTextInput: Boolean) {
 
   companion object {

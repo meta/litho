@@ -27,6 +27,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
+import org.robolectric.annotation.GraphicsMode
 
 /**
  * Unit tests for [TextDrawable]'s truncation extraction, which reconstructs the drawn text from the
@@ -40,6 +41,7 @@ import org.mockito.kotlin.mock
  * re-ellipsizes it — deterministically.
  */
 @RunWith(LithoTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class TextDrawableTruncationTest {
 
   @Test

@@ -40,10 +40,12 @@ import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.spy
 import org.mockito.kotlin.verify
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 
 @LooperMode(LooperMode.Mode.LEGACY)
 @RunWith(LithoTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class LazyCollectionControllerTest {
 
   @Rule @JvmField val lithoTestRule = LithoTestRule()

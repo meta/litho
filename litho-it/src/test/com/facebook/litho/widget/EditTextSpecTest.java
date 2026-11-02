@@ -24,9 +24,11 @@ import com.facebook.litho.testing.testrunner.LithoTestRunner;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.annotation.GraphicsMode;
 
 /** Tests {@link EditText} component. */
 @RunWith(LithoTestRunner.class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 public class EditTextSpecTest {
   @Rule public LithoTestRule lithoTestRule = new LithoTestRule();
 

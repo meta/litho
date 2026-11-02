@@ -62,6 +62,7 @@ import org.junit.runner.RunWith
 import org.mockito.ArgumentMatchers
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
+import org.robolectric.annotation.GraphicsMode
 
 /**
  * Tests [Text] component's legacy implementation ([TextComponentSpec]), which most cases reach into
@@ -69,6 +70,7 @@ import org.mockito.kotlin.whenever
  * tests, which run each case with both implementations.
  */
 @RunWith(LithoTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class TextSpecTest {
   private var context: ComponentContext? = null
   private var previousUsePrimitiveText = false

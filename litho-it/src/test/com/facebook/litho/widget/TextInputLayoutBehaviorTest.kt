@@ -36,9 +36,11 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.GraphicsMode
 
 /** [TextInputLayoutBehavior.isEquivalentTo] compares every field. */
 @RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class TextInputLayoutBehaviorTest {
 
   private val savedText = AtomicReference<CharSequence?>("hello")

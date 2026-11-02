@@ -28,9 +28,11 @@ import com.facebook.litho.testing.testrunner.LithoTestRunner;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.annotation.GraphicsMode;
 
 /** Tests for {@link ViewportManager} */
 @RunWith(LithoTestRunner.class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 public class ViewportManagerTest {
 
   private LayoutInfo mLayoutInfo;

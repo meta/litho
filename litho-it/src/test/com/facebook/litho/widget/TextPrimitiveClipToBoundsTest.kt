@@ -31,9 +31,11 @@ import org.junit.runner.RunWith
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.mockingDetails
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.GraphicsMode
 
 /** Primitive Text passes its `clipToBounds` prop to the text view, which clips when it's set. */
 @RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class TextPrimitiveClipToBoundsTest {
 
   @JvmField @Rule val lithoTestRule = LithoTestRule()

@@ -39,6 +39,7 @@ import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.annotation.GraphicsMode
 
 /**
  * Input paths other than touch that reach a component through the same machinery.
@@ -49,6 +50,7 @@ import org.junit.runner.RunWith
  * for a `ComponentHost`, so the tests survive that change.
  */
 @RunWith(LithoTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class AlternateInputPathTest {
 
   @get:Rule val lithoTestRule = LithoTestRule(attachToRealWindow = true)

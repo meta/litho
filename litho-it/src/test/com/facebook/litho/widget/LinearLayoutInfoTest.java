@@ -33,9 +33,11 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.annotation.GraphicsMode;
 
 /** Tests for {@link LinearLayoutInfo} */
 @RunWith(LithoTestRunner.class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 public class LinearLayoutInfoTest {
 
   @Test

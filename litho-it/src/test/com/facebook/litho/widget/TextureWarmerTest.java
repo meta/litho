@@ -29,6 +29,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.GraphicsMode;
 import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
 import org.robolectric.annotation.LooperMode;
@@ -39,6 +40,7 @@ import org.robolectric.shadows.ShadowLooper;
 @LooperMode(LooperMode.Mode.LEGACY)
 @Config(shadows = {TextureWarmerTest.ShadowPicture.class})
 @RunWith(LithoTestRunner.class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 public class TextureWarmerTest {
 
   private ShadowLooper mShadowLooper;

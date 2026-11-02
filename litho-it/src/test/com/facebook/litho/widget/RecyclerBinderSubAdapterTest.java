@@ -33,9 +33,11 @@ import java.util.List;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.annotation.GraphicsMode;
 
 /** Sub adapter mode tests for {@link RecyclerBinder} */
 @RunWith(LithoTestRunner.class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 public class RecyclerBinderSubAdapterTest {
 
   private ComponentContext mComponentContext;

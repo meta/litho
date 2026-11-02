@@ -31,11 +31,13 @@ import org.assertj.core.api.SoftAssertions
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 
 /** Tests for [Collection]'s children */
 @LooperMode(LooperMode.Mode.LEGACY)
 @RunWith(LithoTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class CollectionChildEquivalenceTest {
 
   @Rule @JvmField val lithoTestRule = LithoTestRule()

@@ -29,8 +29,10 @@ import com.facebook.litho.SizeSpec;
 import com.facebook.litho.testing.testrunner.LithoTestRunner;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.annotation.GraphicsMode;
 
 @RunWith(LithoTestRunner.class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 public class StaggeredGridLayoutInfoTest {
 
   @Test

@@ -35,9 +35,11 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
+import org.robolectric.annotation.GraphicsMode
 
 /** `dynamicTextColor` recolors mounted text the same way for legacy and primitive Text. */
 @RunWith(ParameterizedRobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class TextDynamicColorParityTest(private val usePrimitiveText: Boolean) {
 
   @JvmField @Rule val lithoTestRule = LithoTestRule()

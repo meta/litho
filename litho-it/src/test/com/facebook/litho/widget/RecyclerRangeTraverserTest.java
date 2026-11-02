@@ -24,9 +24,11 @@ import java.util.Arrays;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.annotation.GraphicsMode;
 
 /** Test for {@link RecyclerRangeTraverser} */
 @RunWith(LithoTestRunner.class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 public class RecyclerRangeTraverserTest implements RecyclerRangeTraverser.Processor {
   private ArrayList<Integer> mCollectedIndices;
 

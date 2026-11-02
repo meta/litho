@@ -37,9 +37,11 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
+import org.robolectric.annotation.GraphicsMode;
 
 /** Tests for {@link StickyHeaderController} */
 @RunWith(LithoTestRunner.class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 public class StickyHeaderControllerTest {
 
   @Rule public final LithoTestRule lithoTestRule = new LithoTestRule();

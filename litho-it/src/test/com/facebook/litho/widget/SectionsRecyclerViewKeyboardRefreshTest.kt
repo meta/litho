@@ -32,8 +32,10 @@ import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(LithoTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class SectionsRecyclerViewKeyboardRefreshTest {
   private val activityController =
       Robolectric.buildActivity(KeyRecordingActivity::class.java).setup()

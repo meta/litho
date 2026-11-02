@@ -44,9 +44,11 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
+import org.robolectric.annotation.GraphicsMode;
 
 /** Tests for {@link RecyclerBinderUpdateCallback} */
 @RunWith(LithoTestRunner.class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 public class RecyclerBinderUpdateCallbackTest {
 
   private static final int OLD_DATA_SIZE = 12;

@@ -35,9 +35,11 @@ import java.util.ArrayList;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.annotation.GraphicsMode;
 
 /** Tests for {@link RecyclerBinder} with canRemeasure enabled. */
 @RunWith(LithoTestRunner.class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 public class RecyclerBinderCanRemeasureTest {
 
   private ComponentContext mComponentContext;

@@ -48,8 +48,10 @@ import org.mockito.kotlin.spy
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(LithoTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class NewStickyHeaderControllerTest {
 
   @Rule @JvmField val lithoTestRule = LithoTestRule()

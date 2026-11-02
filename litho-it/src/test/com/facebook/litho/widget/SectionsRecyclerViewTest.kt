@@ -24,8 +24,10 @@ import com.facebook.rendercore.utils.MeasureSpecUtils.exactly
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(LithoTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class SectionsRecyclerViewTest {
 
   private val sectionsRecyclerView =

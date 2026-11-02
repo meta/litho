@@ -48,11 +48,13 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 
 /** TextInput behaves the same with the legacy and the primitive implementation. */
 @LooperMode(LooperMode.Mode.LEGACY)
 @RunWith(ParameterizedRobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class TextInputBehaviorParityTest(private val usePrimitiveTextInput: Boolean) {
 
   @JvmField @Rule val lithoTestRule = LithoTestRule()

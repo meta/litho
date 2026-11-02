@@ -43,9 +43,11 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
+import org.robolectric.annotation.GraphicsMode
 
 /** What a host's text content reports for Litho Text, with legacy and primitive Text. */
 @RunWith(ParameterizedRobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class TextContentItemTest(private val usePrimitiveText: Boolean) {
 
   @JvmField @Rule val lithoTestRule = LithoTestRule()

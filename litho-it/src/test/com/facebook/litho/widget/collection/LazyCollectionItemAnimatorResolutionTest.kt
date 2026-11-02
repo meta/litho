@@ -43,6 +43,7 @@ import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 import org.robolectric.shadows.ShadowLooper
 
@@ -50,6 +51,7 @@ import org.robolectric.shadows.ShadowLooper
 // changeset's notifications.
 @LooperMode(LooperMode.Mode.PAUSED)
 @RunWith(LithoTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class LazyCollectionItemAnimatorResolutionTest {
 
   @get:Rule val legacyFlagOn = rule(enabled = true, newCollection = false)

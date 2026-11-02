@@ -51,11 +51,13 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.annotation.GraphicsMode;
 import org.robolectric.annotation.LooperMode;
 
 /** Tests {@link TextInput} component. */
 @LooperMode(LooperMode.Mode.LEGACY)
 @RunWith(LithoTestRunner.class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 public class TextInputSpecTest {
   // Robolectric's legacy text layout breaks lines only at line breaks, so the uncut hint measures
   // two lines through the one past the cut.

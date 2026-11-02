@@ -31,11 +31,13 @@ import com.facebook.litho.testing.testrunner.LithoTestRunner;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.annotation.GraphicsMode;
 import org.robolectric.shadow.api.Shadow;
 import org.robolectric.shadows.ShadowDrawable;
 
 /** Tests {@link ProgressPrimitiveComponent} */
 @RunWith(LithoTestRunner.class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 public class ProgressSpecTest {
   private ComponentContext mContext;
 

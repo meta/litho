@@ -51,6 +51,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.robolectric.annotation.GraphicsMode
 
 /**
  * Tests for CollectionPrimitiveViewScroller
@@ -79,6 +80,7 @@ import org.mockito.kotlin.whenever
  * don't jump to position 0 - we find a nearby position like 1002 that also shows item A.
  */
 @RunWith(LithoTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class CollectionPrimitiveViewScrollerTest {
 
   @Rule @JvmField val lithoTestRule = LithoTestRule()

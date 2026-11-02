@@ -25,9 +25,11 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RuntimeEnvironment;
+import org.robolectric.annotation.GraphicsMode;
 
 /** Tests for {@link ScrollStateDetector} */
 @RunWith(LithoTestRunner.class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 public class ScrollStateDetectorTest {
 
   private ScrollStateDetector detector;

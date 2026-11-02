@@ -39,6 +39,7 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.annotation.GraphicsMode
 
 /**
  * Tests for dynamic cross-axis sizing functionality in CollectionRecyclerComponent.
@@ -47,6 +48,7 @@ import org.junit.runner.RunWith
  * expands to accommodate children that are larger than the collection's initial cross-axis size.
  */
 @RunWith(LithoTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class CollectionDynamicSizingTest {
 
   @Rule

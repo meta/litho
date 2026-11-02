@@ -92,6 +92,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.whenever
 import org.robolectric.Shadows
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 import org.robolectric.shadow.api.Shadow
 import org.robolectric.shadows.ShadowLooper
@@ -99,6 +100,7 @@ import org.robolectric.shadows.ShadowLooper
 /** Tests for [RecyclerBinder] */
 @LooperMode(LooperMode.Mode.LEGACY)
 @RunWith(LithoTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class RecyclerBinderTest {
 
   @get:Rule val lithoTestRule = LithoTestRule()

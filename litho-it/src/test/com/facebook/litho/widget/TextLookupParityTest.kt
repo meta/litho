@@ -57,9 +57,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
 import org.robolectric.Shadows
+import org.robolectric.annotation.GraphicsMode
 
 /** Text lookups and clicks in tests behave the same for legacy and primitive Text. */
 @RunWith(ParameterizedRobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class TextLookupParityTest(private val usePrimitiveText: Boolean) {
 
   @JvmField @Rule val lithoTestRule = LithoTestRule()

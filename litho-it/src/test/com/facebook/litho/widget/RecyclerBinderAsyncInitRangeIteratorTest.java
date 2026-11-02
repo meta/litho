@@ -46,9 +46,11 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.annotation.GraphicsMode;
 
 /** Tests for {@link RecyclerBinder.ComponentAsyncInitRangeIterator} */
 @RunWith(LithoTestRunner.class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 public class RecyclerBinderAsyncInitRangeIteratorTest {
 
   private static final float RANGE_RATIO = 2.0f;

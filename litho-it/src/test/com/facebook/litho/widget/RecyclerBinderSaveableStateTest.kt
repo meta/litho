@@ -64,10 +64,12 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.annotation.GraphicsMode
 
 /** `useSaveableState` in the rows of `RecyclerBinder` collections (`enableNewCollection` off). */
 @OptIn(ExperimentalLithoApi::class)
 @RunWith(LithoTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class RecyclerBinderSaveableStateTest {
 
   @get:Rule val lithoTestRule = LithoTestRule()

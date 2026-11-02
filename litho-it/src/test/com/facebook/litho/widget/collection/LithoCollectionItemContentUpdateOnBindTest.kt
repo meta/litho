@@ -41,6 +41,7 @@ import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowLooper
 
 /**
@@ -56,6 +57,7 @@ import org.robolectric.shadows.ShadowLooper
  * "synchronous" means the component's render() ran inside the onBindView call itself.
  */
 @RunWith(LithoTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class LithoCollectionItemContentUpdateOnBindTest {
 
   @Rule @JvmField val lithoTestRule = LithoTestRule()

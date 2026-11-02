@@ -35,11 +35,13 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 
 /** Tests to verify that we always prepare layouts in the same order we mount them. */
 @LooperMode(LooperMode.Mode.LEGACY)
 @RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class RecyclerBinderPreparationOrderTest {
 
   @JvmField @Rule val lithoTestRule = LithoTestRule(resizeMode = LithoTestRuleResizeMode.MANUAL)

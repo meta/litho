@@ -60,6 +60,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
+import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 import org.robolectric.shadow.api.Shadow
 import org.robolectric.shadows.ShadowViewRootImpl
@@ -68,6 +69,7 @@ import org.robolectric.util.ReflectionHelpers.ClassParameter
 
 @LooperMode(LooperMode.Mode.PAUSED)
 @RunWith(LithoTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 class KeyboardPullToRefreshTest {
   private val activityController =
       Robolectric.buildActivity(KeyRecordingActivity::class.java).setup()

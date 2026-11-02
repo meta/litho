@@ -42,6 +42,7 @@ import java.util.List;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.annotation.GraphicsMode;
 import org.robolectric.annotation.LooperMode;
 import org.robolectric.shadow.api.Shadow;
 import org.robolectric.shadows.ShadowLooper;
@@ -49,6 +50,7 @@ import org.robolectric.shadows.ShadowLooper;
 /** Tests for {@link RecyclerBinder} with wrap content enabled. */
 @LooperMode(LooperMode.Mode.LEGACY)
 @RunWith(LithoTestRunner.class)
+@GraphicsMode(GraphicsMode.Mode.LEGACY)
 public class RecyclerBinderWrapContentTest {
 
   private static final float RANGE_RATIO = 2.0f;
