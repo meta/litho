@@ -210,7 +210,7 @@ class StyleReflowInterruptionTest {
     val midWidth = grow().width
     assertThat(midWidth).isGreaterThan(100).isLessThan(250)
 
-    checkNotNull(layoutHeight).snapTo(250.px)
+    checkNotNull(layoutHeight).jumpTo(250.px)
     shadowOf(getMainLooper()).idle()
     testView.measure().layout()
 
@@ -254,7 +254,8 @@ class StyleReflowInterruptionTest {
     assertThat(grow().width).isGreaterThan(100).isLessThan(250)
 
     // Both values now tick on the same frame.
-    checkNotNull(layoutHeight).animateTo(250.px, tween(duration = 144.ms, easing = Easing.Linear))
+    checkNotNull(layoutHeight)
+        .startAnimation(250.px, tween(duration = 144.ms, easing = Easing.Linear))
     animationRule.advanceBy(72.ms)
     testView.measure().layout()
 

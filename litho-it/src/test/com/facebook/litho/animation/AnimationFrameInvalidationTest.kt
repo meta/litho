@@ -151,7 +151,7 @@ class AnimationFrameInvalidationTest {
     assertThat(testView.lithoView.alpha).isEqualTo(0f)
 
     // snapTo runs outside a frame tick; the bind-only update must flush immediately, in-frame.
-    checkNotNull(capturedAnimatable).snapTo(1f)
+    checkNotNull(capturedAnimatable).jumpTo(1f)
 
     // No looper pump — the value is applied synchronously via the invalidation path.
     assertThat(testView.lithoView.alpha).isEqualTo(1f)
@@ -166,7 +166,7 @@ class AnimationFrameInvalidationTest {
         ImperativeAlphaComponent {
           if (replaceOnBind) {
             replaceOnBind = false
-            checkNotNull(capturedAnimatable).animateTo(0f, snap()) {
+            checkNotNull(capturedAnimatable).startAnimation(0f, snap()) {
               outcomes.add("replacement" to it)
             }
           }
@@ -174,10 +174,10 @@ class AnimationFrameInvalidationTest {
       }
       lithoTestRule.idle()
       val animatable = checkNotNull(capturedAnimatable)
-      animatable.animateTo(1f, tween(1_000.milliseconds)) { outcomes.add("first" to it) }
+      animatable.startAnimation(1f, tween(1_000.milliseconds)) { outcomes.add("first" to it) }
       replaceOnBind = true
 
-      if (firstOutcome == AnimationEnd.Finished) animatable.finish() else animatable.snapTo(1f)
+      if (firstOutcome == AnimationEnd.Finished) animatable.finish() else animatable.jumpTo(1f)
 
       assertThat(testView.lithoView.alpha).isEqualTo(1f)
       assertThat(replaceOnBind).isFalse()

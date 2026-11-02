@@ -41,7 +41,7 @@ enum class AnimationEnd {
  * Imperative wrapper around [AnimatedValue].
  *
  * Unlike [useAnimatedValue], callers drive an [Animatable] explicitly from event handlers and bind
- * callbacks via [animateTo], [snapTo], and [stop].
+ * callbacks via [startAnimation], [jumpTo], and [stop].
  */
 @ExperimentalLithoApi
 class Animatable<T>
@@ -72,7 +72,11 @@ internal constructor(
    */
   @MainThread
   @JvmOverloads
-  fun animateTo(target: T, spec: FiniteAnimationSpec<T>, onEnd: ((AnimationEnd) -> Unit)? = null) {
+  fun startAnimation(
+      target: T,
+      spec: FiniteAnimationSpec<T>,
+      onEnd: ((AnimationEnd) -> Unit)? = null,
+  ) {
     ThreadUtils.assertMainThread()
     animatedValue.retarget(target, spec, preserveEqualTargetTiming = true)
     driver.anchorInCompletionFrame()
@@ -91,7 +95,7 @@ internal constructor(
    * Immediately sets the value to [target] without animation. Must be called on the main thread.
    */
   @MainThread
-  fun snapTo(target: T) {
+  fun jumpTo(target: T) {
     ThreadUtils.assertMainThread()
     completeCommand(AnimationEnd.Interrupted)
     this.target = target
@@ -114,7 +118,7 @@ internal constructor(
    * ```kotlin
    * val alpha = useAnimatable(0.4f, FloatTypeConverter)
    * // From an event handler:
-   * alpha.animateTo(1f, tween(300.ms)) { outcome -> /* handle completion */ }
+   * alpha.startAnimation(1f, tween(300.ms)) { outcome -> /* handle completion */ }
    * // From a later event handler, complete the command immediately:
    * alpha.finish()
    * ```

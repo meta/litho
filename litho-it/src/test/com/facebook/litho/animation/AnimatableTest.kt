@@ -82,7 +82,7 @@ class AnimatableTest {
     shadowOf(getMainLooper()).idle()
     assertThat(testView.lithoView.alpha).isEqualTo(0f)
 
-    checkNotNull(capturedAnimatable).animateTo(1f, snap())
+    checkNotNull(capturedAnimatable).startAnimation(1f, snap())
     animationRule.runNextFrame()
 
     assertThat(testView.lithoView.alpha).isEqualTo(1f)
@@ -95,7 +95,7 @@ class AnimatableTest {
     val animatable = checkNotNull(capturedAnimatable)
 
     assertThatThrownBy {
-          animatable.animateTo(1f, VelocityTrackingAnimationSpec(Animator.DURATION_INFINITE))
+          animatable.startAnimation(1f, VelocityTrackingAnimationSpec(Animator.DURATION_INFINITE))
         }
         .isInstanceOf(IllegalArgumentException::class.java)
         .hasMessageContaining("FiniteAnimationSpec must create an animator with a finite duration")
@@ -108,7 +108,7 @@ class AnimatableTest {
     shadowOf(getMainLooper()).idle()
     assertThat(testView.lithoView.alpha).isEqualTo(0f)
 
-    checkNotNull(capturedAnimatable).snapTo(0.5f)
+    checkNotNull(capturedAnimatable).jumpTo(0.5f)
     shadowOf(getMainLooper()).idle()
 
     assertThat(testView.lithoView.alpha).isEqualTo(0.5f)
@@ -121,7 +121,7 @@ class AnimatableTest {
     shadowOf(getMainLooper()).idle()
 
     val animatable = checkNotNull(capturedAnimatable)
-    animatable.animateTo(1f, tween(duration = 1_000.ms, easing = Easing.Linear))
+    animatable.startAnimation(1f, tween(duration = 1_000.ms, easing = Easing.Linear))
 
     animationRule.advanceBy(200.ms)
     val valueBeforeStop = testView.lithoView.alpha
@@ -149,9 +149,9 @@ class AnimatableTest {
     val firstSpec = VelocityTrackingAnimationSpec()
     val secondSpec = VelocityTrackingAnimationSpec()
 
-    animatable.animateTo(1f, firstSpec)
+    animatable.startAnimation(1f, firstSpec)
     animationRule.advanceBy(200.ms)
-    animatable.animateTo(0f, secondSpec)
+    animatable.startAnimation(0f, secondSpec)
 
     assertThat(secondSpec.initialVelocity).isEqualTo(200f)
   }
@@ -166,14 +166,14 @@ class AnimatableTest {
     val secondSpec = VelocityTrackingAnimationSpec()
     val thirdSpec = VelocityTrackingAnimationSpec()
 
-    animatable.animateTo(1f, firstSpec)
+    animatable.startAnimation(1f, firstSpec)
     animationRule.advanceBy(200.ms)
-    animatable.animateTo(0f, secondSpec)
+    animatable.startAnimation(0f, secondSpec)
     val secondVelocity = checkNotNull(secondSpec.initialVelocityVector)
     assertThat(secondVelocity[0]).isEqualTo(200f)
 
     animationRule.advanceBy(100.ms)
-    animatable.animateTo(1f, thirdSpec)
+    animatable.startAnimation(1f, thirdSpec)
 
     assertThat(secondVelocity[0]).isEqualTo(200f)
     assertThat(thirdSpec.initialVelocityVector).isNotSameAs(secondVelocity)
@@ -185,13 +185,13 @@ class AnimatableTest {
     shadowOf(getMainLooper()).idle()
     val animatable = checkNotNull(capturedAnimatable)
 
-    animatable.animateTo(1f, tween(duration = 160.ms, easing = Easing.Linear))
+    animatable.startAnimation(1f, tween(duration = 160.ms, easing = Easing.Linear))
     animationRule.advanceBy(80.ms)
     val mid = testView.lithoView.alpha
     assertThat(mid).isGreaterThan(0f)
     assertThat(mid).isLessThan(1f)
 
-    animatable.animateTo(0f, tween(duration = 160.ms, easing = Easing.Linear))
+    animatable.startAnimation(0f, tween(duration = 160.ms, easing = Easing.Linear))
     animationRule.runNextFrame()
     assertThat(testView.lithoView.alpha).isLessThan(mid)
   }
@@ -206,10 +206,10 @@ class AnimatableTest {
         val animatable = checkNotNull(capturedAnimatable)
         val outcomes = mutableListOf<AnimationEnd>()
         val spec = tween<Float>(100.ms, Easing.Linear)
-        animatable.animateTo(1f, spec) { outcome ->
+        animatable.startAnimation(1f, spec) { outcome ->
           outcomes.add(outcome)
           if (outcome == AnimationEnd.Finished) {
-            animatable.animateTo(2f, spec) { outcomes.add(it) }
+            animatable.startAnimation(2f, spec) { outcomes.add(it) }
           }
         }
         if (finishExplicitly) {
@@ -242,7 +242,7 @@ class AnimatableTest {
     shadowOf(getMainLooper()).idle()
     assertThat(nestedHost.alpha).isEqualTo(0f)
 
-    checkNotNull(capturedAnimatable).snapTo(0.5f)
+    checkNotNull(capturedAnimatable).jumpTo(0.5f)
     shadowOf(getMainLooper()).idle()
 
     assertThat(nestedHost.alpha).isEqualTo(0.5f)
@@ -256,9 +256,9 @@ class AnimatableTest {
     val outcomes = mutableListOf<AnimationEnd>()
     val animatable = checkNotNull(capturedAnimatable)
 
-    animatable.animateTo(0f, snap()) { firstOutcome ->
+    animatable.startAnimation(0f, snap()) { firstOutcome ->
       outcomes.add(firstOutcome)
-      animatable.animateTo(0f, snap()) { secondOutcome -> outcomes.add(secondOutcome) }
+      animatable.startAnimation(0f, snap()) { secondOutcome -> outcomes.add(secondOutcome) }
     }
 
     assertThat(outcomes).isEmpty()
@@ -289,7 +289,7 @@ class AnimatableTest {
       val outcomes = mutableListOf<AnimationEnd>()
       val animatable = checkNotNull(capturedAnimatable)
 
-      animatable.animateTo(0f, spec) { outcomes.add(it) }
+      animatable.startAnimation(0f, spec) { outcomes.add(it) }
       assertThat(animatable.value.value).isZero()
       assertThat(outcomes).isEmpty()
       animationRule.advanceBy(500.ms)
@@ -312,14 +312,14 @@ class AnimatableTest {
     val outcomes = mutableListOf<Pair<String, AnimationEnd>>()
     val animatable = checkNotNull(capturedAnimatable)
     val spec = tween<Float>(duration = 1_000.ms, easing = Easing.Linear)
-    animatable.animateTo(1f, spec) { outcomes.add("first" to it) }
+    animatable.startAnimation(1f, spec) { outcomes.add("first" to it) }
     animationRule.advanceBy(200.ms)
     view.setRoot(ImperativeAlphaComponent(label = "updated alpha"))
     lithoTestRule.idle()
     assertThat(capturedAnimatable).isSameAs(animatable)
     val progress = view.lithoView.alpha
 
-    animatable.animateTo(0f, spec) { outcomes.add("second" to it) }
+    animatable.startAnimation(0f, spec) { outcomes.add("second" to it) }
     animatable.stop()
 
     assertThat(outcomes).isEmpty()
@@ -339,9 +339,9 @@ class AnimatableTest {
     lithoTestRule.idle()
     val outcomes = mutableListOf<Pair<String, AnimationEnd>>()
     val animatable = checkNotNull(capturedAnimatable)
-    animatable.animateTo(1f, snap()) { outcomes.add("first" to it) }
+    animatable.startAnimation(1f, snap()) { outcomes.add("first" to it) }
     AnimationController.enqueueCompletion {
-      animatable.animateTo(0f, snap()) { outcomes.add("second" to it) }
+      animatable.startAnimation(0f, snap()) { outcomes.add("second" to it) }
     }
 
     animationRule.runNextFrame()
@@ -364,10 +364,10 @@ class AnimatableTest {
     lithoTestRule.idle()
     val outcomes = mutableListOf<Pair<AnimationEnd, Float>>()
     val animatable = checkNotNull(capturedAnimatable)
-    animatable.animateTo(1f, tween(1_000.ms)) { outcomes.add(it to view.lithoView.alpha) }
+    animatable.startAnimation(1f, tween(1_000.ms)) { outcomes.add(it to view.lithoView.alpha) }
     animationRule.advanceBy(200.ms)
 
-    animatable.snapTo(0.5f)
+    animatable.jumpTo(0.5f)
     lithoTestRule.idle()
 
     assertThat(outcomes).isEmpty()
@@ -382,7 +382,7 @@ class AnimatableTest {
     lithoTestRule.idle()
     val outcomes = mutableListOf<Pair<AnimationEnd, Float>>()
     val animatable = checkNotNull(capturedAnimatable)
-    animatable.animateTo(1f, tween(1_000.ms)) { outcomes.add(it to view.lithoView.alpha) }
+    animatable.startAnimation(1f, tween(1_000.ms)) { outcomes.add(it to view.lithoView.alpha) }
 
     animatable.finish()
     animatable.finish()
@@ -401,7 +401,7 @@ class AnimatableTest {
     val view = lithoTestRule.render { ImperativeAlphaComponent() }
     lithoTestRule.idle()
     val outcomes = mutableListOf<AnimationEnd>()
-    checkNotNull(capturedAnimatable).animateTo(1f, tween(1_000.ms)) { outcomes.add(it) }
+    checkNotNull(capturedAnimatable).startAnimation(1f, tween(1_000.ms)) { outcomes.add(it) }
 
     view.release()
     lithoTestRule.idle()

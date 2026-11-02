@@ -192,10 +192,10 @@ thread from event handlers, and pass its `value` directly to a `Style` binding:
 ```kotlin
 val alpha = useAnimatable(0.4f, FloatTypeConverter)
 // In an event handler:
-alpha.animateTo(1f, tween(300.ms)) { outcome ->
+alpha.startAnimation(1f, tween(300.ms)) { outcome ->
     when (outcome) {
         AnimationEnd.Finished -> { /* reached the command target */ }
-        AnimationEnd.Interrupted -> { /* replaced by animateTo or snapTo */ }
+        AnimationEnd.Interrupted -> { /* replaced by startAnimation or jumpTo */ }
         AnimationEnd.Cancelled -> { /* stopped or unmounted */ }
     }
 }
@@ -207,8 +207,8 @@ Row(style = Style.alpha(alpha.value))
 
 | Command | Value behavior | Outcome for an active command |
 |---------|----------------|-------------------------------|
-| `animateTo(target, spec, onEnd)` | Animates toward the new target | `Interrupted` for the replaced command |
-| `snapTo(target)` | Publishes the new value immediately | `Interrupted` |
+| `startAnimation(target, spec, onEnd)` | Animates toward the new target | `Interrupted` for the replaced command |
+| `jumpTo(target)` | Publishes the new value immediately | `Interrupted` |
 | `stop()` | Holds the current value | `Cancelled` |
 | `finish()` | Publishes the active command's target immediately | `Finished` |
 
@@ -326,7 +326,7 @@ val pulse = chain<Float> {
   wait(80.ms)
   animateToTarget(tween(200.ms))
 }
-scale.animateTo(1f, pulse)
+scale.startAnimation(1f, pulse)
 ```
 
 A chain can move even when its initial and target values are equal. Each leg keeps its

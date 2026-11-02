@@ -73,8 +73,8 @@ class SystemDurationScaleSourceTest {
           shadowOf(Looper.getMainLooper()).idle()
           assertThat(tree.lithoView).isNull()
           var completions = 0
-          command.animateTo(0f, tween(0.ms)) { completions++ }
-          command.animateTo(1f, linear) { completions++ }
+          command.startAnimation(0f, tween(0.ms)) { completions++ }
+          command.startAnimation(1f, linear) { completions++ }
           driver.frame(0L)
           assertThat(command.value.value).isEqualTo(1f)
           assertThat(completions).isEqualTo(2)
@@ -83,7 +83,7 @@ class SystemDurationScaleSourceTest {
           Settings.Global.putFloat(resolver, setting, 2f)
           resolver.notifyChange(uri, null)
           shadowOf(Looper.getMainLooper()).idle()
-          command.animateTo(0f, linear)
+          command.startAnimation(0f, linear)
           driver.frame(100.ms.inWholeNanoseconds)
           driver.frame(300.ms.inWholeNanoseconds)
           assertThat(command.value.value).isCloseTo(0.9f, offset(0.0001f))

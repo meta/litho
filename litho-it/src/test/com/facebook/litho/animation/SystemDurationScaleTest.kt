@@ -66,7 +66,7 @@ class SystemDurationScaleTest {
       lithoTestRule.idle()
       view.setRoot(Mixed(1f))
       lithoTestRule.idle()
-      command.animateTo(1f, linear)
+      command.startAnimation(1f, linear)
       animationRule.advanceBy(200.ms)
       view.measure().layout()
       val expected = 0.2f / scale
@@ -130,7 +130,7 @@ class SystemDurationScaleTest {
     )
     for (spec in specs) {
       ends.clear()
-      command.animateTo(1f, spec) { ends.add(it) }
+      command.startAnimation(1f, spec) { ends.add(it) }
       assertThat(ends).isEmpty()
       animationRule.runNextFrame()
       view.measure().layout()

@@ -57,9 +57,9 @@ class SimpleAnimatableKComponent : KComponent() {
     )
 
     return Column(justifyContent = YogaJustify.SPACE_BETWEEN, style = Style.padding(all = 20.dp)) {
-      child(SeekBar(onProgressChanged = { alpha.snapTo(it) }))
+      child(SeekBar(onProgressChanged = { alpha.jumpTo(it) }))
       child(square)
-      child(SeekBar(onProgressChanged = { scale.snapTo(it) }))
+      child(SeekBar(onProgressChanged = { scale.jumpTo(it) }))
     }
   }
 }

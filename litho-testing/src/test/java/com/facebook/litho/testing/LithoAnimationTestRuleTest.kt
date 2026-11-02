@@ -87,7 +87,7 @@ class LithoAnimationTestRuleTest {
     assertThat(testView.lithoView.alpha).isEqualTo(0f)
 
     checkNotNull(capturedAnimatable)
-        .animateTo(1f, tween(duration = 1_000.ms, easing = Easing.Linear))
+        .startAnimation(1f, tween(duration = 1_000.ms, easing = Easing.Linear))
 
     assertThat(checkNotNull(capturedAnimatable).isRunning).isFalse()
 
@@ -133,7 +133,7 @@ class LithoAnimationTestRuleTest {
     shadowOf(getMainLooper()).idle()
 
     checkNotNull(capturedAnimatable)
-        .animateTo(1f, tween(duration = 1_000.ms, easing = Easing.Linear))
+        .startAnimation(1f, tween(duration = 1_000.ms, easing = Easing.Linear))
 
     animationRule.advanceBy(100.ms)
     animationRule.advanceBy(100.ms)
