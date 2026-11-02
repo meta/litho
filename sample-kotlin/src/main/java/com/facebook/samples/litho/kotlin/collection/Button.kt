@@ -24,9 +24,9 @@ import com.facebook.litho.view.onClick
 import com.facebook.litho.widget.Text
 
 @Suppress("FunctionName")
-inline fun ResourcesScope.Button(
+fun ResourcesScope.Button(
     text: String,
-    noinline onClick: (ClickEvent) -> Unit,
+    onClick: (ClickEvent) -> Unit,
 ): Text =
     Text.create(context, android.R.attr.buttonStyle, 0)
         .text(text)

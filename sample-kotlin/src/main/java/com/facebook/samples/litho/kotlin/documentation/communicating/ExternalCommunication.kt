@@ -81,7 +81,7 @@ class PurchaseButton(
 class CartBadgeWithFlow(private val cartItemCountFlow: StateFlow<Int>) : KComponent() {
   override fun ComponentScope.render(): Component {
     val itemCount = useFlow(cartItemCountFlow)
-    return Text(text = "Cart (${itemCount ?: 0})")
+    return Text(text = "Cart ($itemCount)")
   }
 }
 // end_component_with_flow

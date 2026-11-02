@@ -69,7 +69,7 @@ class ChildComponentSendsEventToParentComponent(
                               radius = BorderRadius(all = 2.dp),
                           ),
                       )
-                      .onClick { observer?.onComponentClicked() },
+                      .onClick { observer.onComponentClicked() },
           ),
       )
     }

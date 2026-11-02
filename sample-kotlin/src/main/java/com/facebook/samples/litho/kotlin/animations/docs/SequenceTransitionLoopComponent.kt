@@ -54,7 +54,7 @@ class SequenceTransitionLoopComponent : KComponent() {
 
     // Create an event handler for transition end
     val onTransitionEnd =
-        eventHandler<TransitionEndEvent> { event ->
+        eventHandler<TransitionEndEvent> { _ ->
           // When the last animation completes, toggle state to loop
           if (isLooping.value) {
             shown.update { !it }

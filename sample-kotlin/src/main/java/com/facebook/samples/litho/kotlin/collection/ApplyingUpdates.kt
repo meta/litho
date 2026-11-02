@@ -38,7 +38,6 @@ import com.facebook.litho.widget.collection.LazyList
 class ListWithIds(private val friends: List<Person>) : KComponent() {
   override fun ComponentScope.render(): Component {
 
-    val topFriend = friends[0]
     val shouldShowGreeting = useState { false }
 
     return LazyList {

@@ -76,7 +76,7 @@ class TemperatureInput(
 ) : KComponent() {
   override fun ComponentScope.render(): Component = Row {
     child(DoubleInput(value, onReturn))
-    child(Text("${scale.degreeUnit}"))
+    child(Text(scale.degreeUnit))
   }
 }
 
