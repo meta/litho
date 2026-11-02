@@ -331,7 +331,7 @@ public class RecyclerCollectionComponentSpec {
             removeAccessibilityListRole,
             javaStyle.build());
 
-    final ContainerBuilder containerBuilder =
+    final ContainerBuilder<?> containerBuilder =
         Column.create(c).flexShrink(0).alignContent(FLEX_START).child(recyclerComponent);
 
     if (loadingState == LoadingState.LOADING && loadingComponent != null) {

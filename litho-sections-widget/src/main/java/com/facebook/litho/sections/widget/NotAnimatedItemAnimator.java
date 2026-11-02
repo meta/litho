@@ -27,6 +27,7 @@ import com.facebook.infer.annotation.Nullsafe;
 @Nullsafe(Nullsafe.Mode.LOCAL)
 public class NotAnimatedItemAnimator extends SimpleItemAnimator {
 
+  @SuppressWarnings("this-escape") // ctor calls overridable setter (litho pattern)
   public NotAnimatedItemAnimator() {
     super();
     setSupportsChangeAnimations(false);

@@ -27,6 +27,7 @@ import com.facebook.infer.annotation.Nullsafe;
 @Nullsafe(Nullsafe.Mode.LOCAL)
 public class NoUpdateItemAnimator extends DefaultItemAnimator {
 
+  @SuppressWarnings("this-escape") // ctor calls setSupportsChangeAnimations (litho pattern)
   public NoUpdateItemAnimator() {
     super();
     setSupportsChangeAnimations(false);
