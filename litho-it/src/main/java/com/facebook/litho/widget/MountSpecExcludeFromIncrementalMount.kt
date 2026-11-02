@@ -39,6 +39,8 @@ class MountSpecExcludeFromIncrementalMount(
 ) : PrimitiveComponent() {
 
   override fun PrimitiveComponentScope.render(): LithoPrimitive {
+    // Test fixture for the opt-out itself.
+    @Suppress("PrimitiveExcludeFromIncrementalMountDetector")
     shouldExcludeFromIncrementalMount = true
 
     useState { lifecycleTracker.addStep(LifecycleStep.ON_CREATE_INITIAL_STATE) }

@@ -199,6 +199,7 @@ class ExcludedMountIndicator(
         mountBehavior =
             MountBehavior(ViewAllocator { context -> View(context) }) {
               // THIS IS THE KEY: Exclude this component from incremental mount
+              @Suppress("PrimitiveExcludeFromIncrementalMountDetector")
               shouldExcludeFromIncrementalMount = true
 
               bind(itemId) { content ->
