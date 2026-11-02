@@ -313,7 +313,7 @@ public class StateGenerator {
             .addModifiers(Modifier.PROTECTED, Modifier.STATIC)
             .addAnnotation(
                 AnnotationSpec.builder(SuppressWarnings.class)
-                    .addMember("value", "$S", "rawtypes")
+                    .addMember("value", "{$S, $S}", "rawtypes", "varargs")
                     .build())
             .addParameter(specModel.getContextClass(), "c")
             .addTypeVariables(MethodParamModelUtils.getTypeVariables(stateValue))
