@@ -666,6 +666,13 @@ internal class TextInputLayoutBehavior(
   }
 
   override fun LayoutScope.layout(sizeConstraints: SizeConstraints): PrimitiveLayoutResult {
+    // An EditText measured exactly takes the size it's given, so building one would only repeat it.
+    if (sizeConstraints.hasExactWidth && sizeConstraints.hasExactHeight) {
+      return PrimitiveLayoutResult(
+          width = sizeConstraints.maxWidth,
+          height = sizeConstraints.maxHeight,
+      )
+    }
     // When input type has NO_SUGGESTIONS flag set then suggestion spans are removed when
     // setText is called. This causes that SpanWatcher is invoked and TextView listens to
     // those span changes. It caused a crash like T223197933. Here, we're removing

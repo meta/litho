@@ -17,6 +17,7 @@
 package com.facebook.litho.widget
 
 import android.text.InputFilter
+import android.text.Spanned
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
@@ -29,12 +30,17 @@ import com.facebook.litho.ComponentTree
 import com.facebook.litho.Handle
 import com.facebook.litho.KComponent
 import com.facebook.litho.LithoView
+import com.facebook.litho.Style
 import com.facebook.litho.config.ComponentsConfiguration
+import com.facebook.litho.core.height
+import com.facebook.litho.core.width
 import com.facebook.litho.kotlin.widget.TextInput
+import com.facebook.litho.layout.flexbox.Column
 import com.facebook.litho.testing.LithoTestRule
 import com.facebook.litho.testing.TestLithoView
 import com.facebook.litho.testing.exactly
 import com.facebook.litho.testing.unspecified
+import com.facebook.rendercore.px
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.After
 import org.junit.Before
@@ -144,6 +150,17 @@ class TextInputBehaviorParityTest(private val usePrimitiveTextInput: Boolean) {
     assertThat(calls).containsExactly("second")
   }
 
+  @Test
+  fun `an input given a fixed size is laid out without measuring an EditText`() {
+    val measures = MeasureCounter()
+
+    val tree = layOutWithoutMounting { fixedSizeInput(measures, widthPx = 300, heightPx = 90) }
+
+    assertThat(measures.count).isEqualTo(0)
+    val editText = mount(tree)
+    assertThat(editText.width to editText.height).isEqualTo(300 to 90)
+  }
+
   private fun inputWithConnection(onCreate: () -> Unit): Component =
       object : KComponent() {
         override fun ComponentScope.render(): Component = TextInput(
@@ -182,6 +199,19 @@ class TextInputBehaviorParityTest(private val usePrimitiveTextInput: Boolean) {
         TextInput.create(c).handle(handle).multiline(true).initialText(initialText).build()
       }
 
+  private fun fixedSizeInput(measures: MeasureCounter, widthPx: Int, heightPx: Int): Component =
+      object : KComponent() {
+        override fun ComponentScope.render(): Component = Column {
+          child(
+              TextInput(
+                  initialText = "draft",
+                  inputFilter = measures,
+                  style = Style.width(widthPx.px).height(heightPx.px),
+              ),
+          )
+        }
+      }
+
   private fun heightOf(component: (ComponentContext) -> Component): Int =
       mount(layOutWithoutMounting(component)).height
 
@@ -207,6 +237,23 @@ class TextInputBehaviorParityTest(private val usePrimitiveTextInput: Boolean) {
       return null
     }
     return (0 until view.childCount).firstNotNullOfOrNull { findEditText(view.getChildAt(it)) }
+  }
+
+  /** Measuring an input sets its text on a new EditText, which runs this filter once. */
+  private class MeasureCounter : InputFilter {
+    var count = 0
+
+    override fun filter(
+        source: CharSequence?,
+        start: Int,
+        end: Int,
+        dest: Spanned?,
+        dstart: Int,
+        dend: Int,
+    ): CharSequence? {
+      count++
+      return null
+    }
   }
 
   companion object {
