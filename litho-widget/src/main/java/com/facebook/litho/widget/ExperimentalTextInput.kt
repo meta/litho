@@ -19,6 +19,7 @@ package com.facebook.litho.widget
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.res.ColorStateList
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.Typeface
@@ -267,6 +268,7 @@ class ExperimentalTextInput(
     val savedTextWithoutSpans = useState { AtomicReference(initialText.toString() as CharSequence) }
     val savedTextWithSpans = useState { AtomicReference(initialText.toSpanned()) }
     val measureSeqNumber = useState { 0 }
+    val measurements = useState { TextInputMeasurements() }
     // Hand the committed input's text state to the controller, so triggers work before it mounts.
     useEffect(
         textInputController,
@@ -344,6 +346,7 @@ class ExperimentalTextInput(
                 measureSeqNumber = measureSeqNumber.value,
                 useTextWithSpansForMeasure = useTextWithSpansForMeasure,
                 isHintOnOneLine = isHintOnOneLine,
+                measurements = measurements.value,
             ),
         mountBehavior =
             MountBehavior(
@@ -608,6 +611,7 @@ internal class TextInputLayoutBehavior(
     private val savedTextWithSpans: AtomicReference<Spanned?>?,
     private val useTextWithSpansForMeasure: Boolean,
     private val isHintOnOneLine: Boolean,
+    private val measurements: TextInputMeasurements,
 ) : LayoutBehavior {
   /**
    * Whether the previous measurement can be reused. Written out, rather than Litho's default
@@ -662,7 +666,8 @@ internal class TextInputLayoutBehavior(
         savedTextWithoutSpans === other.savedTextWithoutSpans &&
         savedTextWithSpans === other.savedTextWithSpans &&
         useTextWithSpansForMeasure == other.useTextWithSpansForMeasure &&
-        isHintOnOneLine == other.isHintOnOneLine
+        isHintOnOneLine == other.isHintOnOneLine &&
+        measurements === other.measurements
   }
 
   override fun LayoutScope.layout(sizeConstraints: SizeConstraints): PrimitiveLayoutResult {
@@ -672,6 +677,16 @@ internal class TextInputLayoutBehavior(
           width = sizeConstraints.maxWidth,
           height = sizeConstraints.maxHeight,
       )
+    }
+    // Read once: an edit on the main thread can change the text while this measures it.
+    val textWithoutSpans = savedTextWithoutSpans?.get()
+    val textWithSpans = savedTextWithSpans?.get()
+    val text = if (useTextWithSpansForMeasure) textWithSpans else textWithoutSpans
+    val configuration = androidContext.resources.configuration
+    val behavior = this@TextInputLayoutBehavior
+    val cached = measurements.sizeFor(behavior, configuration, sizeConstraints, text)
+    if (cached != null) {
+      return cached
     }
     // When input type has NO_SUGGESTIONS flag set then suggestion spans are removed when
     // setText is called. This causes that SpanWatcher is invoked and TextView listens to
@@ -717,13 +732,13 @@ internal class TextInputLayoutBehavior(
         importantForAutofill,
         autofillHints,
         disableAutofill,
-        savedTextWithoutSpans?.get(),
-        savedTextWithSpans?.get(),
+        textWithoutSpans,
+        textWithSpans,
         useTextWithSpansForMeasure,
         isHintOnOneLine = isHintOnOneLine,
     )
 
-    return PrimitiveLayoutResult(
+    val result = PrimitiveLayoutResult(
         height = forMeasure.measuredHeight,
         width =
             if (!sizeConstraints.hasBoundedWidth) {
@@ -733,6 +748,95 @@ internal class TextInputLayoutBehavior(
               min(sizeConstraints.maxWidth, forMeasure.measuredWidth)
             },
     )
+    measurements.record(behavior, configuration, sizeConstraints, text, result)
+    return result
+  }
+}
+
+/**
+ * The sizes an input measured to, so a re-layout that would measure the same EditText reuses them.
+ * Litho keeps only a Primitive's last measurement, and its exact measure after layout overwrites
+ * it, so without this every re-layout measures an EditText again.
+ *
+ * A size is reused only when everything that went into measuring it is the same:
+ * - the props, by [TextInputLayoutBehavior.isEquivalentTo];
+ * - the configuration: the font scale, density and locale change the text's size but not the props,
+ *   and a tree can keep its state across such a change;
+ * - the size constraints;
+ * - the text: the props compare the text holders, not what they hold, so typing changes the text
+ *   without changing the props.
+ *
+ * Layout runs on several threads, so the sizes are replaced as one snapshot.
+ */
+internal class TextInputMeasurements {
+
+  private val snapshot = AtomicReference<Snapshot?>(null)
+
+  fun sizeFor(
+      behavior: TextInputLayoutBehavior,
+      configuration: Configuration,
+      sizeConstraints: SizeConstraints,
+      text: CharSequence?,
+  ): PrimitiveLayoutResult? {
+    val current = snapshot.get()
+    if (current == null || !current.isFor(behavior, configuration)) {
+      return null
+    }
+    val size = current.sizes.firstOrNull { it.sizeConstraints == sizeConstraints } ?: return null
+    return if (isSameText(size.text, text)) size.result else null
+  }
+
+  fun record(
+      behavior: TextInputLayoutBehavior,
+      configuration: Configuration,
+      sizeConstraints: SizeConstraints,
+      text: CharSequence?,
+      result: PrimitiveLayoutResult,
+  ) {
+    val size = Size(sizeConstraints, text, result)
+    while (true) {
+      val current = snapshot.get()
+      val next =
+          if (current != null && current.isFor(behavior, configuration)) {
+            val others = current.sizes.filterNot { it.sizeConstraints == sizeConstraints }
+            Snapshot(behavior, current.configuration, others.takeLast(MAX_SIZES - 1) + size)
+          } else {
+            // A copy: Android updates the Resources' configuration in place when it changes.
+            Snapshot(behavior, Configuration(configuration), listOf(size))
+          }
+      // compareAndSet rather than updateAndGet, which needs API 24.
+      if (snapshot.compareAndSet(current, next)) {
+        return
+      }
+    }
+  }
+
+  /**
+   * The text without spans is a String, so it compares by content. The text with spans is a new
+   * object on every edit, so it compares by identity: an edit always measures again.
+   */
+  private fun isSameText(measured: CharSequence?, current: CharSequence?): Boolean =
+      if (measured is String && current is String) measured == current else measured === current
+
+  private class Size(
+      val sizeConstraints: SizeConstraints,
+      val text: CharSequence?,
+      val result: PrimitiveLayoutResult,
+  )
+
+  /** The sizes measured with one set of props, under one configuration. */
+  private class Snapshot(
+      val behavior: TextInputLayoutBehavior,
+      val configuration: Configuration,
+      val sizes: List<Size>,
+  ) {
+    fun isFor(behavior: TextInputLayoutBehavior, configuration: Configuration): Boolean =
+        this.behavior.isEquivalentTo(behavior) && this.configuration == configuration
+  }
+
+  private companion object {
+    /** As Yoga's `LayoutResults::MaxCachedMeasurements`. */
+    const val MAX_SIZES: Int = 8
   }
 }
 

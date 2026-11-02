@@ -47,6 +47,7 @@ class TextInputLayoutBehaviorTest {
   // Compared by identity, so shared across behaviors.
   private val errorDrawable: Drawable = Color.RED.toDrawable()
   private val keyListener: KeyListener = TextKeyListener.getInstance()
+  private val measurements = TextInputMeasurements()
 
   @Test
   fun `behaviors built from the same props are equivalent`() {
@@ -87,6 +88,7 @@ class TextInputLayoutBehaviorTest {
         type.isArray -> arrayOf<String?>("changed")
         MovementMethod::class.java.isAssignableFrom(type) -> LinkMovementMethod.getInstance()
         type == AtomicReference::class.java -> AtomicReference<Any?>(null)
+        type == TextInputMeasurements::class.java -> TextInputMeasurements()
         else -> error("Add a different value for $type")
       }
 
@@ -130,5 +132,6 @@ class TextInputLayoutBehaviorTest {
       savedTextWithSpans = savedTextWithSpans,
       useTextWithSpansForMeasure = false,
       isHintOnOneLine = false,
+      measurements = measurements,
   )
 }

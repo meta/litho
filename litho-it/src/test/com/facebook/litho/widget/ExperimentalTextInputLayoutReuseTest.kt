@@ -24,21 +24,35 @@ import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.text.InputFilter
 import android.text.Spanned
+import android.view.View
+import android.view.ViewGroup
+import android.widget.EditText
 import androidx.core.graphics.drawable.toDrawable
 import com.facebook.litho.Component
 import com.facebook.litho.ComponentScope
 import com.facebook.litho.ComponentTree
 import com.facebook.litho.KComponent
 import com.facebook.litho.Size
+import com.facebook.litho.Style
+import com.facebook.litho.core.height
+import com.facebook.litho.core.width
+import com.facebook.litho.flexbox.flex
+import com.facebook.litho.kotlin.widget.Text
 import com.facebook.litho.layout.flexbox.Column
+import com.facebook.litho.layout.flexbox.Row
 import com.facebook.litho.testing.LithoTestRule
+import com.facebook.litho.testing.TestLithoView
 import com.facebook.litho.testing.exactly
 import com.facebook.litho.testing.unspecified
+import com.facebook.litho.useCached
+import com.facebook.rendercore.px
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.LooperMode
 
 /**
@@ -51,6 +65,11 @@ import org.robolectric.annotation.LooperMode
 class ExperimentalTextInputLayoutReuseTest {
 
   @JvmField @Rule val lithoTestRule = LithoTestRule()
+
+  @After
+  fun resetFontScale() {
+    RuntimeEnvironment.setFontScale(1f)
+  }
 
   @Test
   fun `a background built on each render that draws the same keeps the measurement`() {
@@ -116,8 +135,86 @@ class ExperimentalTextInputLayoutReuseTest {
     assertThat(layout(tree, counter, padded)).isEqualTo(heightWithPadding)
   }
 
+  @Test
+  fun `re-laying out an input that grows into a row keeps its measurement`() {
+    val counter = CountingFilter()
+    val tree = ComponentTree.create(lithoTestRule.context).build()
+
+    layout(tree, Composer(counter, label = "first"))
+    val measurements = counter.calls
+
+    layout(tree, Composer(counter, label = "second"))
+    assertThat(counter.calls).isEqualTo(measurements)
+  }
+
+  @Test
+  fun `re-laying out an input that grows into a row with a different hint measures again`() {
+    val counter = CountingFilter()
+    val tree = ComponentTree.create(lithoTestRule.context).build()
+
+    layout(tree, Composer(counter, label = "first", hint = "Aa"))
+    val measurements = counter.calls
+
+    layout(tree, Composer(counter, label = "second", hint = "Message"))
+    // Each size measured with the old hint is measured again, not only the first one asked for.
+    assertThat(counter.calls - measurements).isEqualTo(measurements)
+  }
+
+  @Test
+  fun `re-laying out an input that grows into a narrower slot measures again`() {
+    val counter = CountingFilter()
+    val tree = ComponentTree.create(lithoTestRule.context).build()
+
+    layout(tree, Composer(counter, label = "first", buttonWidthPx = 100))
+    val measurements = counter.calls
+
+    layout(tree, Composer(counter, label = "second", buttonWidthPx = 200))
+    assertThat(counter.calls).isGreaterThan(measurements)
+  }
+
+  @Test
+  fun `re-laying out an input at a width it had before the user typed measures it again`() {
+    val counter = CountingFilter()
+    val view =
+        lithoTestRule.render(widthPx = 500, heightPx = 200) {
+          Composer(counter, label = "button shown", buttonWidthPx = 200)
+        }
+    relayOut(view, Composer(counter, label = "button hidden", buttonWidthPx = 0))
+
+    // The user types; the text still fits on one line in the wider slot.
+    editTextOf(view).text.append(" and more")
+    lithoTestRule.idle()
+    val measurements = counter.calls
+
+    relayOut(view, Composer(counter, label = "button shown again", buttonWidthPx = 200))
+    // The narrow slot's size was measured for "draft", before the user typed.
+    assertThat(counter.calls).isGreaterThan(measurements)
+  }
+
+  @Test
+  fun `an input in a tree that kept its state measures again after the font scale changes`() {
+    val counter = CountingFilter()
+    val oldTree = ComponentTree.create(lithoTestRule.context).build()
+    layout(oldTree, Composer(counter, label = "composer"))
+    val state = oldTree.acquireTreeState()
+    oldTree.release()
+    val measurements = counter.calls
+
+    RuntimeEnvironment.setFontScale(1.3f)
+    val newTree = ComponentTree.create(lithoTestRule.context).treeState(state).build()
+    layout(newTree, Composer(counter, label = "composer"))
+
+    // The sizes the new tree kept were measured at the old font scale.
+    assertThat(counter.calls).isGreaterThan(measurements)
+  }
+
   private fun layout(tree: ComponentTree, root: Component) {
     tree.setRootAndSizeSpecSync(root, exactly(500), unspecified())
+  }
+
+  private fun relayOut(view: TestLithoView, root: Component) {
+    view.setRoot(root)
+    lithoTestRule.idle()
   }
 
   private fun layout(tree: ComponentTree, counter: CountingFilter, background: Drawable): Int {
@@ -158,6 +255,53 @@ class ExperimentalTextInputLayoutReuseTest {
     ): CharSequence? {
       calls++
       return null
+    }
+  }
+
+  private fun editTextOf(view: TestLithoView): EditText =
+      checkNotNull(findEditText(view.lithoView)) { "No EditText mounted" }
+
+  private fun findEditText(view: View): EditText? {
+    if (view is EditText) {
+      return view
+    }
+    if (view !is ViewGroup) {
+      return null
+    }
+    return (0 until view.childCount).firstNotNullOfOrNull { findEditText(view.getChildAt(it)) }
+  }
+
+  /**
+   * Messenger's composer: an input that grows into the room a button leaves it. Yoga measures it
+   * for its natural size and again for the room it grows into, so each layout measures it under
+   * more than one size constraint.
+   *
+   * A new [label] re-renders the composer while the input's own props stay the same.
+   */
+  private class Composer(
+      private val counter: CountingFilter,
+      private val label: String,
+      private val hint: String = "Aa",
+      private val buttonWidthPx: Int = 100,
+  ) : KComponent() {
+    override fun ComponentScope.render(): Component {
+      val inputFilters = useCached(counter) { listOf(counter) }
+      return Column {
+        child(Text(text = label))
+        child(
+            Row {
+              child(Row(style = Style.width(buttonWidthPx.px).height(40.px)))
+              child(
+                  ExperimentalTextInput(
+                      initialText = "draft",
+                      hint = hint,
+                      inputFilters = inputFilters,
+                      style = Style.flex(grow = 1f),
+                  ),
+              )
+            },
+        )
+      }
     }
   }
 
