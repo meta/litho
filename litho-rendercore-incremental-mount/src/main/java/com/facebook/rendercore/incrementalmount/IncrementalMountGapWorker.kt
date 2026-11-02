@@ -59,20 +59,6 @@ internal interface PremountCostEstimator {
 }
 
 /**
- * One premount ask, as the worker issues it. A seam rather than a direct call so tests can assert
- * the deadline, frame sequence, clock and estimator the worker hands down.
- */
-internal typealias PremountDispatcher =
-    (
-        IncrementalMountExtension,
-        ExtensionState<IncrementalMountExtensionState>,
-        Long,
-        Long,
-        () -> Long,
-        PremountCostEstimator,
-    ) -> PremountResult
-
-/**
  * Predicts premount cost per content type from an exponentially weighted moving average, the shape
  * RecyclerView uses for its own prefetch estimates
  * (`RecyclerView.RecycledViewPool.runningAverage`).
@@ -133,7 +119,15 @@ private constructor(
     private val tracer: Systracer,
     private val nanoTime: () -> Long,
     private val estimator: PremountCostEstimator,
-    private val premountDispatcher: PremountDispatcher,
+    private val premountDispatcher:
+        (
+            IncrementalMountExtension,
+            ExtensionState<IncrementalMountExtensionState>,
+            Long,
+            Long,
+            () -> Long,
+            PremountCostEstimator,
+        ) -> PremountResult,
 ) : Choreographer.FrameCallback, Runnable {
 
   private val handler: Handler = Handler(Looper.getMainLooper())
@@ -472,7 +466,15 @@ private constructor(
         tracer: Systracer,
         nanoTime: () -> Long,
         estimator: PremountCostEstimator,
-        premountDispatcher: PremountDispatcher,
+        premountDispatcher:
+            (
+                IncrementalMountExtension,
+                ExtensionState<IncrementalMountExtensionState>,
+                Long,
+                Long,
+                () -> Long,
+                PremountCostEstimator,
+            ) -> PremountResult,
     ): IncrementalMountGapWorker {
       val eagerFrameInterval =
           if (RenderCoreConfig.computeGapWorkerFrameIntervalLazily) {
@@ -520,7 +522,15 @@ private constructor(
 
     private val SYSTEM_NANO_TIME: () -> Long = System::nanoTime
 
-    private val DEFAULT_PREMOUNT_DISPATCHER: PremountDispatcher =
+    private val DEFAULT_PREMOUNT_DISPATCHER:
+        (
+            IncrementalMountExtension,
+            ExtensionState<IncrementalMountExtensionState>,
+            Long,
+            Long,
+            () -> Long,
+            PremountCostEstimator,
+        ) -> PremountResult =
         { extension, extensionState, deadlineNs, frameSequence, nanoTime, estimator ->
           extension.premountNextForGapWorker(
               extensionState,

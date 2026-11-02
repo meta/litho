@@ -698,7 +698,15 @@ class IncrementalMountGapWorkerTest {
         PremountResult.EXHAUSTED,
     )
     lateinit var worker: IncrementalMountGapWorker
-    val dispatcher: PremountDispatcher =
+    val dispatcher:
+        (
+            IncrementalMountExtension,
+            ExtensionState<IncrementalMountExtensionState>,
+            Long,
+            Long,
+            () -> Long,
+            PremountCostEstimator,
+        ) -> PremountResult =
         { extension, extensionState, deadlineNs, frameSequence, nanoTime, estimator ->
           val result =
               fixture.dispatch(
@@ -1055,7 +1063,15 @@ class IncrementalMountGapWorkerTest {
         } else {
           TestIncrementalMountExtensionInput(firstOutput, secondOutput)
         }
-    val dispatcher: PremountDispatcher =
+    val dispatcher:
+        (
+            IncrementalMountExtension,
+            ExtensionState<IncrementalMountExtensionState>,
+            Long,
+            Long,
+            () -> Long,
+            PremountCostEstimator,
+        ) -> PremountResult =
         { actualExtension, actualState, deadlineNs, frameSequence, nanoTime, estimator ->
           // Return the adapter's own result: hardcoding MOUNTED would never let the worker's
           // loop terminate, since it exits only on YIELD or EXHAUSTED.
@@ -1281,7 +1297,16 @@ class IncrementalMountGapWorkerTest {
       val delegate: com.facebook.rendercore.MountDelegate,
       val acquireOrdinaryMountReference: () -> Unit,
       val ownsGapWorkerMountReference: () -> Boolean = { false },
-      val dispatcher: PremountDispatcher? = null,
+      val dispatcher:
+          ((
+              IncrementalMountExtension,
+              ExtensionState<IncrementalMountExtensionState>,
+              Long,
+              Long,
+              () -> Long,
+              PremountCostEstimator,
+          ) -> PremountResult)? =
+          null,
       val mountGapWorkerContentWithoutExtensionReference: () -> Unit = {},
       val acquireGapWorkerMountReference: () -> Unit = {},
       val ownsSecondGapWorkerMountReference: () -> Boolean = { false },
@@ -1290,7 +1315,15 @@ class IncrementalMountGapWorkerTest {
       val pendingPremountContentType: () -> Any? = { null },
       val clearCostAwareInput: () -> Unit = {},
   ) {
-    fun requireDispatcher(): PremountDispatcher = checkNotNull(dispatcher)
+    fun requireDispatcher():
+        (
+            IncrementalMountExtension,
+            ExtensionState<IncrementalMountExtensionState>,
+            Long,
+            Long,
+            () -> Long,
+            PremountCostEstimator,
+        ) -> PremountResult = checkNotNull(dispatcher)
   }
 
   private class MountStateSamplingScenario(
@@ -1487,7 +1520,15 @@ class IncrementalMountGapWorkerTest {
 
   private fun createWorker(
       nanoTime: () -> Long,
-      dispatcher: PremountDispatcher,
+      dispatcher:
+          (
+              IncrementalMountExtension,
+              ExtensionState<IncrementalMountExtensionState>,
+              Long,
+              Long,
+              () -> Long,
+              PremountCostEstimator,
+          ) -> PremountResult,
       estimator: PremountCostEstimator = estimator(),
   ): IncrementalMountGapWorker =
       IncrementalMountGapWorker.get(
@@ -1524,9 +1565,24 @@ class IncrementalMountGapWorkerTest {
   )
 
   private fun wrapDispatcher(
-      delegate: PremountDispatcher,
+      delegate:
+          (
+              IncrementalMountExtension,
+              ExtensionState<IncrementalMountExtensionState>,
+              Long,
+              Long,
+              () -> Long,
+              PremountCostEstimator,
+          ) -> PremountResult,
       block: (() -> PremountResult) -> PremountResult,
-  ): PremountDispatcher =
+  ): (
+      IncrementalMountExtension,
+      ExtensionState<IncrementalMountExtensionState>,
+      Long,
+      Long,
+      () -> Long,
+      PremountCostEstimator,
+  ) -> PremountResult =
       { extension, extensionState, deadlineNs, frameSequence, nanoTime, estimator ->
         block {
           delegate(
@@ -1540,7 +1596,16 @@ class IncrementalMountGapWorkerTest {
         }
       }
 
-  private fun dispatcherFor(vararg fixtures: CostAwareFixture): PremountDispatcher =
+  private fun dispatcherFor(
+      vararg fixtures: CostAwareFixture,
+  ): (
+      IncrementalMountExtension,
+      ExtensionState<IncrementalMountExtensionState>,
+      Long,
+      Long,
+      () -> Long,
+      PremountCostEstimator,
+  ) -> PremountResult =
       { extension, extensionState, deadlineNs, frameSequence, nanoTime, estimator ->
         fixtures
             .single { it.extensionState === extensionState }
@@ -1554,7 +1619,15 @@ class IncrementalMountGapWorkerTest {
             )
       }
 
-  private fun throwingPremountDispatcher(): PremountDispatcher = { _, _, _, _, _, _ ->
+  private fun throwingPremountDispatcher():
+      (
+          IncrementalMountExtension,
+          ExtensionState<IncrementalMountExtensionState>,
+          Long,
+          Long,
+          () -> Long,
+          PremountCostEstimator,
+      ) -> PremountResult = { _, _, _, _, _, _ ->
     error("dispatcher accessed")
   }
 
@@ -1578,7 +1651,16 @@ class IncrementalMountGapWorkerTest {
   ) {
     val calls = mutableListOf<PremountDispatchCall>()
     val resultsReturned = mutableListOf<PremountResult>()
-    val dispatcher: PremountDispatcher = ::dispatch
+    val dispatcher:
+        (
+            IncrementalMountExtension,
+            ExtensionState<IncrementalMountExtensionState>,
+            Long,
+            Long,
+            () -> Long,
+            PremountCostEstimator,
+        ) -> PremountResult =
+        ::dispatch
 
     fun dispatch(
         extension: IncrementalMountExtension,
