@@ -16,6 +16,7 @@
 
 package com.facebook.litho.animation
 
+import android.view.Choreographer
 import com.facebook.rendercore.ms
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.nanoseconds
@@ -276,14 +277,14 @@ class AnimationControllerTest {
 
   private class TestAnimationFrameDriver : AnimationFrameDriver {
 
-    private val scheduledCallbacks = linkedSetOf<AnimationFrameCallback>()
+    private val scheduledCallbacks = linkedSetOf<Choreographer.FrameCallback>()
     private var currentFrameTimeNanos: Long = 0L
 
-    override fun postFrameCallback(callback: AnimationFrameCallback) {
+    override fun postFrameCallback(callback: Choreographer.FrameCallback) {
       scheduledCallbacks.add(callback)
     }
 
-    override fun removeFrameCallback(callback: AnimationFrameCallback) {
+    override fun removeFrameCallback(callback: Choreographer.FrameCallback) {
       scheduledCallbacks.remove(callback)
     }
 

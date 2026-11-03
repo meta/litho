@@ -18,6 +18,7 @@ package com.facebook.litho.animation
 
 import android.os.Looper
 import android.provider.Settings
+import android.view.Choreographer
 import android.view.View
 import com.facebook.litho.Component
 import com.facebook.litho.ComponentContext
@@ -154,13 +155,13 @@ class SystemDurationScaleSourceTest {
   }
 
   private class FrameDriver : AnimationFrameDriver {
-    var callback: AnimationFrameCallback? = null
+    var callback: Choreographer.FrameCallback? = null
 
-    override fun postFrameCallback(callback: AnimationFrameCallback) {
+    override fun postFrameCallback(callback: Choreographer.FrameCallback) {
       this.callback = callback
     }
 
-    override fun removeFrameCallback(callback: AnimationFrameCallback) {
+    override fun removeFrameCallback(callback: Choreographer.FrameCallback) {
       if (this.callback === callback) this.callback = null
     }
 

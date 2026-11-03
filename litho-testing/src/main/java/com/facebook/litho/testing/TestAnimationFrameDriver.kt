@@ -16,7 +16,7 @@
 
 package com.facebook.litho.testing
 
-import com.facebook.litho.animation.AnimationFrameCallback
+import android.view.Choreographer
 import com.facebook.litho.animation.AnimationFrameDriver
 import com.facebook.rendercore.ms
 import kotlin.time.Duration
@@ -29,14 +29,14 @@ import kotlin.time.Duration
  */
 internal class TestAnimationFrameDriver : AnimationFrameDriver {
 
-  private val scheduledCallbacks = linkedSetOf<AnimationFrameCallback>()
+  private val scheduledCallbacks = linkedSetOf<Choreographer.FrameCallback>()
   private var isDispatchingFrame = false
   private var needsStartFrame = false
 
   var currentFrameTimeNanos: Long = 0L
     private set
 
-  override fun postFrameCallback(callback: AnimationFrameCallback) {
+  override fun postFrameCallback(callback: Choreographer.FrameCallback) {
     val hadScheduledCallbacks = scheduledCallbacks.isNotEmpty()
     scheduledCallbacks.add(callback)
     if (!hadScheduledCallbacks && !isDispatchingFrame) {
@@ -44,7 +44,7 @@ internal class TestAnimationFrameDriver : AnimationFrameDriver {
     }
   }
 
-  override fun removeFrameCallback(callback: AnimationFrameCallback) {
+  override fun removeFrameCallback(callback: Choreographer.FrameCallback) {
     scheduledCallbacks.remove(callback)
     if (scheduledCallbacks.isEmpty()) {
       needsStartFrame = false
