@@ -327,6 +327,13 @@ internal constructor(
      */
     @JvmField var cacheComparableFields: Boolean = false
 
+    /**
+     * Reuses [com.facebook.litho.widget.SolidColor]'s `ColorDrawable` across renders while its
+     * color and alpha are unchanged. Both arms render the same pixels; this exists to measure the
+     * difference.
+     */
+    @JvmField var cacheSolidColorDrawable: Boolean = false
+
     @JvmField var shouldOverrideHasTransientState: Boolean = false
     @JvmField var reduceMemorySpikeUserSession: Boolean = false
     @JvmField var reduceMemorySpikeDataDiffSection: Boolean = false

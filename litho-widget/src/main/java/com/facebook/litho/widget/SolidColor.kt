@@ -16,14 +16,15 @@
 
 package com.facebook.litho.widget
 
-import android.graphics.drawable.ColorDrawable
 import android.widget.ImageView
 import androidx.annotation.ColorInt
 import androidx.core.graphics.ColorUtils
+import androidx.core.graphics.drawable.toDrawable
 import com.facebook.litho.Component
 import com.facebook.litho.ComponentScope
 import com.facebook.litho.KComponent
 import com.facebook.litho.Style
+import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.core.height
 import com.facebook.litho.core.width
 import com.facebook.litho.useCached
@@ -45,24 +46,30 @@ class SolidColor(
 ) : KComponent() {
 
   override fun ComponentScope.render(): Component {
-    val colorWithAlpha =
-        useCached(color, alpha) {
-          if (alpha >= 0f) {
-            val clampedAlpha = min(1.0f, alpha)
-            ColorUtils.setAlphaComponent(color, (clampedAlpha * 255f).toInt())
-          } else {
-            color
-          }
+    val drawable =
+        if (ComponentsConfiguration.cacheSolidColorDrawable) {
+          useCached(color, alpha) { colorWithAlpha(color, alpha).toDrawable() }
+        } else {
+          useCached(color, alpha) { colorWithAlpha(color, alpha) }.toDrawable()
         }
 
     return PrimitiveImage(
-        drawable = ColorDrawable(colorWithAlpha),
+        drawable = drawable,
         scaleType = ImageView.ScaleType.FIT_XY,
         style = style,
     )
   }
 
   companion object {
+    @ColorInt
+    private fun colorWithAlpha(@ColorInt color: Int, alpha: Float): Int =
+        if (alpha >= 0f) {
+          val clampedAlpha = min(1.0f, alpha)
+          ColorUtils.setAlphaComponent(color, (clampedAlpha * 255f).toInt())
+        } else {
+          color
+        }
+
     /**
      * Simplified Java-compatible factory method that accepts just color and style. Use this method
      * when calling from Java code that only needs to specify color and style without passing
