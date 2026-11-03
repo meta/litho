@@ -303,7 +303,7 @@ public class RecyclerCollectionEventsController extends RecyclerEventsController
     }
   }
 
-  public void setSectionTree(SectionTree sectionTree) {
+  public void setSectionTree(@Nullable SectionTree sectionTree) {
     mSectionTree = sectionTree;
   }
 
