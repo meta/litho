@@ -16,6 +16,7 @@
 
 package com.facebook.litho
 
+import com.facebook.litho.config.UnmountOnDetach
 import com.facebook.litho.testing.LithoTestRule
 import com.facebook.litho.testing.testrunner.LithoTestRunner
 import com.facebook.litho.widget.MountSpecInterStagePropsTester
@@ -54,7 +55,7 @@ class InterStagePropsTest {
     // We need to make sure layout happens because which triggers mount and bind together
     testLithoView.attachToWindow()
     val config = testLithoView.lithoView.configuration
-    if (config != null && config.enableFixForIM) {
+    if (config != null && config.unmountOnDetach != UnmountOnDetach.Never) {
       testLithoView.lithoView.notifyVisibleBoundsChanged(VisibilityChangeReason.UNKNOWN)
       assertThat(lifecycleTracker.steps)
           .describedAs("On Bind should be called")

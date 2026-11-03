@@ -28,6 +28,7 @@ import com.facebook.litho.ResourcesScope
 import com.facebook.litho.Style
 import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.config.PrimitiveRecyclerBinderStrategy
+import com.facebook.litho.config.UnmountOnDetach
 import com.facebook.litho.core.height
 import com.facebook.litho.core.width
 import com.facebook.litho.layout.flexbox.Column
@@ -160,12 +161,12 @@ class RecyclerTest {
   }
 
   @Test
-  fun `a detach without enableFixForIM keeps skipsRedundantBringToFront on`() {
+  fun `a detach that does not unmount keeps skipsRedundantBringToFront on`() {
     forEachStrategy { strategy, _ ->
       // In a real window, the detach reaches the list itself, not only the LithoView.
       val binder = newRecyclerBinder(realWindowRule.context)
       val testLithoView =
-          realWindowRule.render(componentTree = componentTree(enableFixForIM = false)) {
+          realWindowRule.render(componentTree = componentTree(UnmountOnDetach.Never)) {
             Column { child(recycler(binder, strategy)) }
           }
       val list = testLithoView.mountedList()
@@ -207,12 +208,12 @@ class RecyclerTest {
   }
 
   @Test
-  fun `a detach under enableFixForIM turns skipsRedundantBringToFront off`() {
+  fun `a detach that unmounts turns skipsRedundantBringToFront off`() {
     forEachStrategy { strategy, _ ->
       val binder = newRecyclerBinder(realWindowRule.context)
       // Below the root, as in an app: incremental mount never unmounts the root item.
       val testLithoView =
-          realWindowRule.render(componentTree = componentTree(enableFixForIM = true)) {
+          realWindowRule.render(componentTree = componentTree(UnmountOnDetach.Always)) {
             Column { child(recycler(binder, strategy)) }
           }
       val list = testLithoView.mountedList()
@@ -318,14 +319,14 @@ class RecyclerTest {
       style = Style.width(100.px).height(100.px),
   )
 
-  /** Sets [enableFixForIM] explicitly, since one of the runner's configurations turns it on. */
-  private fun componentTree(enableFixForIM: Boolean): ComponentTree =
+  /** Sets [unmountOnDetach] explicitly, since one of the runner's configurations turns it on. */
+  private fun componentTree(unmountOnDetach: UnmountOnDetach): ComponentTree =
       ComponentTree.create(realWindowRule.context)
           .componentsConfiguration(
               ComponentsConfiguration.create(
                       realWindowRule.context.lithoConfiguration.componentsConfig,
                   )
-                  .enableFixForIM(enableFixForIM)
+                  .unmountOnDetach(unmountOnDetach)
                   .build(),
           )
           .build()

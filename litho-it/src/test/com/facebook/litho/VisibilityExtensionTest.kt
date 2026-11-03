@@ -17,6 +17,7 @@
 package com.facebook.litho
 
 import android.graphics.Color
+import com.facebook.litho.config.UnmountOnDetach
 import com.facebook.litho.core.height
 import com.facebook.litho.core.width
 import com.facebook.litho.testing.LithoTestRule
@@ -82,7 +83,7 @@ class VisibilityExtensionTest {
     val testLithoView = lithoTestRule.render { component }
 
     val config = testLithoView.lithoView.configuration
-    if (config != null && config.enableFixForIM) {
+    if (config != null && config.unmountOnDetach != UnmountOnDetach.Never) {
       assertThat(isVisible).isTrue()
 
       testLithoView.detachFromWindow()
@@ -114,7 +115,7 @@ class VisibilityExtensionTest {
     val testLithoView = lithoTestRule.render { component }
 
     val config = testLithoView.lithoView.configuration
-    if (config != null && config.enableFixForIM) {
+    if (config != null && config.unmountOnDetach != UnmountOnDetach.Never) {
       assertThat(isVisible).isTrue()
 
       testLithoView.detachFromWindow()

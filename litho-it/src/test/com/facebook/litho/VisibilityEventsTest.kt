@@ -23,6 +23,7 @@ import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import com.facebook.litho.LifecycleStep.StepInfo
 import com.facebook.litho.config.ComponentsConfiguration
+import com.facebook.litho.config.UnmountOnDetach
 import com.facebook.litho.testing.LithoTestRule
 import com.facebook.litho.testing.LithoTestRuleResizeMode
 import com.facebook.litho.testing.TestDrawableComponent
@@ -2033,7 +2034,7 @@ class VisibilityEventsTest {
     assertThat(component.dispatchedEventHandlers).contains(invisibleEventHandler)
     assertThat(component.dispatchedEventHandlers).contains(unfocusedEventHandler)
     component.dispatchedEventHandlers.clear()
-    if (!ComponentsConfiguration.defaultInstance.enableFixForIM) {
+    if (ComponentsConfiguration.defaultInstance.unmountOnDetach == UnmountOnDetach.Never) {
       testLithoView.lithoView.setVisibilityHint(true, false)
       assertThat(component.dispatchedEventHandlers).contains(visibleEventHandler)
       assertThat(component.dispatchedEventHandlers).contains(focusedEventHandler)
@@ -2228,7 +2229,7 @@ class VisibilityEventsTest {
     assertThat(component.dispatchedEventHandlers).contains(invisibleEventHandler)
     assertThat(component.dispatchedEventHandlers).contains(unfocusedEventHandler)
     component.dispatchedEventHandlers.clear()
-    if (!ComponentsConfiguration.defaultInstance.enableFixForIM) {
+    if (ComponentsConfiguration.defaultInstance.unmountOnDetach == UnmountOnDetach.Never) {
       testLithoView.lithoView.setVisibilityHint(true, false)
       assertThat(component.dispatchedEventHandlers).contains(visibleEventHandler)
       assertThat(component.dispatchedEventHandlers).contains(focusedEventHandler)

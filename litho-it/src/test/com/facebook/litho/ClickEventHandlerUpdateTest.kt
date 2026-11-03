@@ -17,6 +17,7 @@
 package com.facebook.litho
 
 import com.facebook.litho.config.ComponentsConfiguration
+import com.facebook.litho.config.UnmountOnDetach
 import com.facebook.litho.testing.LithoTestRule
 import com.facebook.litho.testing.LithoTestRuleResizeMode
 import com.facebook.litho.testing.testrunner.LithoTestRunner
@@ -99,9 +100,8 @@ class ClickEventHandlerUpdateTest {
 
   @Test
   fun `click event handler on drawable mountspec should update`() {
-    if (ComponentsConfiguration.defaultInstance.enableFixForIM) {
-      // With IM fix we'll unmount all components when LV gets detached, which means Host will not
-      // be the same
+    if (ComponentsConfiguration.defaultInstance.unmountOnDetach != UnmountOnDetach.Never) {
+      // Unmounting on detach replaces the Host, so it is not the same
       return
     }
     val context = lithoTestRule.context

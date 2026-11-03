@@ -27,6 +27,7 @@ import android.widget.BaseAdapter
 import android.widget.FrameLayout
 import android.widget.ListView
 import com.facebook.litho.config.ComponentsConfiguration
+import com.facebook.litho.config.UnmountOnDetach
 import com.facebook.litho.core.height
 import com.facebook.litho.core.width
 import com.facebook.litho.testing.testrunner.LithoTestRunner
@@ -175,7 +176,7 @@ class BaseMountingViewSkipFullyMountedTest {
 
   @Test
   fun `an explicit empty notification after a temporary detach still unmounts`() {
-    val lithoView = showInRow(skip = true, enableFixForIM = true)
+    val lithoView = showInRow(skip = true, unmountOnDetach = UnmountOnDetach.Always)
     val mountedItems = lithoView.mountDelegateTarget.getMountItemCount()
 
     lithoView.onStartTemporaryDetach()
@@ -219,9 +220,9 @@ class BaseMountingViewSkipFullyMountedTest {
   private fun showInRow(
       skip: Boolean,
       transformer: VisibilityBoundsTransformer? = null,
-      enableFixForIM: Boolean = false,
+      unmountOnDetach: UnmountOnDetach = UnmountOnDetach.Never,
   ): LithoView {
-    val lithoView = createLithoView(skip, transformer, enableFixForIM)
+    val lithoView = createLithoView(skip, transformer, unmountOnDetach)
     val row =
         FrameLayout(activity).apply {
           addView(lithoView, FrameLayout.LayoutParams(VIEW_SIZE, VIEW_SIZE))
@@ -238,13 +239,13 @@ class BaseMountingViewSkipFullyMountedTest {
   private fun createLithoView(
       skip: Boolean,
       transformer: VisibilityBoundsTransformer?,
-      enableFixForIM: Boolean = false,
+      unmountOnDetach: UnmountOnDetach = UnmountOnDetach.Never,
   ): LithoView {
     val config =
         ComponentsConfiguration.defaultInstance.copy(
             skipMountWhenFullyShownAndMounted = skip,
             visibilityBoundsTransformer = transformer,
-            enableFixForIM = enableFixForIM,
+            unmountOnDetach = unmountOnDetach,
         )
     return LithoView(activity).apply {
       componentTree =

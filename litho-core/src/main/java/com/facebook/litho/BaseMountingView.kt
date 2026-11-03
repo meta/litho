@@ -46,6 +46,7 @@ import com.facebook.litho.TreeState.TreeMountInfo
 import com.facebook.litho.animation.AnimatedProperties
 import com.facebook.litho.animation.AnimatedProperty
 import com.facebook.litho.config.ComponentsConfiguration
+import com.facebook.litho.config.UnmountOnDetach
 import com.facebook.litho.debug.DebugOverlay
 import com.facebook.litho.debug.DebugOverlay.Companion.getDebugOverlay
 import com.facebook.litho.debug.LithoDebugEvent
@@ -356,10 +357,8 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
   }
 
   private fun maybeUnmountComponents() {
-    val config = configuration
     if (
-        config != null &&
-            config.enableFixForIM &&
+        unmountsOnDetach &&
             !isTemporaryDetached &&
             !hasTransientState() &&
             isIncrementalMountEnabled
@@ -857,8 +856,7 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
     assertMainThread()
 
     val config = configuration
-    val mountWhenAttachAndDetach = (config != null) && config.enableFixForIM
-    if (!hasTree || (mountWhenAttachAndDetach && rect == previousMountBounds)) {
+    if (!hasTree || (unmountsOnDetach && rect == previousMountBounds)) {
       return
     }
 
@@ -890,7 +888,7 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
 
     if (
         areBoundsVisible ||
-            (mountWhenAttachAndDetach && (rect != null && rect.isEmpty)) ||
+            (unmountsOnDetach && (rect != null && rect.isEmpty)) ||
             hasComponentsExcludedFromIncrementalMount(
                 currentLayoutState,
             ) // It might not be yet visible but animating from 0
@@ -1209,10 +1207,10 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
    *
    * @return True if LithoView is attached and we need to invoke IM or dispatch visibility event.
    */
-  private fun shouldDispatchVisibilityEvent(): Boolean {
-    val config = configuration
-    return !(config != null && config.enableFixForIM && !isAttached)
-  }
+  private fun shouldDispatchVisibilityEvent(): Boolean = !(unmountsOnDetach && !isAttached)
+
+  private val unmountsOnDetach: Boolean
+    get() = (configuration?.unmountOnDetach ?: UnmountOnDetach.Never) != UnmountOnDetach.Never
 
   /**
    * @return the width value that that the MountingView should be animating from. If this returns

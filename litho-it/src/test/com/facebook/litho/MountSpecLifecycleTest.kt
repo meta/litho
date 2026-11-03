@@ -19,6 +19,7 @@ package com.facebook.litho
 import com.facebook.litho.LifecycleStep.StepInfo
 import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.config.PreAllocationHandler
+import com.facebook.litho.config.UnmountOnDetach
 import com.facebook.litho.core.height
 import com.facebook.litho.layout.flexbox.Column
 import com.facebook.litho.testing.LithoStatsRule
@@ -142,7 +143,7 @@ class MountSpecLifecycleTest {
     lifecycleTracker.reset()
     testLithoView.detachFromWindow()
     val config = testLithoView.lithoView.configuration
-    if (config != null && config.enableFixForIM) {
+    if (config != null && config.unmountOnDetach != UnmountOnDetach.Never) {
       assertThat(lifecycleTracker.steps)
           .describedAs("Should only call")
           .containsExactly(LifecycleStep.ON_UNBIND, LifecycleStep.ON_UNMOUNT)
@@ -181,7 +182,7 @@ class MountSpecLifecycleTest {
             .detachFromWindow()
 
     val config = testLithoView.lithoView.configuration
-    if (config != null && config.enableFixForIM) {
+    if (config != null && config.unmountOnDetach != UnmountOnDetach.Never) {
       assertThat(lifecycleTracker1.steps)
           .describedAs("Should only call unbind because we mark it as excluded from IM")
           .contains(LifecycleStep.ON_UNBIND)
@@ -200,7 +201,7 @@ class MountSpecLifecycleTest {
     lifecycleTracker2.reset()
     testLithoView.attachToWindow().layout()
 
-    if (config != null && config.enableFixForIM) {
+    if (config != null && config.unmountOnDetach != UnmountOnDetach.Never) {
       assertThat(lifecycleTracker1.steps)
           .describedAs("Should call bind because it's mounted")
           .containsExactly(LifecycleStep.ON_BIND)
@@ -216,7 +217,7 @@ class MountSpecLifecycleTest {
           .containsExactly(LifecycleStep.ON_BIND)
     }
 
-    if (config != null && config.enableFixForIM) {
+    if (config != null && config.unmountOnDetach != UnmountOnDetach.Never) {
       testLithoView.lithoView.notifyVisibleBoundsChanged(VisibilityChangeReason.UNKNOWN)
       assertThat(lifecycleTracker2.steps)
           .describedAs("Should be mounted as we notify visible bounds changed")

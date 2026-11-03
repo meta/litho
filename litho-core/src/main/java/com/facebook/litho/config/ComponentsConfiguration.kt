@@ -98,11 +98,8 @@ internal constructor(
     @JvmField
     val primitiveRecyclerBinderStrategy: PrimitiveRecyclerBinderStrategy =
         PrimitiveRecyclerBinderStrategy.DEFAULT,
-    /**
-     * This flag is used to enable a fix for the issue where components that match the host view
-     * size do not get unmounted when they go out of the viewport.
-     */
-    @JvmField val enableFixForIM: Boolean = false,
+    /** What a LithoView using this configuration unmounts when it is detached from the window. */
+    @JvmField val unmountOnDetach: UnmountOnDetach = UnmountOnDetach.Never,
     /**
      * When true, a released [com.facebook.litho.ComponentTree] detaches itself from its
      * [com.facebook.litho.StateUpdaterDelegator], so it can be garbage collected while the
@@ -648,8 +645,8 @@ internal constructor(
       config = config.copy(enableKeyboardPullToRefresh = enabled)
     }
 
-    fun enableFixForIM(enabled: Boolean): Builder = apply {
-      config = config.copy(enableFixForIM = enabled)
+    fun unmountOnDetach(unmountOnDetach: UnmountOnDetach): Builder = apply {
+      config = config.copy(unmountOnDetach = unmountOnDetach)
     }
 
     fun detachStateUpdaterOnTreeRelease(enabled: Boolean): Builder = apply {
