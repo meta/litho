@@ -231,6 +231,13 @@ internal constructor(
      * the Kotlin flexbox components.
      */
     @JvmField val useKComponentForLegacyRowColumn: Boolean = false,
+    /**
+     * When true, a RecyclerBinder that has never been mounted keeps only the most recent pending
+     * OnDataRendered callbacks instead of queueing one per change set until its first mount. Each
+     * pending callback retains its change set, so a collection that keeps updating while it is
+     * never mounted otherwise grows without bound.
+     */
+    @JvmField val boundDataRenderedCallbacksBeforeMount: Boolean = false,
 ) {
 
   companion object {
@@ -703,6 +710,10 @@ internal constructor(
 
     fun useKComponentForLegacyRowColumn(enabled: Boolean): Builder = apply {
       config = config.copy(useKComponentForLegacyRowColumn = enabled)
+    }
+
+    fun boundDataRenderedCallbacksBeforeMount(enabled: Boolean): Builder = apply {
+      config = config.copy(boundDataRenderedCallbacksBeforeMount = enabled)
     }
 
     fun build(): ComponentsConfiguration = config

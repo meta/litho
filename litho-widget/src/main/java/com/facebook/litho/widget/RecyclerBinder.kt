@@ -73,6 +73,7 @@ import com.facebook.litho.choreographercompat.ChoreographerCompatImpl
 import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.config.LithoDebugConfigurations
 import com.facebook.litho.debug.CollectionRangeTrigger
+import com.facebook.litho.debug.DebugInfoReporter
 import com.facebook.litho.debug.LithoDebugEvent
 import com.facebook.litho.debug.LithoDebugEventAttributes
 import com.facebook.litho.saveableStateComponentKey
@@ -172,10 +173,13 @@ class RecyclerBinder private constructor(builder: Builder) :
 
   private val poolScope: PoolScope
 
-  @JvmField
   @ThreadConfined(ThreadConfined.UI)
-  @VisibleForTesting
-  val dataRenderedCallbacks: Deque<ChangeSetCompleteCallback?> = ArrayDeque()
+  private val pendingDataRendered: Deque<PendingDataRendered> = ArrayDeque()
+
+  @get:VisibleForTesting
+  @get:ThreadConfined(ThreadConfined.UI)
+  val dataRenderedCallbacks: List<ChangeSetCompleteCallback?>
+    get() = pendingDataRendered.map { it.callback }
 
   @JvmField
   @VisibleForTesting
@@ -327,6 +331,8 @@ class RecyclerBinder private constructor(builder: Builder) :
 
   @Volatile private var hasAsyncOperations = false
   private var isInitMounted = false // Set to true when the first mount() is called.
+  private var hasReportedDataRenderedCallbacksDroppedBeforeMount = false
+  private var changeSetSequence = 0L
 
   @CommitPolicy private var commitPolicy = CommitPolicy.IMMEDIATE
   private var hasFilledViewport = false
@@ -1003,8 +1009,11 @@ class RecyclerBinder private constructor(builder: Builder) :
     val durationNs = System.nanoTime() - startNs
 
     scrollToPendingPaginationTarget()
+    val sequence = ++changeSetSequence
     batch.changeSetCompleteCallback?.onDataBound()
-    dataRenderedCallbacks.addLast(batch.changeSetCompleteCallback)
+    pendingDataRendered.addLast(
+        PendingDataRendered(batch.changeSetCompleteCallback, batch.isDataChanged, sequence),
+    )
     maybeDispatchDataRendered()
 
     dispatchChangesetApplied(
@@ -1782,8 +1791,11 @@ class RecyclerBinder private constructor(builder: Builder) :
 
       scrollToPendingPaginationTarget()
       if (changeSetCompleteCallback != null) {
+        val sequence = ++changeSetSequence
         changeSetCompleteCallback.onDataBound()
-        dataRenderedCallbacks.addLast(changeSetCompleteCallback)
+        pendingDataRendered.addLast(
+            PendingDataRendered(changeSetCompleteCallback, isDataChanged, sequence),
+        )
       }
       maybeDispatchDataRendered()
 
@@ -1835,10 +1847,35 @@ class RecyclerBinder private constructor(builder: Builder) :
     hasFilledViewport = true
   }
 
+  /**
+   * Drops the oldest pending callbacks down to [DATA_RENDERED_CALLBACKS_QUEUE_MAX_SIZE], except the
+   * most recently committed data-changed one.
+   */
+  @ThreadConfined(ThreadConfined.UI)
+  private fun trimPendingDataRendered() {
+    var latestDataChanged: PendingDataRendered? = null
+    for (pending in pendingDataRendered) {
+      if (
+          pending.isDataChanged &&
+              (latestDataChanged == null || pending.sequence > latestDataChanged.sequence)
+      ) {
+        latestDataChanged = pending
+      }
+    }
+    var excess = pendingDataRendered.size - DATA_RENDERED_CALLBACKS_QUEUE_MAX_SIZE
+    val iterator = pendingDataRendered.iterator()
+    while (excess > 0 && iterator.hasNext()) {
+      if (iterator.next() !== latestDataChanged) {
+        iterator.remove()
+        excess--
+      }
+    }
+  }
+
   @ThreadConfined(ThreadConfined.UI)
   private fun maybeDispatchDataRendered() {
     ThreadUtils.assertMainThread()
-    if (dataRenderedCallbacks.isEmpty()) {
+    if (pendingDataRendered.isEmpty()) {
       // early return if no pending dataRendered callbacks.
       return
     }
@@ -1846,6 +1883,25 @@ class RecyclerBinder private constructor(builder: Builder) :
     if (!isInitMounted) {
       // The view isn't mounted yet, OnDataRendered callbacks are postponed until mount() is called,
       // and ViewGroup#dispatchDraw(Canvas) should take care triggering OnDataRendered callbacks.
+      if (
+          componentsConfiguration.boundDataRenderedCallbacksBeforeMount &&
+              pendingDataRendered.size > DATA_RENDERED_CALLBACKS_QUEUE_MAX_SIZE
+      ) {
+        if (!hasReportedDataRenderedCallbacksDroppedBeforeMount) {
+          hasReportedDataRenderedCallbacksDroppedBeforeMount = true
+          DebugInfoReporter.report(DATA_RENDERED_DROPPED_BEFORE_MOUNT) {
+            put(
+                "firstItem",
+                synchronized(this) { _componentTreeHolders.firstOrNull()?.renderInfo?.name },
+            )
+            put("logTag", componentContext?.logTag)
+            put("items", getItemCount())
+            put("mainAxisWrapContent", isMainAxisWrapContent)
+            put("crossAxisWrapContent", isCrossAxisWrapContent)
+          }
+        }
+        trimPendingDataRendered()
+      }
       return
     }
 
@@ -1860,17 +1916,17 @@ class RecyclerBinder private constructor(builder: Builder) :
             !isVisibleToUser(recyclerView)
     ) {
       val isMounted = recyclerView != null
-      val snapshotCallbacks: Deque<ChangeSetCompleteCallback?> = ArrayDeque(dataRenderedCallbacks)
-      dataRenderedCallbacks.clear()
+      val snapshotCallbacks: Deque<PendingDataRendered> = ArrayDeque(pendingDataRendered)
+      pendingDataRendered.clear()
       mainThreadHandler.postAtFrontOfQueue {
         val uptimeMillis = SystemClock.uptimeMillis()
         while (!snapshotCallbacks.isEmpty()) {
-          snapshotCallbacks.pollFirst()?.onDataRendered(isMounted, uptimeMillis)
+          snapshotCallbacks.pollFirst().callback?.onDataRendered(isMounted, uptimeMillis)
         }
       }
     } else {
-      if (dataRenderedCallbacks.size > DATA_RENDERED_CALLBACKS_QUEUE_MAX_SIZE) {
-        dataRenderedCallbacks.clear()
+      if (pendingDataRendered.size > DATA_RENDERED_CALLBACKS_QUEUE_MAX_SIZE) {
+        pendingDataRendered.clear()
         val messageBuilder = buildString {
           append("recyclerView: ")
           append(recyclerView)
@@ -3577,6 +3633,16 @@ class RecyclerBinder private constructor(builder: Builder) :
   )
 
   /**
+   * [sequence] is the commit order. It differs from queue order when a change set is committed from
+   * inside another one's `onDataBound()`.
+   */
+  private class PendingDataRendered(
+      val callback: ChangeSetCompleteCallback?,
+      val isDataChanged: Boolean,
+      val sequence: Long,
+  )
+
+  /**
    * A batch of [AsyncOperation]s that should be applied all at once. The OnDataBoundListener should
    * be called once all these operations are applied.
    */
@@ -4320,6 +4386,8 @@ class RecyclerBinder private constructor(builder: Builder) :
     private const val POST_UPDATE_VIEWPORT_AND_COMPUTE_RANGE_MAX_ATTEMPTS = 3
     private const val DATA_RENDERED_CALLBACKS_QUEUE_MAX_SIZE = 20
     private const val DATA_RENDERED_NOT_TRIGGERED = "RecyclerBinder:DataRenderedNotTriggered"
+    private const val DATA_RENDERED_DROPPED_BEFORE_MOUNT =
+        "RecyclerBinder:DataRenderedDroppedBeforeMount"
     private val UNINITIALIZED = MeasureSpecUtils.unspecified()
     const val UNSET: Int = -1
     const val APPLY_READY_BATCHES_RETRY_LIMIT: Int = 100
