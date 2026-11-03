@@ -475,6 +475,20 @@ class StateHandler {
   val state: Map<GlobalKey, ComponentState<out StateContainer>>?
     get() = _state
 
+  /**
+   * Visits the [useSaveableState] entries of this handler. [block] runs under this handler's lock,
+   * so it should only collect.
+   */
+  @Synchronized
+  internal fun forEachSaveableEntry(block: (slot: SaveableStateSlot, value: Any?) -> Unit) {
+    _state?.forEach { (_, componentState) ->
+      (componentState.value as? KStateContainer)?.states?.forEach { entry ->
+        val deps = entry.deps
+        if (deps.size == 1) (deps[0] as? SaveableStateSlot)?.let { block(it, entry.value) }
+      }
+    }
+  }
+
   @get:Synchronized
   val pendingStateUpdates: Map<StateId, MutableList<StateUpdate>>?
     get() = _pendingStateUpdates

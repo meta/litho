@@ -68,7 +68,7 @@ class LithoRenderer(
       mergeTreePropContainersIfNeeded(parentTreePropContainer, treePropContainer)
   private val lithoTree: LithoTree = LithoTree(
       id = id,
-      stateProvider = this,
+      treeStateProvider = this,
       stateUpdater = this,
       rootHost = this,
       errorComponentReceiver = this,
@@ -747,6 +747,9 @@ class LithoRenderer(
 
   override val uiTreeState: TreeState?
     @Synchronized get() = treeState
+
+  override val isBoundToHost: Boolean
+    @Synchronized get() = currentLifecycle == LithoRendererLifecycle.STARTED
 
   // region StateUpdater
   override var isFirstMount: Boolean

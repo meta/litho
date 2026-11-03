@@ -116,6 +116,13 @@ internal interface TreeStateProvider {
    * may have been disposed.
    */
   val uiTreeState: TreeState?
+
+  /**
+   * Whether this tree is bound to a host, so saveable-state registries save its values. A tree that
+   * is never unbound from its host, like a ComponentTree, always is.
+   */
+  val isBoundToHost: Boolean
+    get() = true
 }
 
 internal class StateProviderImpl(

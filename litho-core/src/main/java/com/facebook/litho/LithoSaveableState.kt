@@ -19,6 +19,7 @@ package com.facebook.litho
 import androidx.annotation.RestrictTo
 import com.facebook.litho.annotations.ExperimentalLithoApi
 import com.facebook.litho.annotations.Hook
+import java.util.Objects
 import java.util.concurrent.atomic.AtomicReference
 
 /** Converts a value to and from a representation supported by Android saved state. */
@@ -37,6 +38,39 @@ fun <T> Saver(save: (T) -> Any?, restore: (Any?) -> T): Saver<T> =
 
       override fun restore(value: Any?): T = restore.invoke(value)
     }
+
+/**
+ * The only dep of a [useSaveableState] state entry, so it moves with the entry through every
+ * [TreeState] copy and leaves with it.
+ *
+ * Equal slots keep the entry's value: a new explicit key or a newer [generation] initializes it
+ * again, a new [saver] does not.
+ */
+internal class SaveableStateSlot(
+    val explicitKey: String?,
+    /** The registry the hook saves into, or null when there is none. */
+    val scope: LithoSaveableStateRegistry?,
+    /** Built once, and only when there is a [scope]. */
+    val storageKey: String?,
+    saver: Saver<*>,
+    /** The late-restore generation of [scope] this slot was created in. */
+    val generation: Int,
+) {
+  /** The saver of the latest render. */
+  @Volatile var saver: Saver<*> = saver
+
+  /** Whether the entry's initial value was restored from [scope]. */
+  @Volatile var restored: Boolean = false
+
+  override fun equals(other: Any?): Boolean =
+      other is SaveableStateSlot &&
+          other.explicitKey == explicitKey &&
+          other.scope === scope &&
+          other.generation == generation
+
+  override fun hashCode(): Int =
+      Objects.hash(explicitKey, System.identityHashCode(scope), generation)
+}
 
 /**
  * Declares component state that can be restored by a lifecycle-backed host.

@@ -209,6 +209,12 @@ private constructor(
     layoutState.commit()
   }
 
+  /** Visits the [useSaveableState] entries of both handlers, each under its handler's lock. */
+  internal fun forEachSaveableEntry(block: (slot: SaveableStateSlot, value: Any?) -> Unit) {
+    resolveState.forEachSaveableEntry(block)
+    layoutState.forEachSaveableEntry(block)
+  }
+
   fun queueStateUpdate(
       key: StateId,
       stateUpdate: StateContainer.StateUpdate,

@@ -34,7 +34,8 @@ internal typealias LithoRendererLifecycleProvider = LithoTreeLifecycleProvider
 class LithoTree
 internal constructor(
     val id: Int,
-    stateProvider: TreeStateProvider,
+    /** The source of this tree's committed state, which saveable-state registries save from. */
+    internal val treeStateProvider: TreeStateProvider,
     @field:ThreadConfined(ThreadConfined.ANY) val stateUpdater: StateUpdater,
     @field:ThreadConfined(ThreadConfined.UI) val rootHost: RootHostProvider,
     val errorComponentReceiver: ErrorComponentReceiver,
@@ -46,7 +47,7 @@ internal constructor(
 
   @field:ThreadConfined(ThreadConfined.ANY)
   val stateProvider: com.facebook.litho.state.StateProvider =
-      StateProviderImpl(id, isReadTrackingEnabled, stateProvider)
+      StateProviderImpl(id, isReadTrackingEnabled, treeStateProvider)
 
   /** This tree's reflow surface, held as the abstraction; see [ReflowProvider]. */
   @JvmField internal val reflowProvider: ReflowProvider = ReflowAnimationStore(this)
@@ -66,7 +67,7 @@ internal constructor(
             ComponentsConfiguration.defaultInstance.enableStateReadTracking,
     ): LithoTree = LithoTree(
         id = componentTree.id,
-        stateProvider = componentTree,
+        treeStateProvider = componentTree,
         stateUpdater = stateUpdater,
         rootHost = componentTree,
         errorComponentReceiver = componentTree,

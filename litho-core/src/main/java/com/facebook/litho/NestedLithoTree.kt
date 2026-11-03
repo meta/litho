@@ -166,7 +166,7 @@ object NestedLithoTree {
           ComponentsConfiguration.defaultInstance.enableStateReadTracking,
   ): LithoTree = LithoTree(
       id = id,
-      stateProvider = stateUpdater,
+      treeStateProvider = stateUpdater,
       stateUpdater = stateUpdater,
       rootHost = mountedViewReference,
       errorComponentReceiver = errorComponentReceiver,

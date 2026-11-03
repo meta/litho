@@ -286,7 +286,7 @@ fun PrimitiveComponentScope.useNestedTree(
                 }
             LithoTree(
                 id = nestedTreeState.id,
-                stateProvider = stateUpdater,
+                treeStateProvider = stateUpdater,
                 stateUpdater = stateUpdater,
                 rootHost = nestedTreeState.mountedViewReference,
                 errorComponentReceiver = { errorComponentRef.update(AtomicReference(it)) },
