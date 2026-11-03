@@ -26,8 +26,6 @@ import com.facebook.litho.state.UiStateReadRecordsProvider
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
-internal typealias StateProvider = TreeStateProvider
-
 internal typealias RootHostProvider = MountedViewReference
 
 internal typealias LithoRendererLifecycleProvider = LithoTreeLifecycleProvider
@@ -36,7 +34,7 @@ internal typealias LithoRendererLifecycleProvider = LithoTreeLifecycleProvider
 class LithoTree
 internal constructor(
     val id: Int,
-    stateProvider: StateProvider,
+    stateProvider: TreeStateProvider,
     @field:ThreadConfined(ThreadConfined.ANY) val stateUpdater: StateUpdater,
     @field:ThreadConfined(ThreadConfined.UI) val rootHost: RootHostProvider,
     val errorComponentReceiver: ErrorComponentReceiver,

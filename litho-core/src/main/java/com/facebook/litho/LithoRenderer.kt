@@ -30,6 +30,7 @@ import com.facebook.litho.config.RunnableHandlerProvider
 import com.facebook.litho.debug.DebugInfoReporter
 import com.facebook.litho.effects.EffectContext
 import com.facebook.litho.state.StateId
+import com.facebook.litho.state.TreeStateProvider
 import com.facebook.rendercore.Host
 import com.facebook.rendercore.RunnableHandler
 import com.facebook.rendercore.RunnableHandler.DefaultHandler
@@ -50,7 +51,12 @@ class LithoRenderer(
     val visibilityController: LithoVisibilityEventsController? = null,
     /* this is only set by the containers for child renderers */
     val synchronizer: UpdateSynchronizer? = null,
-) : StateProvider, StateUpdater, StateUpdateRequester, RootHostProvider, ErrorComponentReceiver {
+) :
+    TreeStateProvider,
+    StateUpdater,
+    StateUpdateRequester,
+    RootHostProvider,
+    ErrorComponentReceiver {
 
   // todo Rename this class to LithoTreeContext
   private val lithoConfiguration: LithoConfiguration = LithoConfiguration(
