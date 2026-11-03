@@ -225,7 +225,7 @@ public abstract class Component implements Cloneable, Equivalence<Component>, At
   public final Object createMountContent(Context c) {
     final boolean isTracing = ComponentsSystrace.isTracing();
     if (isTracing) {
-      ComponentsSystrace.beginSection("mount.createContent:" + ((Component) this).getSimpleName());
+      ComponentsSystrace.beginSection("mount.createContent:" + this.getSimpleName());
     }
     try {
       return onCreateMountContent(c);
@@ -379,7 +379,7 @@ public abstract class Component implements Cloneable, Equivalence<Component>, At
   }
 
   @Nullable
-  protected static EventTrigger getEventTrigger(ComponentContext c, int id, String key) {
+  protected static EventTrigger<?> getEventTrigger(ComponentContext c, int id, String key) {
     if (c.getComponentScope() == null || c.getStateUpdater() == null) {
       return null;
     }
@@ -388,7 +388,7 @@ public abstract class Component implements Cloneable, Equivalence<Component>, At
   }
 
   @Nullable
-  protected static EventTrigger getEventTrigger(ComponentContext c, int id, Handle handle) {
+  protected static EventTrigger<?> getEventTrigger(ComponentContext c, int id, Handle handle) {
     if (handle.getStateUpdater() == null) {
       return null;
     }

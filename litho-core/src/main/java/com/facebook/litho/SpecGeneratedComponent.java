@@ -52,13 +52,13 @@ import java.util.HashMap;
 /** Base class for all component generated via the Spec API (@LayoutSpec and @MountSpec). */
 @Nullsafe(Nullsafe.Mode.LOCAL)
 public abstract class SpecGeneratedComponent extends Component
-    implements ContentAllocator,
+    implements ContentAllocator<Object>,
         HasEventDispatcher,
         EventDispatcher,
         EventTriggerTarget,
         HasEventTrigger {
 
-  private static final DynamicValue[] sEmptyArray = new DynamicValue[0];
+  private static final DynamicValue<?>[] sEmptyArray = new DynamicValue<?>[0];
 
   private final String mSimpleName;
   private @Nullable Object mOwnerGlobalKey;
@@ -374,7 +374,7 @@ public abstract class SpecGeneratedComponent extends Component
   @Override
   @Nullable
   public final Object acceptTriggerEvent(
-      EventTrigger eventTrigger, Object eventState, Object[] params) {
+      EventTrigger<?> eventTrigger, Object eventState, Object[] params) {
     try {
       return acceptTriggerEventImpl(eventTrigger, eventState, params);
     } catch (Exception e) {
@@ -388,7 +388,7 @@ public abstract class SpecGeneratedComponent extends Component
   }
 
   protected @Nullable Object acceptTriggerEventImpl(
-      EventTrigger eventTrigger, Object eventState, Object[] params) {
+      EventTrigger<?> eventTrigger, Object eventState, Object[] params) {
     // Do nothing by default
     return null;
   }
@@ -981,7 +981,7 @@ public abstract class SpecGeneratedComponent extends Component
   }
 
   @Override
-  public final @Nullable Object dispatchOnEvent(EventHandler eventHandler, Object eventState) {
+  public final @Nullable Object dispatchOnEvent(EventHandler<?> eventHandler, Object eventState) {
     boolean isTracing = ComponentsSystrace.isTracing();
 
     // We don't want to wrap and throw error events
@@ -1021,7 +1021,7 @@ public abstract class SpecGeneratedComponent extends Component
     }
   }
 
-  protected @Nullable Object dispatchOnEventImpl(EventHandler eventHandler, Object eventState) {
+  protected @Nullable Object dispatchOnEventImpl(EventHandler<?> eventHandler, Object eventState) {
     if (eventHandler.id == ERROR_EVENT_HANDLER_ID) {
       Preconditions.checkNotNull(
               getErrorHandler(
