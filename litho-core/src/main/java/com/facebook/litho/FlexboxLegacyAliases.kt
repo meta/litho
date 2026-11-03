@@ -19,27 +19,6 @@
 package com.facebook.litho
 
 /**
- * Migration scaffolding: a typealias for the legacy SpecGen [Row] class under a non-colliding name.
- *
- * When migrating Kotlin call sites from the legacy `ResourcesScope.Row { ... }` DSL to the new
- * `com.facebook.litho.layout.flexbox.Row(...) { ... }` function, any file that also constructs the
- * legacy SpecGen `Row` via `Row.create(c).build()` hits a name collision: the new function and the
- * legacy class share the simple name `Row`. Rewriting `Row.create(c)` to `RowBuilder.create(c)`
- * (and switching the import to `com.facebook.litho.RowBuilder`) frees the `Row` name in the file
- * for the new function.
- *
- * Java callers are unaffected — typealiases are Kotlin-only and Java code keeps using
- * `com.facebook.litho.Row` directly. The Java migration is handled separately in Phase 3 of the
- * Row/Column migration plan.
- */
-@Deprecated(
-    "Migration scaffold. Use com.facebook.litho.layout.flexbox.Row(...) for new construction. " +
-        "This alias only exists so files that also import the new Row function can keep " +
-        "calling Row.create(c).build() under the disambiguated name RowBuilder.create(c).build().",
-)
-typealias RowBuilder = Row
-
-/**
  * Migration scaffolding: a typealias for the legacy SpecGen [Column] class under a non-colliding
  * name. See [RowBuilder] for rationale.
  */
