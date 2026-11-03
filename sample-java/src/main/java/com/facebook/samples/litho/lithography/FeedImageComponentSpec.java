@@ -78,6 +78,7 @@ public class FeedImageComponentSpec {
     return ComponentRenderInfo.create().component(createImageComponent(c, model).build()).build();
   }
 
+  @SuppressWarnings("rawtypes")
   private static Component.Builder createImageComponent(
       ComponentContext c, @Nullable String image) {
     return FrescoVitoImage2.create(c)

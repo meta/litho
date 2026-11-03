@@ -27,7 +27,7 @@ import com.facebook.rendercore.Dimen
 class PropWithoutResourceTypeKComponent(
     private val name: CharSequence,
     private val size: Dimen,
-    @ColorInt private val color: Int,
+    @param:ColorInt private val color: Int,
 ) : KComponent() {
 
   override fun ComponentScope.render(): Component {

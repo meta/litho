@@ -55,12 +55,14 @@ import java.util.List;
 public class HideableDataDiffSectionSpec<T> {
 
   @OnCreateInitialState
+  @SuppressWarnings("rawtypes")
   public static <T> void onCreateInitialState(
       SectionContext c, StateValue<HashSet<Object>> blacklistState) {
     blacklistState.set(new HashSet<>());
   }
 
   @OnUpdateState
+  @SuppressWarnings({"rawtypes", "unchecked"})
   public static void onBlacklistUpdate(
       StateValue<HashSet<Object>> blacklistState,
       @Param Object modelObject,
@@ -77,6 +79,7 @@ public class HideableDataDiffSectionSpec<T> {
   }
 
   @OnCreateChildren
+  @SuppressWarnings("rawtypes")
   protected static <T> Children onCreateChildren(
       SectionContext c,
       @State HashSet<Object> blacklistState,
@@ -94,6 +97,7 @@ public class HideableDataDiffSectionSpec<T> {
         .build();
   }
 
+  @SuppressWarnings("rawtypes")
   private static <T> List<T> removeBlacklistedItems(
       SectionContext c,
       List<T> data,

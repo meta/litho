@@ -23,7 +23,7 @@ import com.facebook.litho.kotlinStyle
 import com.facebook.litho.view.onClick
 import com.facebook.litho.widget.Text
 
-@Suppress("FunctionName")
+@Suppress("FunctionName", "NOTHING_TO_INLINE")
 fun ResourcesScope.Button(
     text: String,
     onClick: (ClickEvent) -> Unit,

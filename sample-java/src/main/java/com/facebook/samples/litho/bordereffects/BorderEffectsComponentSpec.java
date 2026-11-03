@@ -63,6 +63,7 @@ class BorderEffectsComponentSpec {
   }
 
   @OnEvent(RenderEvent.class)
+  @SuppressWarnings("rawtypes")
   static RenderInfo onRender(ComponentContext c, @FromEvent Class<? extends Component> model) {
 
     try {

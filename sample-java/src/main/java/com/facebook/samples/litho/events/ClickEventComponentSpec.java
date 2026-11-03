@@ -43,6 +43,7 @@ class ClickEventComponentSpec {
   }
 
   @OnEvent(ClickEvent.class)
+  @SuppressWarnings("rawtypes")
   protected static void onButtonClick(ComponentContext c, @Param String text) {
     EventHandler handler = ClickEventComponent.getClickTextEventHandler(c);
     if (handler != null) {

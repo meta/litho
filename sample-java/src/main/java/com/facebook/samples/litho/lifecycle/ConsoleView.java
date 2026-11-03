@@ -29,6 +29,7 @@ import java.lang.ref.WeakReference;
 
 public class ConsoleView extends ScrollView {
 
+  @SuppressWarnings("this-escape")
   public ConsoleView(Context context) {
     super(context);
 

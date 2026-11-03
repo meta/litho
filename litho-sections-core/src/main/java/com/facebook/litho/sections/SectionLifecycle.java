@@ -216,6 +216,7 @@ public abstract class SectionLifecycle implements EventDispatcher, EventTriggerT
     return null;
   }
 
+  @SuppressWarnings({"rawtypes", "unchecked"})
   protected static <E> EventHandler<E> newEventHandler(
       final Class<? extends Section> reference,
       final String className,

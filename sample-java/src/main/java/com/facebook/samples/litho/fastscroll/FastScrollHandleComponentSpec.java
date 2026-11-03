@@ -71,6 +71,7 @@ public class FastScrollHandleComponentSpec {
   }
 
   @OnCreateLayout
+  @SuppressWarnings({"rawtypes", "unchecked"})
   static Component onCreateLayout(
       ComponentContext c,
       @State RecyclerCollectionEventsController recyclerEventsController,
@@ -96,6 +97,7 @@ public class FastScrollHandleComponentSpec {
         .build();
   }
 
+  @SuppressWarnings("rawtypes")
   private static Component.Builder buildDragHandle(ComponentContext c) {
     final int radiusDip = HANDLE_SIZE_DP / 2;
     return Text.create(c)

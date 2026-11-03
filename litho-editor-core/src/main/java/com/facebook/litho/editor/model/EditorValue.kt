@@ -59,6 +59,7 @@ abstract class EditorValue {
       return null
     }
 
+    @Suppress("PARAMETER_NAME_CHANGED_ON_OVERRIDE")
     override fun isColor(number: EditorColor): Void? {
       return null
     }
@@ -146,6 +147,7 @@ abstract class EditorValue {
             return visitor.isNumber(path.toTypedArray(), number)
           }
 
+          @Suppress("PARAMETER_NAME_CHANGED_ON_OVERRIDE")
           override fun isColor(number: EditorColor): Boolean {
             return visitor.isColor(path.toTypedArray(), number)
           }
@@ -186,6 +188,7 @@ abstract class EditorValue {
             return false
           }
 
+          @Suppress("PARAMETER_NAME_CHANGED_ON_OVERRIDE")
           override fun isColor(number: EditorColor): Boolean {
             ref.set(aggregator.addColor(ref.get(), number))
             return false

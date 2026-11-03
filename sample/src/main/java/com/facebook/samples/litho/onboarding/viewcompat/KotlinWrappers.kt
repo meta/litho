@@ -21,6 +21,7 @@ import com.facebook.litho.Style
 import com.facebook.litho.kotlinStyle
 
 // start_kwrapper
+@Suppress("NOTHING_TO_INLINE")
 inline fun ResourcesScope.CircularImage(
     url: String,
     style: Style = Style,

@@ -85,7 +85,7 @@ class ScrollController extends RecyclerView.OnScrollListener implements View.OnT
 
         if (handleOffsetRange > 0) {
           // Adjust offset
-          handleOffset -= dy;
+          handleOffset = (int) (handleOffset - dy);
           // Check if it is in the correct range
           handleOffset = Math.max(0, handleOffset);
           handleOffset = Math.min(handleOffsetRange, handleOffset);

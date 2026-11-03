@@ -80,6 +80,7 @@ object SimpleEditor {
       value: T,
   ): DefaultEditorVisitor {
     return object : DefaultEditorVisitor() {
+      @Suppress("PARAMETER_NAME_CHANGED_ON_OVERRIDE")
       override fun isShape(`object`: EditorShape): Void? {
         val properties = propertyEditor.readProperties(value)
         val updates = `object`.value
@@ -132,6 +133,7 @@ object SimpleEditor {
       value: T,
   ): EditorValue.EditorVisitor<Void?> {
     return object : DefaultEditorVisitor() {
+      @Suppress("PARAMETER_NAME_CHANGED_ON_OVERRIDE")
       override fun isShape(`object`: EditorShape): Void? {
         val properties = propertyEditor.readProperties(value)
         val stringProperties: MutableMap<String, String> = HashMap()
@@ -336,6 +338,7 @@ object SimpleEditor {
               return number(number.value)
             }
 
+            @Suppress("PARAMETER_NAME_CHANGED_ON_OVERRIDE")
             override fun isColor(number: EditorColor): SimpleEditorValue? {
               return color(number.color)
             }

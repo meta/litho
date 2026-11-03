@@ -123,6 +123,7 @@ public class DataDiffSectionSpec<T> {
       "RenderInfo has returned null. Returning ComponentRenderInfo.createEmpty() as default.";
 
   @OnDiff
+  @SuppressWarnings({"rawtypes", "unchecked"})
   public static <T> void onCreateChangeSet(
       SectionContext c,
       ChangeSet changeSet,
@@ -347,6 +348,7 @@ public class DataDiffSectionSpec<T> {
       return renderInfos;
     }
 
+    @SuppressWarnings("rawtypes")
     private static List<Object> extractPrevData(List<Diff<?>> dataHolders) {
       final List<Object> data = new ArrayList<>(dataHolders.size());
       for (Diff<?> diff : dataHolders) {
@@ -355,6 +357,7 @@ public class DataDiffSectionSpec<T> {
       return data;
     }
 
+    @SuppressWarnings("rawtypes")
     private static List<Object> extractNextData(List<Diff<?>> dataHolders) {
       final List<Object> data = new ArrayList<>(dataHolders.size());
       for (Diff<?> diff : dataHolders) {
@@ -364,6 +367,7 @@ public class DataDiffSectionSpec<T> {
     }
   }
 
+  @SuppressWarnings("rawtypes")
   private static class ComponentRenderer<T>
       implements RecyclerBinderUpdateCallback.ComponentRenderer<T> {
 
@@ -399,6 +403,7 @@ public class DataDiffSectionSpec<T> {
   }
 
   @VisibleForTesting
+  @SuppressWarnings({"rawtypes", "unchecked"})
   static class Callback<T> extends DiffUtil.Callback {
 
     private final @Nullable List<? extends T> mPreviousData;

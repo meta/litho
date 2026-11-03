@@ -36,6 +36,8 @@ import com.facebook.samples.litho.kotlin.debug.ExampleTouchEventSubscriber
 import com.facebook.soloader.SoLoader
 
 class LithoSampleApplication : Application() {
+  // ComponentsConfiguration has a non-public ctor; copy() is the only way to derive variants.
+  @Suppress("DATA_CLASS_INVISIBLE_COPY_USAGE_WARNING")
   override fun onCreate() {
     super.onCreate()
 

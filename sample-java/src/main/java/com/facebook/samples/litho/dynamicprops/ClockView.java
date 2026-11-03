@@ -58,27 +58,32 @@ public class ClockView extends View {
 
   private long mTime;
 
+  @SuppressWarnings("this-escape")
   public ClockView(Context context) {
     super(context);
     init();
   }
 
+  @SuppressWarnings("this-escape")
   public ClockView(Context context, @Nullable AttributeSet attrs) {
     super(context, attrs);
     init();
   }
 
+  @SuppressWarnings("this-escape")
   public ClockView(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
     super(context, attrs, defStyleAttr);
     init();
   }
 
+  @SuppressWarnings("this-escape")
   public ClockView(
       Context context, @Nullable AttributeSet attrs, int defStyleAttr, int defStyleRes) {
     super(context, attrs, defStyleAttr, defStyleRes);
     init();
   }
 
+  @SuppressWarnings("this-escape")
   private void init() {
     mDefaultSizePx = dpToPx(DEFAULT_SIZE_DP);
     mStrokeThinWidthPx = dpToPx(STROKE_THIN_WIDTH_DP);
@@ -207,6 +212,7 @@ public class ClockView extends View {
     canvas.restoreToCount(savedCount);
   }
 
+  @SuppressWarnings("this-escape")
   private int dpToPx(float dp) {
     float densityDpi = getResources().getDisplayMetrics().densityDpi;
     return (int) (dp * (densityDpi / DisplayMetrics.DENSITY_DEFAULT));

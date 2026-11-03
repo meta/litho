@@ -117,6 +117,8 @@ class VisibilityBoundsTransformerActivity : NavigatableDemoActivity() {
         }
       }
 
+  // ComponentsConfiguration has a non-public ctor; copy() is the only way to derive variants.
+  @Suppress("DATA_CLASS_INVISIBLE_COPY_USAGE_WARNING")
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     val parentContainer = FrameLayout(this)

@@ -113,6 +113,7 @@ public class ViewPagerDemoComponentSpec {
   }
 
   @OnCreateLayout
+  @SuppressWarnings("unchecked")
   static Component onCreateLayout(
       ComponentContext c, @State RecyclerCollectionEventsController eventsController) {
 

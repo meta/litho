@@ -51,6 +51,8 @@ import com.facebook.rendercore.sp
  */
 class LazyListItemAnimationsComponent : KComponent() {
 
+  // ComponentsConfiguration has a non-public ctor; copy() is the only way to derive variants.
+  @Suppress("DATA_CLASS_INVISIBLE_COPY_USAGE_WARNING")
   override fun ComponentScope.render(): Component {
     val list = useState { DemoList((0 until INITIAL_ITEMS).toList(), INITIAL_ITEMS) }
     val useIds = useState { true }
