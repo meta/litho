@@ -17,15 +17,7 @@
 package com.facebook.litho
 
 /**
- * Defines a single tree prop, i.e. a mapping from type to concrete instance of that type that is
- * visible to the subtree, to be used with [TreePropProvider].
- *
- * You can create a Pair with the `to` infix function, e.g. `String::class to "Hello World!"`.
- */
-typealias ClassValuePair<T> = Pair<Class<T>, T>
-
-/**
- * Defines a single tree prop override. Unlike [ClassValuePair] there can be multiple
+ * Defines a single tree prop override. Unlike `Pair<Class<T>, T>` there can be multiple
  * [TreePropValuePair] with the same corresponding class.
  *
  * [TreeProp]'s should be declared separately and then overridden in [TreePropProvider]. If there
@@ -51,7 +43,7 @@ typealias TreePropValuePair<T> = Pair<TreeProp<T>, T>
 )
 @JvmName("LegacyTreePropProvider") // avoid JVM declaration clash with the other TreePropProvider
 inline fun TreePropProvider(
-    vararg props: ClassValuePair<*>,
+    vararg props: Pair<Class<*>, *>,
     crossinline component: () -> Component,
 ): KComponent {
   val resolvedComponent = component()
@@ -88,7 +80,7 @@ inline fun TreePropProvider(
 )
 @JvmName("NullableLegacyTreePropProvider") // avoid JVM declaration clash with overload
 inline fun NullableTreePropProvider(
-    vararg props: ClassValuePair<*>,
+    vararg props: Pair<Class<*>, *>,
     crossinline component: () -> Component?,
 ): KComponent? {
   val resolvedComponent = component() ?: return null
@@ -111,7 +103,7 @@ inline fun NullableTreePropProvider(
 /** See [TreePropProvider]. */
 @PublishedApi
 internal class TreePropProviderImpl(
-    private val classProps: Array<out ClassValuePair<*>>? = null,
+    private val classProps: Array<out Pair<Class<*>, *>>? = null,
     private val treeProps: Array<out TreePropValuePair<*>>? = null,
     private val child: Component,
 ) : KComponent() {
