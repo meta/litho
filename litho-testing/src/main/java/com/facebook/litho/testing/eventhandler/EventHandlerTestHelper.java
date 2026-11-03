@@ -60,7 +60,7 @@ public class EventHandlerTestHelper {
    * @param <R> The type of the return value of the event
    * @return A mock event handler
    */
-  @SuppressWarnings("unchecked")
+  @SuppressWarnings({"unchecked", "rawtypes"})
   public static <E, R> EventHandler<E> createMockEventHandler(
       Class eventClass, final MockEventHandler<E, R> handler) {
     final EventDispatcher dispatcher = mock(EventDispatcher.class);
@@ -82,6 +82,7 @@ public class EventHandlerTestHelper {
         0, EventHandlerRebindMode.REBIND, new EventDispatchInfo(() -> dispatcher, null), null);
   }
 
+  @SuppressWarnings("rawtypes")
   public static EventHandler create(ComponentContext c, int id) {
     if (c.getComponentScope() == null || !(c.getComponentScope() instanceof HasEventDispatcher)) {
       return NoOpEventHandler.getNoOpEventHandler();
@@ -94,6 +95,7 @@ public class EventHandlerTestHelper {
         null);
   }
 
+  @SuppressWarnings("rawtypes")
   public static EventHandler create(ComponentContext c, int id, @Nullable Object[] params) {
     if (c.getComponentScope() == null || !(c.getComponentScope() instanceof HasEventDispatcher)) {
       return NoOpEventHandler.getNoOpEventHandler();
