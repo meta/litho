@@ -21,6 +21,7 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SnapHelper
 import androidx.recyclerview.widget.StaggeredGridLayoutManager
 import com.facebook.litho.ComponentContext
+import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.config.PreAllocationHandler
 import com.facebook.litho.sections.widget.GridLayoutInfoFactory
 import com.facebook.litho.sections.widget.GridRecyclerConfiguration
@@ -67,10 +68,12 @@ abstract class CollectionLayout(
                   .recyclerBinderConfig(
                       RecyclerBinderConfig(
                           componentsConfiguration =
-                              componentContext.lithoConfiguration.componentsConfig.copy(
-                                  preAllocationHandler = preAllocationHandler,
-                                  incrementalMountEnabled = isIncrementalMountEnabled,
-                              ),
+                              ComponentsConfiguration.create(
+                                      componentContext.lithoConfiguration.componentsConfig,
+                                  )
+                                  .withPreAllocationHandler(preAllocationHandler)
+                                  .incrementalMountEnabled(isIncrementalMountEnabled)
+                                  .build(),
                           rangeRatio = rangeRatio ?: RecyclerBinderConfig.DEFAULT_RANGE_RATIO,
                           estimatedViewportCount = estimatedViewportCount,
                           wrapContent = mainAxisWrapContent,

@@ -1129,11 +1129,11 @@ private class CollectionPrimitiveViewLayoutBehavior(
         val field = RecyclerView::class.java.getDeclaredField("mState")
         field.isAccessible = true
         val state = field[this]
-        return state.toString()
+        return state!!.toString()
       } catch (e: Exception) {
         DebugInfoReporter.report(category = "Collection") {
           this["event"] = "InvalidRecyclerViewState"
-          this["message"] = "${e.message}"
+          this["message"] = e.message.toString()
         }
         return "Exception getting state: ${e.message}"
       }
