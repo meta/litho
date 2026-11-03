@@ -918,6 +918,7 @@ object TextComponentSpec {
             layoutWidth,
             isAlignedLeft,
             isRtl,
+            layoutDirection,
         )
 
         val layoutTruncatedText = { candidate: CharSequence ->
@@ -961,7 +962,8 @@ object TextComponentSpec {
         if (
             truncated !== text &&
                 newLayout.lineCount > ellipsizedLineNumber + 1 &&
-                ComponentsConfiguration.fitCustomEllipsisOnTruncatedLine
+                (ComponentsConfiguration.fitCustomEllipsisOnTruncatedLine ||
+                    layoutDirection == YogaDirection.RTL)
         ) {
           val fitting = fitCustomEllipsisOnLine(
               text,
@@ -1006,6 +1008,7 @@ object TextComponentSpec {
    */
   @VisibleForTesting
   @JvmStatic
+  @JvmOverloads
   fun truncateText(
       text: CharSequence,
       customEllipsisText: CharSequence,
@@ -1015,6 +1018,7 @@ object TextComponentSpec {
       layoutWidth: Float,
       isAlignedLeft: Boolean,
       isRtl: Boolean,
+      layoutDirection: YogaDirection = YogaDirection.LTR,
   ): CharSequence {
     val customEllipsisTextWidth = ellipsisTextLayout.getLineWidth(0)
     // Identify the X position at which to truncate the final line:
@@ -1033,10 +1037,17 @@ object TextComponentSpec {
     // Get character offset at ellipsisTarget. For RTL, getOffsetForAdvance expects
     // run-relative advances (from right edge), not left-edge X coordinates like ellipsisTarget.
     // Convert ellipsisTarget to run-relative advance for RTL.
-    val fixRtlTruncation = isRtl && ComponentsConfiguration.fixRtlCustomEllipsisTruncation
+    val isRtlLayout = layoutDirection == YogaDirection.RTL
+    val fixRtlTruncation =
+        !isRtlLayout && isRtl && ComponentsConfiguration.fixRtlCustomEllipsisTruncation
     var ellipsisOffset: Int =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-          val advance = if (fixRtlTruncation) layoutWidth - ellipsisTarget else ellipsisTarget
+          val advance =
+              when {
+                isRtlLayout -> layoutWidth - customEllipsisTextWidth
+                fixRtlTruncation -> layoutWidth - ellipsisTarget
+                else -> ellipsisTarget
+              }
           val offset = getEllipsisOffsetFromPaintAdvance(
               newLayout,
               text,

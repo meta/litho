@@ -403,12 +403,15 @@ internal constructor(
     /**
      * Fixes RTL custom ellipsis truncation by converting ellipsisTarget to a run-relative advance
      * (layoutWidth - ellipsisTarget) before passing to Paint.getOffsetForAdvance for RTL text.
+     * Ignored for text with an RTL layout direction, which always truncates from a run-relative
+     * advance of (layoutWidth - custom ellipsis width).
      */
     @JvmField var fixRtlCustomEllipsisTruncation: Boolean = false
 
     /**
      * Steps a custom ellipsis truncation back by grapheme until the custom ellipsis fits on the
-     * last visible line, instead of letting it wrap onto a line that is clipped.
+     * last visible line, instead of letting it wrap onto a line that is clipped. Ignored for text
+     * with an RTL layout direction, which always does this.
      */
     @JvmField var fitCustomEllipsisOnTruncatedLine: Boolean = false
 
