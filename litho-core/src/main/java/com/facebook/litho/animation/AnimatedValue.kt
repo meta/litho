@@ -140,19 +140,26 @@ internal constructor(
   internal fun retarget(target: T, spec: AnimationSpec<T>, preserveEqualTargetTiming: Boolean) {
     val stationary = _currentValue == target && currentAnimator == null
     if (stationary && !preserveEqualTargetTiming) return
+    installAnimator(prepareAnimator(target, spec))
+  }
+
+  internal fun prepareAnimator(target: T, spec: AnimationSpec<T>): Animator<T>? {
     val velocity = currentVelocity()
     val animator = spec.createAnimator(_currentValue, target, typeConverter, velocity)
     require(spec !is FiniteAnimationSpec<*> || animator.durationNanos >= 0L) {
       "FiniteAnimationSpec must create an animator with a finite duration."
     }
     val noOp = _currentValue == target && animator.isFinished(0L) && animator.getValue(0L) == target
-    if (noOp) {
-      currentAnimator = null
+    return if (noOp) null else animator
+  }
+
+  internal fun installAnimator(animator: Animator<T>?) {
+    currentAnimator = animator
+    if (animator == null) {
       resetFrameState()
       isActive = false
       return
     }
-    currentAnimator = animator
     runOriginNanos = clock.playTimeNanos
   }
 

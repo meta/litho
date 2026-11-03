@@ -51,6 +51,14 @@ internal constructor(
 ) {
   private var target = animatedValue.currentValueRaw
   private var onEnd: ((AnimationEnd) -> Unit)? = null
+  private var commandVersion = 0L
+  @Volatile
+  internal var isHandoff = false
+    private set
+
+  internal var runOwner: AnimationRunOwner? = null
+    private set
+
   internal var completionContext: ComponentContext? = null
 
   init {
@@ -63,12 +71,13 @@ internal constructor(
 
   /** True if an animation is actively running. */
   val isRunning: Boolean
-    get() = animatedValue.isRunning
+    get() = !isHandoff && animatedValue.isRunning
 
   /**
-   * Starts an animation toward [target]. [onEnd] is delivered asynchronously after frame
-   * invalidations, including for commands that require no animation. Replacement interrupts the
-   * previous command; [stop] or owner unmount cancels it.
+   * Starts an animation toward [target]. [onEnd] is delivered once after frame invalidations,
+   * including no-op commands. Replacement interrupts the previous command; [stop] or unmount
+   * cancels it. Taking over a value owned by a coroutine run cancels that run. Continue callback
+   * chains only for [AnimationEnd.Finished].
    */
   @MainThread
   @JvmOverloads
@@ -78,9 +87,31 @@ internal constructor(
       onEnd: ((AnimationEnd) -> Unit)? = null,
   ) {
     ThreadUtils.assertMainThread()
-    animatedValue.retarget(target, spec, preserveEqualTargetTiming = true)
-    driver.anchorInCompletionFrame()
+    startCommand(null, target, spec, onEnd)
+  }
+
+  internal fun startCommand(
+      owner: AnimationRunOwner?,
+      target: T,
+      spec: FiniteAnimationSpec<T>,
+      onEnd: ((AnimationEnd) -> Unit)?,
+  ): Long {
+    val version = ++commandVersion
+    val animator = animatedValue.prepareAnimator(target, spec)
+    if (commandVersion == version && runOwner !== owner) {
+      runOwner?.interrupt(this, AnimationEnd.Interrupted)
+    }
+    if (commandVersion != version || owner?.isReleased == true) {
+      enqueueEnd(onEnd, AnimationEnd.Interrupted)
+      return version
+    }
     completeCommand(AnimationEnd.Interrupted)
+    if (!claim(owner)) {
+      enqueueEnd(onEnd, AnimationEnd.Cancelled)
+      return version
+    }
+    driver.anchorInCompletionFrame()
+    animatedValue.installAnimator(animator)
     this.target = target
     this.onEnd = onEnd
     if (animatedValue.hasAnimator) {
@@ -89,6 +120,7 @@ internal constructor(
       driver.stop()
       completeCommand(AnimationEnd.Finished)
     }
+    return version
   }
 
   /**
@@ -97,6 +129,14 @@ internal constructor(
   @MainThread
   fun jumpTo(target: T) {
     ThreadUtils.assertMainThread()
+    snapCommand(null, target)
+  }
+
+  internal fun snapCommand(owner: AnimationRunOwner?, target: T) {
+    if (owner?.isReleased == true) return
+    val version = ++commandVersion
+    if (runOwner !== owner) runOwner?.interrupt(this, AnimationEnd.Interrupted)
+    if (commandVersion != version || !claim(owner)) return
     completeCommand(AnimationEnd.Interrupted)
     this.target = target
     animatedValue.snapTo(target)
@@ -107,9 +147,74 @@ internal constructor(
   @MainThread
   fun stop() {
     ThreadUtils.assertMainThread()
+    stopCommand()
+  }
+
+  private fun stopCommand() {
+    val version = ++commandVersion
+    runOwner?.interrupt(this, AnimationEnd.Cancelled)
+    if (commandVersion != version) return
     completeCommand(AnimationEnd.Cancelled)
     animatedValue.stop()
     driver.stop()
+  }
+
+  internal fun unmount() {
+    stopCommand()
+    driver.unmount()
+  }
+
+  internal fun cancelCommand(owner: AnimationRunOwner?, version: Long) {
+    if (runOwner !== owner || commandVersion != version || onEnd == null) return
+    ++commandVersion
+    completeCommand(AnimationEnd.Cancelled)
+    animatedValue.stop()
+    driver.stop()
+  }
+
+  internal fun releaseClaim(
+      owner: AnimationRunOwner,
+      preserveAnimation: Boolean,
+      outcome: AnimationEnd,
+  ) {
+    if (runOwner !== owner) return
+    completeCommand(outcome)
+    runOwner = null
+    isHandoff = false
+    if (!preserveAnimation) {
+      ++commandVersion
+      animatedValue.stop()
+      driver.stop()
+    }
+    driver.bind(null)
+  }
+
+  internal fun transferClaim(owner: AnimationRunOwner, replacement: AnimationRunOwner) {
+    if (runOwner !== owner) return
+    completeCommand(AnimationEnd.Cancelled)
+    runOwner = replacement
+    isHandoff = true
+  }
+
+  internal fun freezeHandoff(owner: AnimationRunOwner) {
+    if (runOwner !== owner || !isHandoff) return
+    driver.stop()
+    driver.bind(null)
+  }
+
+  private fun claim(owner: AnimationRunOwner?): Boolean {
+    if (owner == null) return true
+    if (runOwner !== owner) {
+      if (!owner.claim(this)) return false
+      runOwner = owner
+    }
+    isHandoff = false
+    driver.bind(owner.playback)
+    return true
+  }
+
+  internal fun bindRunPlayback(owner: AnimationRunOwner, playback: AnimationPlayback?) {
+    if (runOwner === owner && !isHandoff) driver.bind(playback)
   }
 
   /**
@@ -132,8 +237,13 @@ internal constructor(
 
   private fun completeCommand(outcome: AnimationEnd) {
     target = animatedValue.currentValueRaw
-    val callback = onEnd ?: return
+    val callback = onEnd
     onEnd = null
+    enqueueEnd(callback, outcome)
+  }
+
+  private fun enqueueEnd(callback: ((AnimationEnd) -> Unit)?, outcome: AnimationEnd) {
+    if (callback == null) return
     val context = completionContext
     AnimationController.enqueueCompletion {
       dispatchAnimationCompletion(context) { callback(outcome) }
@@ -186,7 +296,7 @@ fun <T> ComponentScope.useAnimatable(
 
   useEffect(Unit) {
     onCleanup {
-      animatable.stop()
+      animatable.unmount()
       animatable.completionContext = null
     }
   }

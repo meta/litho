@@ -56,6 +56,8 @@ android {
 }
 
 
+addKotlinFriend(project, ':litho-core')
+
 dependencies {
     api project(':litho-core')
 

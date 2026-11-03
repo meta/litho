@@ -226,6 +226,59 @@ retargeting without visual discontinuities.
 No explicit cancellation or restart is needed — just change the state and the animation
 adapts.
 
+### Coroutine sequences
+
+Use `startAnimation` with a `chain` for a fixed sequence on one value. The optional
+`litho-coroutines-kotlin` module adds suspending `animateTo` and `snapTo` extensions, plus
+`useAnimationScope` for conditional steps, parallel work, shared playback, and cancellation:
+
+```kotlin
+import com.facebook.litho.animation.animateTo
+import com.facebook.litho.animation.wait
+import com.facebook.litho.animation.snapTo
+import com.facebook.litho.animation.useAnimationScope
+
+val opacity = useAnimatable(0f, FloatTypeConverter)
+val position = useAnimatable(120.dp, DimenTypeConverter)
+val animations = useAnimationScope(playback = playback)
+
+Style.onClick {
+  animations.launchLatest {
+    opacity.snapTo(0f)
+    opacity.animateTo(1f, tween(150.ms))
+    wait(100.ms)
+    position.animateTo(0.dp, spring())
+    onShown()
+  }
+}
+```
+
+`animateTo` waits for natural completion or `finish()`. Replacement, stop, unmount, and coroutine
+cancellation cancel the await. `snapTo` updates immediately without waiting for a frame. Both also
+work outside an animation run. Use `launch` for parallel steps. A newer command on the same value
+interrupts the older await; normal coroutine cancellation also affects that await's children.
+
+`launchLatest` cancels its predecessor and returns a `Job`. Cancelling this job stops owned motion
+before cleanup finishes; `join()` waits for the body and its children. Removing the hook cancels the
+run. Launching after removal returns a cancelled job. An explicit launch from cancellation cleanup
+is still a new request.
+
+Use the returned job's `cancel()` to stop the whole run. `cancelChildren()` uses normal cooperative
+child cancellation; it does not cancel the run job or bypass `NonCancellable` work.
+
+Suspending commands inherit ownership through coroutine context. Claims last between steps until
+the run ends; taking over a claimed value cancels its run and siblings. A replacement run preserves
+interruption velocity; unused predecessor values stop and retain that velocity until the replacement
+ends. Commands on those unused values remain independent.
+
+Synchronous `startAnimation`, `jumpTo`, and `stop` are external controls, including inside a run.
+Using them in stale cancellation cleanup can take over a newer run. Suspending commands check the
+run's cancellation even in `NonCancellable` cleanup and cannot change its replacement.
+
+Playback controls owned animations and `wait`. Ordinary `delay` and external awaits keep their
+usual coroutine semantics. Commands and waits run on the main thread. Dispatch and skipped frames
+can introduce gaps between awaits; use `chain` for exact leg timing.
+
 ## Testing Animations
 
 Use `LithoAnimationTestRule` from `com.facebook.litho.testing` when tests need
