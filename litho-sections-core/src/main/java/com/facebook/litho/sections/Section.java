@@ -66,6 +66,7 @@ public abstract class Section extends SectionLifecycle
 
   private StateContainer mStateContainer;
 
+  @SuppressWarnings("this-escape") // ctor calls getLogTag (established core-infra pattern)
   protected Section(String simpleName) {
     mSimpleName = simpleName;
     mKey = getLogTag();

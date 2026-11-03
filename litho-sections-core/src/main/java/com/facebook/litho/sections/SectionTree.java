@@ -329,11 +329,13 @@ public class SectionTree {
     return mEventHandlersController;
   }
 
+  @SuppressWarnings({"rawtypes"}) // heterogeneous event plumbing (raw by design)
   @Nullable
   synchronized EventTrigger getEventTrigger(Object triggerKey) {
     return mEventTriggersContainer.getEventTrigger(triggerKey);
   }
 
+  @SuppressWarnings({"rawtypes"}) // heterogeneous event plumbing (raw by design)
   @Nullable
   synchronized EventTrigger getEventTrigger(Handle handle, int methodId) {
     return mEventTriggersContainer.getEventTrigger(handle, methodId);

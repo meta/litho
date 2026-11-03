@@ -42,6 +42,7 @@ public class ChangeSetCalculationState {
     return mState != null;
   }
 
+  @SuppressWarnings({"rawtypes"}) // heterogeneous event plumbing (raw by design)
   void recordEventHandler(String globalKey, EventHandler eventHandler) {
     if (mState == null) {
       throw new RuntimeException("Trying to use inactive ChangeSetCalculationState!");

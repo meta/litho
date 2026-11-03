@@ -92,6 +92,7 @@ public abstract class SectionLifecycle implements EventDispatcher, EventTriggerT
 
   protected void createService(SectionContext c) {}
 
+  @SuppressWarnings({"rawtypes"}) // heterogeneous event plumbing (raw by design)
   @Nullable
   @Override
   public final Object dispatchOnEvent(EventHandler eventHandler, Object eventState) {
@@ -106,11 +107,13 @@ public abstract class SectionLifecycle implements EventDispatcher, EventTriggerT
     }
   }
 
+  @SuppressWarnings({"rawtypes"}) // heterogeneous event plumbing (raw by design)
   protected @Nullable Object dispatchOnEventImpl(EventHandler eventHandler, Object eventState) {
     // Do nothing by default.
     return null;
   }
 
+  @SuppressWarnings({"rawtypes"}) // heterogeneous event plumbing (raw by design)
   @Override
   @Nullable
   public final Object acceptTriggerEvent(
@@ -126,6 +129,7 @@ public abstract class SectionLifecycle implements EventDispatcher, EventTriggerT
     }
   }
 
+  @SuppressWarnings({"rawtypes"}) // heterogeneous event plumbing (raw by design)
   protected @Nullable Object acceptTriggerEventImpl(
       EventTrigger eventTrigger, Object eventState, Object[] params) {
     // Do nothing by default
@@ -235,7 +239,7 @@ public abstract class SectionLifecycle implements EventDispatcher, EventTriggerT
                   + "Event Handlers must be created using a SectionContext from its Section.",
               className, section.getSimpleName()));
     }
-    final EventHandler eventHandler =
+    final EventHandler<E> eventHandler =
         new EventHandler<>(id, mode, new EventDispatchInfo(section, c), params);
     final ChangeSetCalculationState calculationState = c.getChangeSetCalculationState();
     if (calculationState != null && calculationState.isActive()) {
@@ -265,6 +269,7 @@ public abstract class SectionLifecycle implements EventDispatcher, EventTriggerT
     return c.newEventTrigger(methodId, childKey, null);
   }
 
+  @SuppressWarnings({"rawtypes", "unchecked"}) // heterogeneous event plumbing (raw by design)
   @Nullable
   protected static EventTrigger getEventTrigger(SectionContext c, int id, String key) {
     if (c.getSectionScope() == null) {
@@ -282,6 +287,7 @@ public abstract class SectionLifecycle implements EventDispatcher, EventTriggerT
     return trigger;
   }
 
+  @SuppressWarnings({"rawtypes", "unchecked"}) // heterogeneous event plumbing (raw by design)
   @Nullable
   protected static EventTrigger getEventTrigger(SectionContext c, int id, Handle handle) {
     if (c.getSectionScope() == null) {
@@ -309,6 +315,7 @@ public abstract class SectionLifecycle implements EventDispatcher, EventTriggerT
     return previousTreeProps;
   }
 
+  @SuppressWarnings({"rawtypes"}) // heterogeneous event plumbing (raw by design)
   @Nullable
   public static EventHandler getLoadingEventHandler(SectionContext context) {
     Section scopedSection = context.getSectionScope();
@@ -326,6 +333,7 @@ public abstract class SectionLifecycle implements EventDispatcher, EventTriggerT
     return context.getTreeLoadingEventHandler();
   }
 
+  @SuppressWarnings({"unchecked"}) // heterogeneous event plumbing (raw by design)
   public static void dispatchLoadingEvent(
       SectionContext context,
       boolean isEmpty,

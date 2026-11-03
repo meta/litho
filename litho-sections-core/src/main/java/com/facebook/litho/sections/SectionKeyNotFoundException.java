@@ -19,6 +19,7 @@ package com.facebook.litho.sections;
 import com.facebook.infer.annotation.Nullsafe;
 
 @Nullsafe(Nullsafe.Mode.LOCAL)
+@SuppressWarnings("serial") // internal exception, never serialized
 public class SectionKeyNotFoundException extends RuntimeException {
 
   public SectionKeyNotFoundException() {}
