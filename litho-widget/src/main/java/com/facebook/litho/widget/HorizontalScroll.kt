@@ -244,9 +244,3 @@ internal class HorizontalScrollLayoutBehavior(
     return PrimitiveLayoutResult(width = width, height = height, layoutData = layoutState)
   }
 }
-
-@Deprecated(
-    "Use HorizontalScroll instead",
-    ReplaceWith("HorizontalScroll", "com.facebook.litho.widget.HorizontalScroll"),
-)
-typealias PrimitiveHorizontalScroll = HorizontalScroll
