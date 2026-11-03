@@ -19,8 +19,8 @@ package com.facebook.litho
 import androidx.annotation.RestrictTo
 import com.facebook.litho.annotations.ExperimentalLithoApi
 import com.facebook.litho.annotations.Hook
+import com.facebook.litho.state.StateReadRecorder
 import java.util.Objects
-import java.util.concurrent.atomic.AtomicReference
 
 /** Converts a value to and from a representation supported by Android saved state. */
 @ExperimentalLithoApi
@@ -53,7 +53,7 @@ internal class SaveableStateSlot(
     /** Built once, and only when there is a [scope]. */
     val storageKey: String?,
     saver: Saver<*>,
-    /** The late-restore generation of [scope] this slot was created in. */
+    /** The [LithoSaveableStateRegistry.generation] of [scope] this slot was created in. */
     val generation: Int,
 ) {
   /** The saver of the latest render. */
@@ -61,6 +61,22 @@ internal class SaveableStateSlot(
 
   /** Whether the entry's initial value was restored from [scope]. */
   @Volatile var restored: Boolean = false
+
+  /** False once a late restore or a close of [scope] makes the hook read its registry again. */
+  val isCurrent: Boolean
+    get() = scope == null || scope.generation == generation
+
+  /**
+   * The value restored from [scope] if there is one, marking this slot [restored], else [fallback].
+   */
+  fun <T> initialValue(fallback: () -> T): T {
+    val restoredValue = storageKey?.let { scope?.restoredValue(it) } ?: return fallback()
+    restored = true
+    @Suppress("UNCHECKED_CAST")
+    return (saver as Saver<T>).restore(restoredValue.value)
+  }
+
+  @Suppress("UNCHECKED_CAST") fun save(value: Any?): Any? = (saver as Saver<Any?>).save(value)
 
   override fun equals(other: Any?): Boolean =
       other is SaveableStateSlot &&
@@ -80,13 +96,24 @@ internal class SaveableStateSlot(
  * captured by [initializer] are initial inputs rather than observable dependencies; use [key] to
  * represent a different logical state owner.
  *
- * When this component leaves the committed tree, its provider is removed and its value is not
- * retained by this hook. A lifecycle or navigation host that replaces the whole ComponentTree can
- * retain the tree's registry explicitly so active values survive into the replacement tree.
+ * When this component leaves the committed tree, its value is no longer saved. A lifecycle or
+ * navigation host that replaces the whole ComponentTree can retain the tree's registry explicitly
+ * so active values survive into the replacement tree.
+ *
+ * Saving reads the last committed value, so an update that has not committed yet may not be saved.
+ * A restored value is taken from saved state when the render that read it commits, so a component
+ * that commits and leaves before it is shown starts from its [initializer] when it comes back.
+ *
+ * The hook finds its registry and storage key on its first render and keeps them. A different
+ * registry above it is picked up only on its next render after the first one closes. So a
+ * [TreeState] given to a tree with another registry while the tree it came from is still alive is
+ * saved by the new registry only once that tree is released and the new one renders again.
  *
  * The [saver] must encode the value into a type supported by Android [android.os.Bundle]. The
- * default saver stores Bundle-compatible values directly. The factory and saver may run on a Litho
- * resolve thread and must not access Views or other main-thread-only objects.
+ * default saver stores Bundle-compatible values directly. A value the saver can't turn into a
+ * supported type fails on the hook's first render under an open registry. The factory and saver may
+ * run on a Litho resolve thread and must not access Views or other main-thread-only objects. A save
+ * uses the saver of the latest render and may run on any thread.
  *
  * A root ComponentTree created with a [androidx.savedstate.SavedStateRegistryOwner] saves its
  * values under its root component's class and manual key:
@@ -110,46 +137,73 @@ fun <T> ComponentScope.useSaveableState(
     saver: Saver<T> = autoSaver(),
     initializer: () -> T,
 ): State<T> {
-  val registry = LithoSaveableStateRegistryTreeProp.value
-  val globalKey = context.globalKey
-  val hookLocalKey = requireCurrentHookKey()
-  val component = context.componentScope
-  val storageKey = lazy {
-    saveableStateKey(
-        globalKey = globalKey,
-        hookLocalKey = hookLocalKey,
-        explicitKey = key,
-        componentName = component?.simpleName ?: "unknown component",
-    )
-  }
-  val restoreGeneration =
-      if (registry?.hasLateRestoredValues() == true) registry.restoreGeneration(storageKey.value)
-      else 0
-  // State and effects are already identified by the component's global key and the hook's
-  // position, so only the explicit key can change the storage key of a live hook.
-  val state =
-      useStateWithDeps(key, restoreGeneration) {
-        val restored = registry?.restoredValue(storageKey.value)
-        if (restored == null) initializer() else saver.restore(restored.value)
+  val lithoTree = context.lithoTree ?: error("LithoTree is null")
+  val hookKey = requireCurrentHookKey()
+  val stored = storedHookEntry(hookKey)
+  // State is already identified by the component's global key and the hook's position, so only
+  // the explicit key can change the storage key of a live hook.
+  val slot = (stored?.deps?.singleOrNull() as? SaveableStateSlot)?.takeIf { it.explicitKey == key }
+  val value: T =
+      if (stored != null && slot != null && slot.isCurrent) {
+        if (slot.saver !== saver) slot.saver = saver
+        getUpdatedStateByHookKey(hookKey, stored.deps, initializer)
+      } else {
+        initSaveableState(
+            lithoTree,
+            hookKey,
+            key,
+            saver,
+            stored?.takeIf { slot != null },
+            initializer,
+        )
       }
-  // Saves read the committed value, so they don't depend on read tracking or on which State the
-  // provider captured.
-  val stateProvider = (context.lithoTree ?: error("LithoTree is null")).stateProvider
-  val save: () -> Any? = { saver.save(stateProvider.getValue(state)) }
-  val latestProvider = useState { AtomicReference(save) }.value
+  return hookState(lithoTree, hookKey, value)
+}
 
-  useEffect(saver, stateProvider) {
-    latestProvider.set(save)
-    null
+private fun ComponentScope.storedHookEntry(hookKey: HookKey): CachedValue? =
+    (resolveContext.treeState.getState(context.globalKey, context.isContextForLayout)?.value
+            as? KStateContainer)
+        ?.getByHookKey(hookKey)
+
+/**
+ * Gives a hook its slot and value on its first render, with a new explicit key, or after its
+ * registry's generation moved on. [live] is the stored entry with the same explicit key, whose
+ * value is kept unless its registry has a restored value for it.
+ */
+private fun <T> ComponentScope.initSaveableState(
+    lithoTree: LithoTree,
+    hookKey: HookKey,
+    explicitKey: String?,
+    saver: Saver<T>,
+    live: CachedValue?,
+    initializer: () -> T,
+): T {
+  val scope = LithoSaveableStateRegistryTreeProp.value
+  val storageKey = scope?.let {
+    (live?.deps?.get(0) as SaveableStateSlot?)?.storageKey
+        ?: saveableStateKey(
+            globalKey = context.globalKey,
+            hookLocalKey = hookKey,
+            explicitKey = explicitKey,
+            componentName = context.componentScope?.simpleName ?: "unknown component",
+        )
   }
-
-  useEffect(registry, key) {
-    registry
-        ?.registerProvider(storageKey.value) { latestProvider.get().invoke() }
-        ?.let { registration -> onCleanup(registration::close) }
+  val slot = SaveableStateSlot(explicitKey, scope, storageKey, saver, scope?.generation ?: 0)
+  scope?.addSource(lithoTree)
+  val value: T =
+      getUpdatedStateByHookKey(hookKey, arrayOf(slot)) {
+        @Suppress("UNCHECKED_CAST")
+        slot.initialValue { if (live != null) live.value as T else initializer() }
+      }
+  // A concurrent resolve may have created the entry this render got, with its own slot.
+  val entrySlot = storedHookEntry(hookKey)?.deps?.singleOrNull() as? SaveableStateSlot
+  if (entrySlot?.restored == true) {
+    resolveContext.treeState.recordSaveableClaim(entrySlot, lithoTree)
   }
-
-  return state
+  if (scope != null && storageKey != null) {
+    scope.requireSavableValue(storageKey, StateReadRecorder.untracked { saver.save(value) })
+  }
+  return value
 }
 
 @JvmField

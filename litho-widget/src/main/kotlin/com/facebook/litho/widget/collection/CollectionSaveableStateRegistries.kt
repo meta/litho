@@ -85,7 +85,9 @@ class CollectionSaveableStateRegistries(private val collectionKey: String? = nul
    *
    * Every row gets a registry, even one that never uses `useSaveableState`: the hook only runs
    * while the row renders, and finds its registry in the row's tree props then. An empty registry
-   * claims nothing from its parent and saves nothing, and is closed once its row is gone.
+   * claims nothing from its parent and saves nothing, and is closed once its row is gone. A row
+   * joins the collection's saved state when one of its items is first bound; until then the
+   * collection keeps the row's restored values.
    *
    * A row without a key, or with a key two rows share, gets a registry with no key. Without one,
    * the row would write into the tree's registry it inherits and clash with every row built from
@@ -99,10 +101,12 @@ class CollectionSaveableStateRegistries(private val collectionKey: String? = nul
       synchronized(lock) {
         val collection = collectionRegistryLocked(parent)
         if (key == null || key in sharedKeys) {
-          collection.createChildRegistry(null)
+          collection.createChildRegistry(null, joinsParentWhenShown = true)
         } else {
           rowRegistries.getOrPut(key) {
-            collection.createChildRegistry(key).also { registry -> rowKeys[registry] = key }
+            collection.createChildRegistry(key, joinsParentWhenShown = true).also { registry ->
+              rowKeys[registry] = key
+            }
           }
         }
       }

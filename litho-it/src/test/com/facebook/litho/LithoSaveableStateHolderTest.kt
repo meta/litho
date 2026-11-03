@@ -223,9 +223,9 @@ class LithoSaveableStateHolderTest {
   fun `a covered destination keeps its nested registries`() {
     val holder = LithoSaveableStateHolder(LithoSaveableStateRegistry())
     val entry = holder.registryFor("a")
-    val entryValue = entry.registerProvider("counter") { 3 }
+    val entryValue = LiveValue(entry, "counter", 3)
     val nested = entry.createChildRegistry("item")
-    val nestedValue = nested.registerProvider("scroll") { 42 }
+    val nestedValue = LiveValue(nested, "scroll", 42)
 
     holder.retain("a")
     entryValue.close()

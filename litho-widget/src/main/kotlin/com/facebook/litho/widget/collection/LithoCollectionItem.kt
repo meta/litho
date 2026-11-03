@@ -82,8 +82,8 @@ class LithoCollectionItem(
    */
   @Volatile private var saveableStateRegistry: LithoSaveableStateRegistry? = null
 
-  /** The late restores of [saveableStateRegistry] that the renderer's layout may have read. */
-  @Volatile private var renderedLateRestoreCount: Int = 0
+  /** The generation of [saveableStateRegistry] that the renderer's layout may have read. */
+  @Volatile private var renderedGeneration: Int = 0
 
   private val _lazyRenderer = lazy {
     parentSaveableStateRegistry?.let { parent ->
@@ -93,7 +93,7 @@ class LithoCollectionItem(
       val registry = saveableStateRegistries.registryFor(parent, key.key)
       _treePropContainer?.put(LithoSaveableStateRegistryTreeProp, registry)
       saveableStateRegistry = registry
-      renderedLateRestoreCount = registry.lateRestoreCount()
+      renderedGeneration = registry.generation
     }
     LithoRenderer(
         context = _androidContext,
@@ -178,13 +178,14 @@ class LithoCollectionItem(
 
     // Restored values that arrived after this row rendered, before the collection was first shown,
     // are read only by a new render, so the layout from before them is dropped.
-    saveableStateRegistry?.lateRestoreCount()?.let { count ->
-      if (count != renderedLateRestoreCount) {
-        renderedLateRestoreCount = count
+    saveableStateRegistry?.generation?.let { generation ->
+      if (generation != renderedGeneration) {
+        renderedGeneration = generation
         renderer.cleanup()
       }
     }
     renderer.bindTo(view)
+    saveableStateRegistry?.onTreeShown()
     if (previousView == null) saveableStateRegistry?.let(saveableStateRegistries::onItemBound)
     // Getting size constraints from the scope is the safest way to ensure rendering the correct
     // size constraints, like in the following scenarios:
@@ -205,6 +206,7 @@ class LithoCollectionItem(
     if (!keptCommittedLayout) {
       renderer.renderSyncWithCompatibilityChecks(renderInfo.component, constraints)
     }
+    saveableStateRegistry?.onBoundRowRendered()
     onChildMeasured(this@LithoCollectionItem, size)
   }
 
@@ -217,8 +219,8 @@ class LithoCollectionItem(
       return
     }
 
-    // This is the view we're currently managing - clean it up. Unbinding cleans up the item's
-    // effects, which would drop its saveable values, so they are retained until it binds again.
+    // This is the view we're currently managing - clean it up. An unbound item is no longer saved,
+    // so its values are retained until it binds again.
     saveableStateRegistry?.retainActiveValues()
     rendererOrNull?.unbind()
     view.clean()

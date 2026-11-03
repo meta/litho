@@ -31,8 +31,10 @@ import com.facebook.litho.state.StateReadRecorder
 import com.facebook.litho.testing.LithoTestRule
 import com.facebook.litho.testing.TestLithoView
 import com.facebook.litho.testing.testrunner.LithoTestRunner
+import com.facebook.litho.widget.VerticalScroll
 import java.lang.ref.WeakReference
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import org.assertj.core.api.Assertions.assertThat
@@ -1061,6 +1063,115 @@ class ComponentTreeSaveableStateOwnerTest {
     owner.destroy()
   }
 
+  @Test
+  fun `a late restore updates a hook that already rendered without initializing it again`() {
+    val firstOwner = TestSavedStateOwner()
+    val first = AtomicReference<State<Int>>()
+    render(createTree(firstOwner, CountingStateComponent(AtomicInteger(), first::set)))
+    first.get().updateSync(7)
+    val restoredOwner = TestSavedStateOwner(firstOwner.save(), restoreNow = false)
+    firstOwner.destroy()
+    val initializerCalls = AtomicInteger()
+    val state = AtomicReference<State<Int>>()
+    val root = CountingStateComponent(initializerCalls, state::set)
+    val sizeSpec = SizeSpec.makeSizeSpec(VIEW_SIZE_PX, SizeSpec.EXACTLY)
+    val tree = createTree(restoredOwner, root)
+    tree.setRootAndSizeSpecSync(root, sizeSpec, sizeSpec)
+    assertThat(state.get().value).isEqualTo(0)
+
+    restoredOwner.restore()
+    restoredOwner.moveTo(Lifecycle.State.RESUMED)
+
+    assertThat(state.get().value).isEqualTo(7)
+    assertThat(initializerCalls).hasValue(1)
+    tree.release()
+    restoredOwner.destroy()
+  }
+
+  /**
+   * ```text
+   * Before process death: 5, and 7 inside a vertical scroll
+   * Render the tree, not shown, before Android restores   (0, 0)
+   * Android restores                                      (5, 7)
+   * ```
+   */
+  @Test
+  fun `a late restore reaches values inside a vertical scroll`() {
+    val firstOwner = TestSavedStateOwner()
+    val firstOuter = AtomicReference<State<Int>>()
+    val firstInner = AtomicReference<State<Int>>()
+    val firstView =
+        lithoTestRule
+            .createTestLithoView(
+                componentTree =
+                    createTree(
+                        firstOwner,
+                        ScrollingStateComponent(firstOuter::set, firstInner::set),
+                    ),
+                widthPx = VIEW_SIZE_PX,
+                heightPx = VIEW_SIZE_PX,
+            )
+            .attachToWindow()
+            .measure()
+            .layout()
+    attachedViews.add(firstView)
+    firstOuter.get().updateSync(5)
+    firstInner.get().updateSync(7)
+    lithoTestRule.idle()
+    val restoredOwner = TestSavedStateOwner(firstOwner.save(), restoreNow = false)
+    firstOwner.destroy()
+    val outer = AtomicReference<State<Int>>()
+    val inner = AtomicReference<State<Int>>()
+    val root = ScrollingStateComponent(outer::set, inner::set)
+    val sizeSpec = SizeSpec.makeSizeSpec(VIEW_SIZE_PX, SizeSpec.EXACTLY)
+    val tree = createTree(restoredOwner, root)
+    tree.setRootAndSizeSpecSync(root, sizeSpec, sizeSpec)
+    assertThat(outer.get().value to inner.get().value).isEqualTo(0 to 0)
+
+    restoredOwner.restore()
+    restoredOwner.moveTo(Lifecycle.State.RESUMED)
+
+    assertThat(outer.get().value to inner.get().value).isEqualTo(5 to 7)
+    tree.release()
+    restoredOwner.destroy()
+  }
+
+  /**
+   * ```text
+   * Tree A = 4; its TreeState is kept and A is released, closing its registry
+   * Tree B is built with that TreeState         B shows 4 and saves it in its own registry
+   * ```
+   */
+  @Test
+  fun `a TreeState carried into a tree with a new registry is saved there`() {
+    val owner = TestSavedStateOwner()
+    val first = AtomicReference<State<Int>>()
+    val firstTree = createTree(owner, FirstStateComponent(first::set))
+    val firstView = render(firstTree)
+    first.get().updateSync(4)
+    val carried = firstTree.acquireTreeState()
+    firstView.release()
+
+    val second = AtomicReference<State<Int>>()
+    render(
+        ComponentTree.create(
+                lithoTestRule.context.androidContext,
+                owner,
+                FirstStateComponent(second::set),
+            )
+            .treeState(carried)
+            .build(),
+    )
+    assertThat(second.get().value).isEqualTo(4)
+
+    val restoredOwner = TestSavedStateOwner(owner.save())
+    owner.destroy()
+    val restored = AtomicReference<State<Int>>()
+    render(createTree(restoredOwner, FirstStateComponent(restored::set)))
+    assertThat(restored.get().value).isEqualTo(4)
+    restoredOwner.destroy()
+  }
+
   private fun savedStateWithFirstValue(value: Int): Bundle {
     val owner = TestSavedStateOwner()
     val state = AtomicReference<State<Int>>()
@@ -1194,6 +1305,32 @@ class ComponentTreeSaveableStateOwnerTest {
     override fun ComponentScope.render(): Component {
       onState(useSaveableState { 0 })
       return EmptyComponent()
+    }
+  }
+
+  private class CountingStateComponent(
+      private val initializerCalls: AtomicInteger,
+      private val onState: (State<Int>) -> Unit,
+  ) : KComponent() {
+    override fun ComponentScope.render(): Component {
+      onState(
+          useSaveableState {
+            initializerCalls.incrementAndGet()
+            0
+          },
+      )
+      return EmptyComponent()
+    }
+  }
+
+  /** A value of its own, and one inside a vertical scroll. */
+  private class ScrollingStateComponent(
+      private val onOuter: (State<Int>) -> Unit,
+      private val onInner: (State<Int>) -> Unit,
+  ) : KComponent() {
+    override fun ComponentScope.render(): Component {
+      onOuter(useSaveableState { 0 })
+      return VerticalScroll(child = FirstStateComponent(onInner))
     }
   }
 

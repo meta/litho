@@ -288,6 +288,39 @@ class RecyclerBinderSaveableStateTest {
     }
   }
 
+  /**
+   * ```text
+   * Row 0 = 5, scrolled out of the range
+   * Row 0 changes to leave its value out, and scrolls back   a save keeps 5
+   * Row 0 shows its value again                              5
+   * ```
+   */
+  @Test
+  fun `a row rebuilt without its value after leaving the range keeps the value`() {
+    val owner = TestSavedStateOwner()
+    val rows = RowRecorder()
+    val view = render(owner, FirstValueList(rows, showsFirstValue = true), controlled = false)
+    rows.update(0, 5)
+
+    lithoTestRule.act(view) { recyclerView(view).scrollBy(0, ROW_COUNT * ROW_HEIGHT_PX) }
+    view.setRoot(FirstValueList(rows, showsFirstValue = false))
+    lithoTestRule.idle()
+    lithoTestRule.act(view) { recyclerView(view).scrollBy(0, -ROW_COUNT * ROW_HEIGHT_PX) }
+    val savedWhileLeftOut = owner.save()
+    view.setRoot(FirstValueList(rows, showsFirstValue = true))
+    lithoTestRule.idle()
+
+    assertThat(rows.value(0)).isEqualTo(5)
+    owner.destroy()
+    val restored = RowRecorder()
+    render(
+        TestSavedStateOwner(savedWhileLeftOut),
+        FirstValueList(restored, true),
+        controlled = false,
+    )
+    assertThat(restored.value(0)).isEqualTo(5)
+  }
+
   @Test
   fun `rows in the range but not on screen are saved`() {
     listOf(true, false).forEach { controlled ->
@@ -622,6 +655,19 @@ class RecyclerBinderSaveableStateTest {
         }
   }
 
+  /** Every row, where row 0 reads its saveable value only when [showsFirstValue]. */
+  private class FirstValueList(
+      private val rows: RowRecorder,
+      private val showsFirstValue: Boolean,
+  ) : KComponent() {
+    override fun ComponentScope.render(): Component =
+        LazyList(style = Style.height(LIST_HEIGHT_PX.px)) {
+          children(items = ALL_ROWS, id = { rowId(it) }) { index ->
+            SaveableRow(index, rows, showsValue = index != 0 || showsFirstValue)
+          }
+        }
+  }
+
   /** Rows 0 and 1 of the first list, and of the second list with [secondIds]. */
   private class TwoLists(
       private val first: RowRecorder,
@@ -723,11 +769,15 @@ class RecyclerBinderSaveableStateTest {
     }
   }
 
-  private class SaveableRow(private val index: Int, private val rows: RowRecorder) : KComponent() {
+  private class SaveableRow(
+      private val index: Int,
+      private val rows: RowRecorder,
+      private val showsValue: Boolean = true,
+  ) : KComponent() {
     override fun ComponentScope.render(): Component {
       val loaded = useState { rows.loaded }
       rows.recordLoaded(index, loaded)
-      if (loaded.value) {
+      if (loaded.value && showsValue) {
         rows.record(index, useSaveableState { 0 }, LithoSaveableStateRegistryTreeProp.value)
       }
       return Text(text = "row_$index", style = Style.height(ROW_HEIGHT_PX.px))

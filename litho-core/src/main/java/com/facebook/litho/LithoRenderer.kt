@@ -749,7 +749,7 @@ class LithoRenderer(
     @Synchronized get() = treeState
 
   override val isBoundToHost: Boolean
-    @Synchronized get() = currentLifecycle == LithoRendererLifecycle.STARTED
+    @Synchronized get() = rootHost != null
 
   // region StateUpdater
   override var isFirstMount: Boolean

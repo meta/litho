@@ -25,6 +25,7 @@ import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import androidx.core.os.bundleOf
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleRegistry
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -57,6 +58,7 @@ import com.facebook.litho.testing.LithoTestRule
 import com.facebook.litho.testing.TestLithoView
 import com.facebook.litho.testing.testrunner.LithoTestRunner
 import com.facebook.litho.useSaveableState
+import com.facebook.litho.useState
 import com.facebook.litho.view.viewTag
 import com.facebook.litho.widget.ComponentRenderInfo
 import com.facebook.litho.widget.LinearLayoutInfo
@@ -64,6 +66,7 @@ import com.facebook.litho.widget.LithoRecyclerView.OnAfterLayoutListener
 import com.facebook.litho.widget.RecyclerBinder
 import com.facebook.litho.widget.RenderInfo
 import com.facebook.litho.widget.SectionsRecyclerView
+import com.facebook.litho.widget.VerticalScroll
 import com.facebook.rendercore.IntSize
 import com.facebook.rendercore.SizeConstraints
 import com.facebook.rendercore.px
@@ -492,13 +495,10 @@ class CollectionSaveableStateTest {
 
   @Test
   fun `a key only uncommitted items read keeps its saved value`() {
-    val source = LithoSaveableStateRegistry()
-    source.createChildRegistry(COLLECTION_KEY).createChildRegistry(ROW_KEY).registerProvider(
-        "value",
-    ) {
-      5
-    }
-    val parent = LithoSaveableStateRegistry(source.snapshot())
+    val savedRow = savedState("value" to 5)
+    val parent = LithoSaveableStateRegistry(
+        savedState(childKey(COLLECTION_KEY) to savedState(childKey(ROW_KEY) to savedRow)),
+    )
     val registries = CollectionSaveableStateRegistries(COLLECTION_KEY)
     assertThat(registries.registryFor(parent, ROW_KEY).restoredValue("value")?.value).isEqualTo(5)
 
@@ -1090,6 +1090,191 @@ class CollectionSaveableStateTest {
     assertThat(shownRowAndOffset(restored)).isEqualTo(25 to -30)
   }
 
+  /**
+   * ```text
+   * Before process death: row 0 = 10
+   * Two items of row 0 render, not bound, before the values arrive   (0, 0)
+   * Bind the first, recycle it, bind the second                      both show 10, the row saves 10
+   * ```
+   */
+  @Test
+  fun `every item of a row rendered before a late restore shows the restored value when bound`() {
+    val source = LithoSaveableStateRegistry()
+    val sourceRows = RowRecorder()
+    bind(rowItem(source, CollectionSaveableStateRegistries(COLLECTION_KEY), sourceRows, 0))
+    sourceRows.update(0, 10)
+    val saved = source.snapshot()
+    val parent = LithoSaveableStateRegistry()
+    val registries = CollectionSaveableStateRegistries(COLLECTION_KEY)
+    val firstRows = RowRecorder()
+    val secondRows = RowRecorder()
+    val firstItem = rowItem(parent, registries, firstRows, 0)
+    val secondItem = rowItem(parent, registries, secondRows, 0)
+    firstItem.measure(ROW_CONSTRAINTS, null)
+    secondItem.measure(ROW_CONSTRAINTS, null)
+    assertThat(firstRows.value(0) to secondRows.value(0)).isEqualTo(0 to 0)
+
+    parent.adoptLateRestoredValues(saved)
+    val firstView = bind(firstItem)
+    assertThat(firstRows.value(0)).isEqualTo(10)
+    firstItem.onViewRecycled(firstView)
+    bind(secondItem)
+
+    assertThat(secondRows.value(0)).isEqualTo(10)
+    assertThat(measuredValue(LithoSaveableStateRegistry(parent.snapshot()))).isEqualTo(10)
+  }
+
+  /**
+   * ```text
+   * Bind the row, set it to 5, recycle it (5 is kept), bind it again
+   * Its saveable child leaves, then comes back         0, not the kept 5
+   * ```
+   */
+  @Test
+  fun `a value that leaves a row bound again is not restored when it comes back`() {
+    val parent = LithoSaveableStateRegistry()
+    val rows = RowRecorder()
+    val show = AtomicReference<State<Boolean>>()
+    val item = LithoCollectionItem(
+        contextWith(parent),
+        renderInfo =
+            ComponentRenderInfo.create()
+                .customAttribute(RecyclerBinder.ID_CUSTOM_ATTR_KEY, 0)
+                .component(ToggleRow(0, rows, show::set))
+                .build(),
+        saveableStateRegistries = CollectionSaveableStateRegistries(COLLECTION_KEY),
+    )
+    val view = bind(item)
+    rows.update(0, 5)
+    item.onViewRecycled(view)
+    with(item) { layoutScope(item).onBindView(view) }
+    assertThat(rows.value(0)).isEqualTo(5)
+
+    setShown(show.get(), false)
+    setShown(show.get(), true)
+
+    assertThat(rows.value(0)).isEqualTo(0)
+  }
+
+  /**
+   * ```text
+   * Bind the row, set it to 5, recycle it (5 is kept)
+   * Bind it again with content that leaves its value out    a save keeps 5
+   * Bind it again with its value                             5
+   * ```
+   */
+  @Test
+  fun `a row bound again without its value keeps the value`() {
+    val parent = LithoSaveableStateRegistry()
+    val rows = RowRecorder()
+    val item = rowItem(parent, CollectionSaveableStateRegistries(COLLECTION_KEY), rows, 0)
+    val view = bind(item)
+    rows.update(0, 5)
+    item.onViewRecycled(view)
+
+    item.renderInfo = rowRenderInfo(0, rows, id = 0, showsValue = false)
+    with(item) { layoutScope(item).onBindView(view) }
+    assertThat(measuredValue(LithoSaveableStateRegistry(parent.snapshot()))).isEqualTo(5)
+    item.renderInfo = rowRenderInfo(0, rows, id = 0)
+    with(item) { layoutScope(item).onBindView(view) }
+
+    assertThat(rows.value(0)).isEqualTo(5)
+  }
+
+  /** As a row in RecyclerView's view cache: still bound, but out of the prepare range. */
+  @Test
+  fun `a bound row that leaves the prepare range is still saved`() {
+    val parent = LithoSaveableStateRegistry()
+    val rows = RowRecorder()
+    val item = rowItem(parent, CollectionSaveableStateRegistries(COLLECTION_KEY), rows, 0)
+    bind(item)
+    rows.update(0, 5)
+
+    with(item) { layoutScope(item).unprepare() }
+
+    assertThat(measuredValue(LithoSaveableStateRegistry(parent.snapshot()))).isEqualTo(5)
+  }
+
+  /**
+   * With a view cache and no prepare range, row 0 scrolled one row off is unprepared but stays
+   * bound in the cache, so a save still has its value.
+   */
+  @Test
+  fun `a row kept bound in the view cache out of the prepare range is saved`() {
+    val owner = TestSavedStateOwner()
+    val rows = RowRecorder()
+    val ids = (0 until ROW_COUNT).toList()
+    val view = render(owner, SaveableList(ids, rows, rangeRatio = 0f))
+    rows.update(0, 5)
+    val recyclerView = recyclerView(view)
+    recyclerView.setItemViewCacheSize(2)
+    val adapter = recyclerView.adapter as CollectionPrimitiveViewAdapter
+    val firstRow = adapter.getItems().first() as LithoCollectionItem
+
+    lithoTestRule.act(view) { recyclerView.scrollBy(0, ROW_HEIGHT_PX) }
+
+    assertThat(firstRow.size).isEqualTo(IntSize.Invalid)
+    val restored = RowRecorder()
+    recreate(owner, SaveableList(ids, restored, rangeRatio = 0f))
+    assertThat(restored.value(0)).isEqualTo(5)
+  }
+
+  @Test
+  fun `a removed row that rendered but was never bound leaves no registry behind`() {
+    val parent = LithoSaveableStateRegistry()
+    val rows = RowRecorder()
+    val registries = CollectionSaveableStateRegistries(COLLECTION_KEY)
+    val item = rowItem(parent, registries, rows, 0)
+    item.measure(ROW_CONSTRAINTS, null)
+    val removedRowRegistry = rows.registry(0)
+
+    registries.onCommit(emptySet())
+
+    assertThat(registries.registryFor(parent, checkNotNull(item.saveableStateKey)))
+        .isNotSameAs(removedRowRegistry)
+  }
+
+  @Test
+  fun `binding a row that never uses saveable state adds no saveable bookkeeping`() {
+    val parent = LithoSaveableStateRegistry()
+    val rows = RowRecorder()
+    val item = LithoCollectionItem(
+        contextWith(parent),
+        renderInfo =
+            ComponentRenderInfo.create()
+                .customAttribute(RecyclerBinder.ID_CUSTOM_ATTR_KEY, 0)
+                .component(StatelessRow(0, rows))
+                .build(),
+        saveableStateRegistries = CollectionSaveableStateRegistries(COLLECTION_KEY),
+    )
+
+    val view = bind(item)
+    item.onViewRecycled(view)
+
+    val registry = rows.registry(0)
+    assertThat(registry.hasSources).isFalse()
+    assertThat(registry.generation).isZero()
+    assertThat(registry.holdsState()).isFalse()
+  }
+
+  @Test
+  fun `a bound row saves the values inside its vertical scroll`() {
+    val rows = RowRecorder()
+    render(TestSavedStateOwner(), ScrollingRowList(listOf(0), rows))
+
+    val snapshot = rows.registry(0).snapshot()
+    val restored = LithoSaveableStateRegistry(snapshot)
+    assertThat(snapshot.keySet().map { restored.restoredValue(it)?.value }).containsExactly(0)
+  }
+
+  /** A registry snapshot holding [values] by key. */
+  private fun savedState(vararg values: Pair<String, Any?>): Bundle =
+      Bundle().apply {
+        values.forEach { (key, value) -> putBundle(key, bundleOf("value" to value)) }
+      }
+
+  private fun childKey(key: String): String = "litho-child-registry:$key"
+
   /** Saves a [SaveableList] of [ids] with rows 0 and 1 set to 10 and 11. */
   private fun savedRows(ids: List<Int>): Bundle {
     val owner = TestSavedStateOwner()
@@ -1295,11 +1480,15 @@ class CollectionSaveableStateTest {
     return rows.value(0)
   }
 
-  private fun rowRenderInfo(index: Int, rows: RowRecorder, id: Int?) =
+  private fun rowRenderInfo(index: Int, rows: RowRecorder, id: Int?, showsValue: Boolean = true) =
       ComponentRenderInfo.create()
           .apply { id?.let { customAttribute(RecyclerBinder.ID_CUSTOM_ATTR_KEY, it) } }
-          .component(SaveableRow(index, rows))
+          .component(SaveableRow(index, rows, showsValue = showsValue))
           .build()
+
+  /** Shows or hides the value of a [ToggleRow], as its own state update would. */
+  @SuppressLint("KComponentSyncUpdateDetector")
+  private fun setShown(show: State<Boolean>, shown: Boolean) = show.updateSync(shown)
 
   private fun layoutScope(vararg items: LithoCollectionItem) = CollectionLayoutScope(
       layoutInfo = LinearLayoutInfo(LinearLayoutManager(lithoTestRule.context.androidContext)),
@@ -1357,10 +1546,26 @@ class CollectionSaveableStateTest {
       private val stickyId: Int? = null,
       // Tells otherwise equal roots apart, so setting one resolves again.
       private val revision: Int = 0,
+      private val rangeRatio: Float? = null,
   ) : KComponent() {
+    override fun ComponentScope.render(): Component = LazyList(
+        rangeRatio = rangeRatio,
+        style = Style.height(LIST_HEIGHT_PX.px).viewTag(LIST_TAG),
+    ) {
+      children(items = ids, id = { it }, isSticky = { it == stickyId }) { id ->
+        SaveableRow(id, rows)
+      }
+    }
+  }
+
+  /** A list whose rows keep their saveable state inside a vertical scroll. */
+  private class ScrollingRowList(private val ids: List<Int>, private val rows: RowRecorder) :
+      KComponent() {
     override fun ComponentScope.render(): Component =
         LazyList(style = Style.height(LIST_HEIGHT_PX.px).viewTag(LIST_TAG)) {
-          ids.forEach { id -> child(SaveableRow(id, rows), id = id, isSticky = id == stickyId) }
+          children(items = ids, id = { it }) { id ->
+            VerticalScroll(child = SaveableRow(id, rows), style = Style.height(ROW_HEIGHT_PX.px))
+          }
         }
   }
 
@@ -1562,6 +1767,23 @@ class CollectionSaveableStateTest {
     }
   }
 
+  /** Row [index], whose saveable value is in a child it shows while its own state is true. */
+  private class ToggleRow(
+      private val index: Int,
+      private val rows: RowRecorder,
+      private val onShow: (State<Boolean>) -> Unit,
+  ) : KComponent() {
+    override fun ComponentScope.render(): Component {
+      val show = useState { true }
+      onShow(show)
+      return if (show.value) {
+        SaveableRow(index, rows)
+      } else {
+        Text(text = "hidden", style = Style.height(ROW_HEIGHT_PX.px))
+      }
+    }
+  }
+
   private class PlainRow : KComponent() {
     override fun ComponentScope.render(): Component =
         Text(text = "plain", style = Style.height(ROW_HEIGHT_PX.px))
@@ -1571,13 +1793,16 @@ class CollectionSaveableStateTest {
       private val index: Int,
       private val rows: RowRecorder,
       private val stateKey: String? = null,
+      private val showsValue: Boolean = true,
   ) : KComponent() {
     override fun ComponentScope.render(): Component {
-      rows.record(
-          index,
-          useSaveableState(key = stateKey) { 0 },
-          LithoSaveableStateRegistryTreeProp.value,
-      )
+      if (showsValue) {
+        rows.record(
+            index,
+            useSaveableState(key = stateKey) { 0 },
+            LithoSaveableStateRegistryTreeProp.value,
+        )
+      }
       return Text(text = "row_$index", style = Style.height(ROW_HEIGHT_PX.px))
     }
   }

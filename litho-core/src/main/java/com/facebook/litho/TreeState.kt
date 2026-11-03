@@ -61,6 +61,20 @@ private constructor(
   private class ResolveUpdates(val resolveVersion: Int, val states: Set<StateId>)
 
   /**
+   * The restored values this render's [useSaveableState] hooks took on their first render. Their
+   * registries drop them when this render commits. Only such renders create it.
+   */
+  @Volatile private var saveableClaims: ArrayList<SaveableClaim>? = null
+
+  private class SaveableClaim(val slot: SaveableStateSlot, val tree: LithoTree)
+
+  /**
+   * The registry that adopted this tree's values, until the tree's next render commits into this
+   * TreeState. Only a tree built with the TreeState of a tree that saved values sets it.
+   */
+  @Volatile private var saveableAdoption: LithoSaveableStateRegistry? = null
+
+  /**
    * This class represents whether this Litho tree has been mounted before. The usage is a bit
    * convoluted and will need to be cleaned out properly in the future.
    */
@@ -142,6 +156,8 @@ private constructor(
         }
       }
     }
+    localTreeState.consumeSaveableClaims()
+    consumeSaveableAdoption()
     localTreeState.scope?.close()
   }
 
@@ -164,7 +180,33 @@ private constructor(
         layoutState.addToStateIdsToPromote(updated)
       }
     }
+    localTreeState.consumeSaveableClaims()
+    consumeSaveableAdoption()
     localTreeState.scope?.close()
+  }
+
+  @Synchronized
+  internal fun recordSaveableClaim(slot: SaveableStateSlot, tree: LithoTree) {
+    val claims = saveableClaims ?: ArrayList<SaveableClaim>(2).also { saveableClaims = it }
+    claims += SaveableClaim(slot, tree)
+  }
+
+  /** Consumes the claims once: the UI tree state commits the same render again. */
+  private fun consumeSaveableClaims() {
+    if (saveableClaims == null) return
+    val claims = synchronized(this) { saveableClaims.also { saveableClaims = null } } ?: return
+    claims.forEach { claim -> claim.slot.scope?.onClaimCommitted(claim.slot, claim.tree) }
+  }
+
+  /** Has [registry] decide which of its copies to drop when the next render commits into this. */
+  internal fun adoptSaveableValuesAtNextCommit(registry: LithoSaveableStateRegistry) {
+    saveableAdoption = registry
+  }
+
+  private fun consumeSaveableAdoption() {
+    val registry = saveableAdoption ?: return
+    saveableAdoption = null
+    registry.onAdoptedTreeCommitted(this)
   }
 
   /** The states a committed resolve newer than [resolveVersion] updated. */

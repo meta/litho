@@ -188,6 +188,7 @@ open class ComponentTree protected constructor(builder: Builder) :
       builder.retainedLithoSaveableStateRegistry
           ?: parentLithoSaveableStateRegistry?.createChildRegistry(
               builder.nestedTreeSaveableStateKey,
+              joinsParentWhenShown = true,
           )
           ?: ownerSaveableStateBinding?.registry
   private val hasRetainedLithoSaveableStateRegistry =
@@ -195,9 +196,8 @@ open class ComponentTree protected constructor(builder: Builder) :
 
   @GuardedBy("this") private var retainedLithoSaveableStateRegistryAcquired = false
 
-  /** The late restores of [lithoSaveableStateRegistry] that this tree's layouts may have read. */
-  @Volatile
-  private var renderedLateRestoreCount: Int = lithoSaveableStateRegistry?.lateRestoreCount() ?: 0
+  /** The generation of [lithoSaveableStateRegistry] that this tree's layouts may have read. */
+  @Volatile private var renderedGeneration: Int = lithoSaveableStateRegistry?.generation ?: 0
 
   // These variables are only accessed from the main thread.
   @ThreadConfined(ThreadConfined.UI) private var isMeasuring: Boolean = false
@@ -412,6 +412,11 @@ open class ComponentTree protected constructor(builder: Builder) :
 
     if (isMainThread) {
       ownerSaveableStateBinding?.initializeOnMain()
+    }
+
+    val carriedTreeState = builder.treeState
+    if (carriedTreeState != null && lithoSaveableStateRegistry?.hasSources == true) {
+      lithoSaveableStateRegistry.adoptTree(checkNotNull(context.lithoTree), carriedTreeState)
     }
 
     ComponentTreeRegistry.register(this)
@@ -675,6 +680,7 @@ open class ComponentTree protected constructor(builder: Builder) :
     }
     ownerSaveableStateBinding?.onAttach()
     renderLateRestoredNestedState()
+    lithoSaveableStateRegistry?.onTreeShown()
     inAttach = true
     try {
       val currentLithoView =
@@ -1466,9 +1472,9 @@ open class ComponentTree protected constructor(builder: Builder) :
   @UiThread
   private fun renderLateRestoredNestedState() {
     if (ownerSaveableStateBinding != null) return
-    val count = lithoSaveableStateRegistry?.lateRestoreCount() ?: return
-    if (count == renderedLateRestoreCount) return
-    renderedLateRestoreCount = count
+    val generation = lithoSaveableStateRegistry?.generation ?: return
+    if (generation == renderedGeneration) return
+    renderedGeneration = generation
     renderRestoredSaveableState()
   }
 

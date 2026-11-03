@@ -52,7 +52,7 @@ private fun ComponentScope.transientMutate(
     }
 
 /** State lookup using the [hookKey] captured by the caller. */
-private fun <T> ComponentScope.getUpdatedStateByHookKey(
+internal fun <T> ComponentScope.getUpdatedStateByHookKey(
     hookKey: HookKey,
     deps: Array<out Any?>,
     initializer: () -> T,
@@ -175,19 +175,24 @@ private fun <T> ComponentScope.useStateImpl(
 ): State<T> {
   val lithoTree = context.lithoTree ?: error("LithoTree is null")
   val hookKey = requireCurrentHookKey()
-  val result = getUpdatedStateByHookKey(hookKey, deps, initializer)
-
-  return State(
-      lithoTree.stateProvider,
-      lithoTree.stateUpdater,
-      HookGlobalKey(context.globalKey, hookKey, RenderScope.Resolve),
-      context.isContextForLayout,
-      context.componentScope,
-      lithoTree.isReadTrackingEnabled,
-      context.lithoConfiguration.componentsConfig.detachStateIdFromValue,
-      result,
-  )
+  return hookState(lithoTree, hookKey, getUpdatedStateByHookKey(hookKey, deps, initializer))
 }
+
+/** The [State] of the hook at [hookKey], whose value this render read as [value]. */
+internal fun <T> ComponentScope.hookState(
+    lithoTree: LithoTree,
+    hookKey: HookKey,
+    value: T,
+): State<T> = State(
+    lithoTree.stateProvider,
+    lithoTree.stateUpdater,
+    HookGlobalKey(context.globalKey, hookKey, RenderScope.Resolve),
+    context.isContextForLayout,
+    context.componentScope,
+    lithoTree.isReadTrackingEnabled,
+    context.lithoConfiguration.componentsConfig.detachStateIdFromValue,
+    value,
+)
 
 /** Interface with which a component gets the value from a state or updates it. */
 class State<T>

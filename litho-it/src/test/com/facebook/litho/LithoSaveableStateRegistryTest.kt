@@ -16,12 +16,18 @@
 
 package com.facebook.litho
 
+import android.graphics.Rect
 import android.os.BadParcelableException
 import android.os.Bundle
 import android.os.Parcel
 import android.os.Parcelable
-import androidx.core.os.bundleOf
+import com.facebook.litho.annotations.ExperimentalLithoApi
+import com.facebook.litho.debug.LithoDebugEvent
 import com.facebook.litho.testing.testrunner.LithoTestRunner
+import com.facebook.rendercore.debug.DebugEvent
+import com.facebook.rendercore.debug.DebugEventAttribute
+import com.facebook.rendercore.debug.DebugEventBus
+import com.facebook.rendercore.debug.DebugEventSubscriber
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
@@ -32,14 +38,14 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.shadows.ShadowLog
 
+@OptIn(ExperimentalLithoApi::class)
 @RunWith(LithoTestRunner::class)
 class LithoSaveableStateRegistryTest {
 
   @Test
-  fun `snapshot restores a registered value`() {
+  fun `snapshot restores a live value`() {
     val registry = LithoSaveableStateRegistry()
-    val value = AtomicInteger(3)
-    registry.registerProvider("counter") { value.get() }
+    LiveValue(registry, "counter", 3)
 
     val restored = LithoSaveableStateRegistry(registry.snapshot())
 
@@ -47,31 +53,29 @@ class LithoSaveableStateRegistryTest {
   }
 
   @Test
-  fun `a second provider for a key saves neither and keeps working`() {
+  fun `two live values for a key save neither`() {
     ShadowLog.clear()
-    val restored = LithoSaveableStateRegistry(bundleOf("counter" to bundleOf("value" to 5)))
-    val first = restored.registerProvider("counter") { 1 }
-    val second = restored.registerProvider("counter") { 2 }
-    val third = restored.registerProvider("counter") { 3 }
+    val restored = LithoSaveableStateRegistry(savedState("counter" to 5))
+    val first = LiveValue(restored, "counter", 1)
+    val second = LiveValue(restored, "counter", 2)
 
+    assertThat(restored.snapshot().containsKey("counter")).isFalse()
     assertThat(restored.restoredValue("counter")).isNull()
     assertThat(restored.snapshot().containsKey("counter")).isFalse()
     assertThat(duplicateKeyWarnings()).isEqualTo(1)
 
     first.close()
     second.close()
-    third.close()
     assertThat(restored.snapshot().isEmpty).isTrue()
   }
 
   @Test
-  fun `unregister discards a provider that its owner did not retain`() {
+  fun `a value is not saved after its tree is released unless retained`() {
     val registry = LithoSaveableStateRegistry()
-    val value = AtomicInteger(1)
-    val registration = registry.registerProvider("counter") { value.get() }
-    value.set(4)
+    val live = LiveValue(registry, "counter", 1)
+    live.set(4)
 
-    registration.close()
+    live.close()
 
     assertThat(registry.restoredValue("counter")).isNull()
     assertThat(registry.snapshot().isEmpty).isTrue()
@@ -80,69 +84,21 @@ class LithoSaveableStateRegistryTest {
   @Test
   fun `owner can retain active values before replacing its tree`() {
     val registry = LithoSaveableStateRegistry()
-    val value = AtomicInteger(1)
-    val registration = registry.registerProvider("counter") { value.get() }
-    value.set(4)
+    val live = LiveValue(registry, "counter", 1)
+    live.set(4)
 
     registry.retainActiveValues()
-    registration.close()
+    live.close()
 
     assertThat(registry.restoredValue("counter")?.value).isEqualTo(4)
   }
 
-  /**
-   * ```text
-   * Retention thread                 Component cleanup
-   * ----------------                 -----------------
-   * Capture active provider
-   * Run provider outside lock
-   *                                  Unregister provider
-   * Provider returns
-   * Do not retain removed value
-   * ```
-   */
   @Test
-  fun `retention does not restore a concurrently removed provider`() {
-    val registry = LithoSaveableStateRegistry()
-    val providerStarted = CountDownLatch(1)
-    val allowProviderToFinish = CountDownLatch(1)
-    val calls = AtomicInteger()
-    val registration =
-        registry.registerProvider("counter") {
-          if (calls.incrementAndGet() > 1) {
-            providerStarted.countDown()
-            check(allowProviderToFinish.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
-          }
-          4
-        }
-    val retain = FutureTask { registry.retainActiveValues() }
-    val retentionThread = Thread(retain)
+  fun `a live value replaces its restored value in the snapshot`() {
+    val restored = LithoSaveableStateRegistry(savedState("counter" to 2))
 
-    try {
-      retentionThread.start()
-      check(providerStarted.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
-      registration.close()
-      allowProviderToFinish.countDown()
-      retain.get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+    LiveValue(restored, "counter", 5)
 
-      assertThat(registry.restoredValue("counter")).isNull()
-      assertThat(registry.snapshot().isEmpty).isTrue()
-    } finally {
-      allowProviderToFinish.countDown()
-      retentionThread.interrupt()
-      registry.close()
-    }
-  }
-
-  @Test
-  fun `registering a provider consumes its restored value`() {
-    val original = LithoSaveableStateRegistry()
-    original.registerProvider("counter") { 2 }
-    val restored = LithoSaveableStateRegistry(original.snapshot())
-
-    restored.registerProvider("counter") { 5 }
-
-    assertThat(restored.restoredValue("counter")).isNull()
     assertThat(
         LithoSaveableStateRegistry(restored.snapshot()).restoredValue("counter")?.value,
     )
@@ -151,15 +107,12 @@ class LithoSaveableStateRegistryTest {
 
   @Test
   fun `snapshot does not share retained value bundles`() {
-    val source = LithoSaveableStateRegistry()
-    source.registerProvider("counter") { 2 }
-    val registry = LithoSaveableStateRegistry(source.snapshot())
+    val registry = LithoSaveableStateRegistry(savedState("counter" to 2))
 
     val snapshot = registry.snapshot()
     snapshot.getBundle("counter")?.clear()
 
     assertThat(registry.restoredValue("counter")?.value).isEqualTo(2)
-    source.close()
     registry.close()
   }
 
@@ -192,160 +145,207 @@ class LithoSaveableStateRegistryTest {
   }
 
   @Test
-  fun `closed registration cannot remove a replacement provider`() {
-    val registry = LithoSaveableStateRegistry()
-    val first = registry.registerProvider("counter") { 1 }
-    first.close()
-    registry.registerProvider("counter") { 2 }
+  fun `a registry reads its restored Bundle once`() {
+    val restoredState = savedState("counter" to 1, childKey("child") to savedState("counter" to 2))
+    val registry = LithoSaveableStateRegistry(restoredState)
+    assertThat(registry.restoredValue("counter")?.value).isEqualTo(1)
 
-    first.close()
+    checkNotNull(restoredState.getBundle("counter")).putInt("value", 3)
+    checkNotNull(restoredState.getBundle(childKey("child"))?.getBundle("value")).clear()
+    restoredState.clear()
 
-    val restored = LithoSaveableStateRegistry(registry.snapshot())
-    assertThat(restored.restoredValue("counter")?.value).isEqualTo(2)
+    assertThat(registry.restoredValue("counter")?.value).isEqualTo(1)
+    assertThat(registry.createChildRegistry("child").restoredValue("counter")?.value).isEqualTo(2)
   }
 
-  /**
-   * ```text
-   * Registration thread A           Registration thread B
-   * ---------------------           ---------------------
-   * Register provider for key
-   *                                 Register provider for the same key
-   * Neither provider is saved; both registrations succeed
-   * ```
-   */
   @Test
-  fun `concurrent registration of one key saves neither provider`() {
-    val registry = LithoSaveableStateRegistry()
-    val start = CountDownLatch(1)
-    val registered = AtomicInteger()
-    val tasks =
-        List(2) { value ->
-          FutureTask {
-            check(start.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
-            registry.registerProvider("shared") { value }
-            registered.incrementAndGet()
+  fun `a restored value that cannot be read is dropped and reported, and the others restore`() {
+    val restoredState = parcelRoundTrip(
+        savedState(
+            "broken" to UnreadableParcelable(),
+            "first" to 1,
+            "last" to 3,
+            childKey("child") to savedState("broken" to UnreadableParcelable(), "counter" to 4),
+        ),
+    )
+
+    val sources = restoreFailureSources {
+      val registry = LithoSaveableStateRegistry(
+          restoredState,
+          LithoSaveableStateRegistryTest::class.java.classLoader,
+      )
+
+      assertThat(registry.restoredValue("broken")).isNull()
+      assertThat(registry.restoredValue("first")?.value).isEqualTo(1)
+      assertThat(registry.restoredValue("last")?.value).isEqualTo(3)
+      val child = registry.createChildRegistry("child")
+      assertThat(child.restoredValue("broken")).isNull()
+      assertThat(child.restoredValue("counter")?.value).isEqualTo(4)
+      assertThat(registry.snapshot().containsKey("broken")).isFalse()
+    }
+
+    assertThat(sources).containsExactly("restore", "restore")
+  }
+
+  @Test
+  fun `a root claim drops and reports the values it cannot read and restores the others`() {
+    val root =
+        LithoSaveableStateRegistry.ownerBacked(
+            LithoSaveableStateRegistryTest::class.java.classLoader,
+        ) {
+          parcelRoundTrip(
+              savedState(
+                  "broken" to UnreadableParcelable(),
+                  "first" to 1,
+                  childKey("child") to
+                      savedState("broken" to UnreadableParcelable(), "counter" to 4),
+                  childKey("discarded") to savedState("broken" to UnreadableParcelable()),
+              ),
+          )
+        }
+    root.discardChildState("discarded")
+
+    val sources = restoreFailureSources {
+      assertThat(root.restoredValue("first")?.value).isEqualTo(1)
+    }
+
+    assertThat(root.restoredValue("broken")).isNull()
+    assertThat(root.createChildRegistry("child").restoredValue("counter")?.value).isEqualTo(4)
+    assertThat(sources).containsExactly("root claim", "root claim")
+  }
+
+  @Test
+  fun `a late restore drops a value that cannot be read and adopts the others`() {
+    val root =
+        LithoSaveableStateRegistry.ownerBacked(
+            LithoSaveableStateRegistryTest::class.java.classLoader,
+        ) {
+          null
+        }
+    val row = root.createChildRegistry("list").createChildRegistry("row-0")
+    assertThat(row.restoredValue("label")).isNull()
+
+    val sources = restoreFailureSources {
+      root.adoptLateRestoredValues(
+          parcelRoundTrip(
+              savedState(
+                  "broken" to UnreadableParcelable(),
+                  "header" to "header",
+                  childKey("list") to
+                      savedState(
+                          childKey("row-0") to
+                              savedState("broken" to UnreadableParcelable(), "label" to "row 0"),
+                      ),
+              ),
+          ),
+      )
+    }
+
+    assertThat(root.restoredValue("header")?.value).isEqualTo("header")
+    assertThat(row.restoredValue("label")?.value).isEqualTo("row 0")
+    assertThat(sources).containsExactly("late restore", "late restore")
+  }
+
+  @Test
+  fun `a closed registry reads no late restored values`() {
+    val root =
+        LithoSaveableStateRegistry.ownerBacked(
+            LithoSaveableStateRegistryTest::class.java.classLoader,
+        ) {
+          null
+        }
+    root.close()
+
+    val sources = restoreFailureSources {
+      root.adoptLateRestoredValues(parcelRoundTrip(savedState("broken" to UnreadableParcelable())))
+    }
+
+    assertThat(sources).isEmpty()
+  }
+
+  @Test
+  fun `restored values are read with the host class loader without changing the restored Bundle`() {
+    val loaded = mutableListOf<String>()
+    val hostClassLoader =
+        object : ClassLoader(LithoSaveableStateRegistryTest::class.java.classLoader) {
+          override fun loadClass(name: String, resolve: Boolean): Class<*> {
+            loaded += name
+            return super.loadClass(name, resolve)
           }
         }
-    val threads = tasks.map(::Thread)
+    val restoredState = parcelRoundTrip(savedState("bounds" to Rect(1, 2, 3, 4)))
+    // An owner may read the Bundle before it hands it over.
+    restoredState.keySet()
 
-    try {
-      threads.forEach(Thread::start)
-      start.countDown()
-      tasks.forEach { it.get(TIMEOUT_SECONDS, TimeUnit.SECONDS) }
+    val registry = LithoSaveableStateRegistry(restoredState, hostClassLoader)
 
-      assertThat(registered).hasValue(2)
-      assertThat(registry.snapshot().containsKey("shared")).isFalse()
-    } finally {
-      threads.forEach(Thread::interrupt)
-      registry.close()
-    }
+    assertThat(registry.restoredValue("bounds")?.value).isEqualTo(Rect(1, 2, 3, 4))
+    assertThat(loaded).contains(Rect::class.java.name)
+    assertThat(restoredState.classLoader).isNotSameAs(hostClassLoader)
   }
 
   /**
    * ```text
-   * Registration thread             Teardown thread
-   * -------------------             ---------------
-   * Validate provider value
-   *                                 Close registry
-   * Attempt to commit provider
-   * Ignore the ended state scope
+   * Snapshot thread                 Other thread
+   * ---------------                 ------------
+   * Walk the live values
+   * Run a saver outside the lock    Another tree uses the registry
+   * Finish snapshot                 Complete without waiting for the saver
    * ```
    */
   @Test
-  fun `close ignores a registration that has not committed`() {
+  fun `snapshot does not hold the registry lock while a saver runs`() {
     val registry = LithoSaveableStateRegistry()
-    val providerStarted = CountDownLatch(1)
-    val allowProviderToFinish = CountDownLatch(1)
-    val registration = FutureTask {
-      registry.registerProvider("counter") {
-        providerStarted.countDown()
-        check(allowProviderToFinish.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
-        1
-      }
-    }
-    val registrationThread = Thread(registration)
-
-    try {
-      registrationThread.start()
-      check(providerStarted.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
-      registry.close()
-      allowProviderToFinish.countDown()
-
-      registration.get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
-      assertThat(registry.snapshot().isEmpty).isTrue()
-    } finally {
-      allowProviderToFinish.countDown()
-      registrationThread.interrupt()
-      registry.close()
-    }
-  }
-
-  /**
-   * ```text
-   * Snapshot thread                 Registration thread
-   * ---------------                 -------------------
-   * Capture provider list
-   * Run provider outside lock       Register another provider
-   * Finish snapshot                 Complete without waiting for saver
-   * ```
-   */
-  @Test
-  fun `snapshot does not hold the registry lock while a provider runs`() {
-    val registry = LithoSaveableStateRegistry()
-    val providerStarted = CountDownLatch(1)
-    val allowProviderToFinish = CountDownLatch(1)
+    val saverStarted = CountDownLatch(1)
+    val allowSaverToFinish = CountDownLatch(1)
     val calls = AtomicInteger()
-    registry.registerProvider("counter") {
-      if (calls.incrementAndGet() > 1) {
-        providerStarted.countDown()
-        check(allowProviderToFinish.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
-      }
-      7
-    }
+    val counter = LiveValue(
+        registry,
+        "counter",
+        7,
+        Saver(
+            save = { value ->
+              if (calls.incrementAndGet() == 1) {
+                saverStarted.countDown()
+                check(allowSaverToFinish.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+              }
+              value
+            },
+            restore = { it },
+        ),
+    )
     val snapshot = FutureTask { registry.snapshot() }
-    val registerOther = FutureTask { registry.registerProvider("other") { 2 } }
+    val useOther = FutureTask { LiveValue(registry, "other", 2) }
     val snapshotThread = Thread(snapshot)
-    val registrationThread = Thread(registerOther)
+    val otherThread = Thread(useOther)
 
     try {
       snapshotThread.start()
-      check(providerStarted.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
-      registrationThread.start()
+      check(saverStarted.await(TIMEOUT_SECONDS, TimeUnit.SECONDS))
+      otherThread.start()
 
-      val otherRegistration = registerOther.get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
-      allowProviderToFinish.countDown()
+      val other = useOther.get(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+      allowSaverToFinish.countDown()
 
       val restored = LithoSaveableStateRegistry(snapshot.get(TIMEOUT_SECONDS, TimeUnit.SECONDS))
 
       assertThat(restored.restoredValue("counter")?.value).isEqualTo(7)
-      assertThat(calls).hasValue(2)
-      otherRegistration.close()
+      assertThat(calls).hasValue(1)
+      other.close()
+      counter.close()
     } finally {
-      allowProviderToFinish.countDown()
+      allowSaverToFinish.countDown()
       snapshotThread.interrupt()
-      registrationThread.interrupt()
+      otherThread.interrupt()
       registry.close()
     }
-  }
-
-  @Test
-  fun `unsupported value is rejected when its provider registers`() {
-    val registry = LithoSaveableStateRegistry()
-
-    assertThatThrownBy { registry.registerProvider("unsupported") { Any() } }
-        .isInstanceOf(IllegalArgumentException::class.java)
-        .hasMessageContaining("unsupported")
-        .hasMessageContaining(Any::class.java.name)
-        .hasMessageContaining("Saver")
-    assertThat(registry.snapshot().isEmpty).isTrue()
   }
 
   @Test
   fun `unsupported updated value reports its owning key during snapshot`() {
     val registry = LithoSaveableStateRegistry()
-    var value: Any = 1
-    registry.registerProvider("counter") { value }
-    value = Any()
+    val live = LiveValue(registry, "counter", 1)
+    live.set(Any())
 
     assertThatThrownBy { registry.snapshot() }
         .isInstanceOf(IllegalArgumentException::class.java)
@@ -354,23 +354,45 @@ class LithoSaveableStateRegistryTest {
   }
 
   @Test
+  fun `unsupported updated value reports its owning key when retained`() {
+    val registry = LithoSaveableStateRegistry()
+    val live = LiveValue(registry, "counter", 1)
+    live.set(Any())
+
+    assertThatThrownBy { registry.retainActiveValues() }
+        .isInstanceOf(IllegalArgumentException::class.java)
+        .hasMessageContaining("counter")
+        .hasMessageContaining(Any::class.java.name)
+  }
+
+  @Test
   fun `close is idempotent and makes later access inert`() {
-    val source = LithoSaveableStateRegistry()
-    source.registerProvider("counter") { 1 }
-    val registry = LithoSaveableStateRegistry(source.snapshot())
-    registry.registerProvider("other") { 1 }
+    val registry = LithoSaveableStateRegistry(savedState("counter" to 1))
+    val other = LiveValue(registry, "other", 1)
 
     registry.close()
     registry.close()
 
     assertThat(registry.snapshot().isEmpty).isTrue()
     assertThat(registry.restoredValue("counter")).isNull()
-    val lateProviderCalls = AtomicInteger()
-    registry.registerProvider("late") { lateProviderCalls.incrementAndGet() }.close()
+    val lateSaves = AtomicInteger()
+    val late = LiveValue(
+        registry,
+        "late",
+        1,
+        Saver(
+            save = { value ->
+              lateSaves.incrementAndGet()
+              value
+            },
+            restore = { it },
+        ),
+    )
     registry.retainActiveValues()
     assertThat(registry.snapshot().isEmpty).isTrue()
-    assertThat(lateProviderCalls.get()).isZero()
-    source.close()
+    assertThat(lateSaves.get()).isZero()
+    late.close()
+    other.close()
   }
 
   /**
@@ -380,20 +402,20 @@ class LithoSaveableStateRegistryTest {
    * Read the nested tree's registry
    *                                    Release the nested tree
    *                                    Save the parent
-   * Read and register again
+   * Read and use it again
    * ```
    */
   @Test
   fun `closing a nested registry mid-calculation keeps parent saves working`() {
     val parent = LithoSaveableStateRegistry()
     val child = parent.createChildRegistry("child")
-    child.registerProvider("counter") { 7 }
+    LiveValue(child, "counter", 7)
 
     child.close()
 
     assertThat(parent.snapshot().isEmpty).isTrue()
     assertThat(child.restoredValue("counter")).isNull()
-    child.registerProvider("again") { 8 }.close()
+    LiveValue(child, "again", 8).close()
     assertThat(parent.snapshot().isEmpty).isTrue()
     parent.close()
   }
@@ -412,7 +434,7 @@ class LithoSaveableStateRegistryTest {
 
     root.adoptLateRestoredValues(savedList())
 
-    assertThat(row.restoreGeneration("label")).isEqualTo(1)
+    assertThat(row.generation).isEqualTo(1)
     assertThat(row.restoredValue("label")?.value).isEqualTo("row 0")
   }
 
@@ -426,13 +448,13 @@ class LithoSaveableStateRegistryTest {
 
     val row = list.createChildRegistry("row-1")
     assertThat(row.restoredValue("label")?.value).isEqualTo("row 1")
-    assertThat(row.restoreGeneration("label")).isZero()
+    assertThat(row.generation).isZero()
   }
 
   /**
    * ```text
    * row-0 reads before the values arrive, then the root adopts them
-   * row-0 registers its restored value, so "list" replaces the root's copy with its own snapshot
+   * row-0 takes its restored value, so "list" replaces the root's copy with its own snapshot
    * Save                                     row-0 and row-1, which never read, are still saved
    * ```
    */
@@ -443,19 +465,45 @@ class LithoSaveableStateRegistryTest {
     assertThat(row.restoredValue("label")).isNull()
     root.adoptLateRestoredValues(savedList())
 
-    val label = row.restoredValue("label")?.value
-    row.registerProvider("label") { label }
+    LiveValue(row, "label", row.restoredValue("label")?.value)
 
     val saved = root.snapshotForOwner()
     assertThat(savedLabel(saved, "row-0")).isEqualTo("row 0")
     assertThat(savedLabel(saved, "row-1")).isEqualTo("row 1")
   }
 
+  /**
+   * ```text
+   * Restored from a save: row-0 takes its value, row-1 and its "detail" child never read
+   * Save again                               row-1 and its "detail" child are saved unchanged
+   * ```
+   */
+  @Test
+  fun `nested values restore from a save and a part no child read is saved again unchanged`() {
+    val source = LithoSaveableStateRegistry()
+    val sourceList = source.createChildRegistry("list")
+    LiveValue(sourceList.createChildRegistry("row-0"), "label", "row 0")
+    val sourceRow = sourceList.createChildRegistry("row-1")
+    LiveValue(sourceRow, "label", "row 1")
+    LiveValue(sourceRow.createChildRegistry("detail"), "text", "more")
+
+    val restored = LithoSaveableStateRegistry(source.snapshot())
+    val row = restored.createChildRegistry("list").createChildRegistry("row-0")
+    LiveValue(row, "label", row.restoredValue("label")?.value)
+    val list = LithoSaveableStateRegistry(restored.snapshot()).createChildRegistry("list")
+
+    assertThat(list.createChildRegistry("row-0").restoredValue("label")?.value).isEqualTo("row 0")
+    val unread = list.createChildRegistry("row-1")
+    assertThat(unread.restoredValue("label")?.value).isEqualTo("row 1")
+    assertThat(unread.createChildRegistry("detail").restoredValue("text")?.value).isEqualTo("more")
+  }
+
   @Test
   fun `a late restore keeps ambiguous keys dropped`() {
     val root = LithoSaveableStateRegistry.ownerBacked(null) { null }
-    root.registerProvider("header") { "first" }
-    root.registerProvider("header") { "second" }
+    LiveValue(root, "header", "first")
+    LiveValue(root, "header", "second")
+    root.snapshotForOwner()
     val first = root.createChildRegistry("list")
     val second = root.createChildRegistry("list")
     assertThat(first.restoredValue("label")).isNull()
@@ -470,34 +518,34 @@ class LithoSaveableStateRegistryTest {
   }
 
   @Test
-  fun `a detached child is not saved when a provider registers`() {
+  fun `a detached child is not saved when a tree uses it`() {
     val parent = LithoSaveableStateRegistry()
     val child = parent.createChildRegistry("child")
-    child.registerProvider("first") { 1 }
+    LiveValue(child, "first", 1)
 
     child.detachFromParent()
-    child.registerProvider("second") { 2 }
+    LiveValue(child, "second", 2)
 
     assertThat(parent.snapshot().isEmpty).isTrue()
   }
 
   @Test
-  fun `a child detached before it reads claims nothing when a provider registers`() {
+  fun `a child detached before it reads claims nothing when a tree uses it`() {
     val parent = LithoSaveableStateRegistry(savedChild("child", 5))
     val detached = parent.createChildRegistry("child")
     detached.detachFromParent()
 
-    detached.registerProvider("other") { 1 }
+    LiveValue(detached, "other", 1)
 
     assertThat(parent.createChildRegistry("child").restoredValue("counter")?.value).isEqualTo(5)
   }
 
   @Test
-  fun `attaching a child saves the values registered while it was detached`() {
+  fun `attaching a child saves the values it got while detached`() {
     val parent = LithoSaveableStateRegistry()
     val child = parent.createChildRegistry("child")
     child.detachFromParent()
-    child.registerProvider("counter") { 3 }
+    LiveValue(child, "counter", 3)
 
     child.attachToParent()
 
@@ -509,10 +557,9 @@ class LithoSaveableStateRegistryTest {
   fun `attaching a child that was saved when detached saves it again`() {
     val parent = LithoSaveableStateRegistry()
     val child = parent.createChildRegistry("child")
-    val value = AtomicInteger(1)
-    child.registerProvider("counter") { value.get() }
+    val live = LiveValue(child, "counter", 1)
     child.detachFromParent()
-    value.set(4)
+    live.set(4)
     assertThat(parent.snapshot().isEmpty).isTrue()
 
     child.attachToParent()
@@ -522,7 +569,7 @@ class LithoSaveableStateRegistryTest {
   }
 
   @Test
-  fun `retaining a child without providers claims nothing from its parent`() {
+  fun `retaining a child without live values claims nothing from its parent`() {
     val parent = LithoSaveableStateRegistry(savedChild("child", 5))
 
     parent.createChildRegistry("child").retainActiveValues()
@@ -531,7 +578,7 @@ class LithoSaveableStateRegistryTest {
   }
 
   @Test
-  fun `retaining a root without providers claims nothing from its owner`() {
+  fun `retaining a root without live values claims nothing from its owner`() {
     val claims = AtomicInteger()
     val root =
         LithoSaveableStateRegistry.ownerBacked(null) {
@@ -548,8 +595,8 @@ class LithoSaveableStateRegistryTest {
   fun `a child left out of its parent's snapshot keeps its values and children`() {
     val parent = LithoSaveableStateRegistry()
     val child = parent.createChildRegistry("child")
-    child.registerProvider("counter") { 3 }
-    child.createChildRegistry("nested").registerProvider("counter") { 4 }
+    LiveValue(child, "counter", 3)
+    LiveValue(child.createChildRegistry("nested"), "counter", 4)
 
     child.setSavedInParent(false)
 
@@ -564,10 +611,10 @@ class LithoSaveableStateRegistryTest {
   fun `a child left out of its parent's snapshot still holds its key`() {
     val parent = LithoSaveableStateRegistry()
     val child = parent.createChildRegistry("child")
-    child.registerProvider("counter") { 1 }
+    LiveValue(child, "counter", 1)
     child.setSavedInParent(false)
 
-    parent.createChildRegistry("child").registerProvider("counter") { 2 }
+    LiveValue(parent.createChildRegistry("child"), "counter", 2)
     child.setSavedInParent(true)
 
     assertThat(parent.snapshot().isEmpty).isTrue()
@@ -577,10 +624,9 @@ class LithoSaveableStateRegistryTest {
   fun `a child saved in its parent again is saved with its current values`() {
     val parent = LithoSaveableStateRegistry()
     val child = parent.createChildRegistry("child")
-    val value = AtomicInteger(1)
-    child.registerProvider("counter") { value.get() }
+    val live = LiveValue(child, "counter", 1)
     child.setSavedInParent(false)
-    value.set(6)
+    live.set(6)
 
     child.setSavedInParent(true)
 
@@ -605,7 +651,7 @@ class LithoSaveableStateRegistryTest {
   fun `a parent keeps no older copy of a child left out of its snapshot`() {
     val parent = LithoSaveableStateRegistry()
     val child = parent.createChildRegistry("child")
-    child.registerProvider("counter") { 1 }
+    LiveValue(child, "counter", 1)
     parent.retainActiveValues()
 
     child.setSavedInParent(false)
@@ -618,7 +664,7 @@ class LithoSaveableStateRegistryTest {
   fun `retaining a parent does not keep a child left out of its snapshot`() {
     val parent = LithoSaveableStateRegistry()
     val child = parent.createChildRegistry("child")
-    child.registerProvider("counter") { 1 }
+    LiveValue(child, "counter", 1)
     child.setSavedInParent(false)
 
     parent.retainActiveValues()
@@ -656,13 +702,14 @@ class LithoSaveableStateRegistryTest {
   @Test
   fun `discarding child state before the claim drops the restored value and claims nothing`() {
     val claims = AtomicInteger()
-    val saved = LithoSaveableStateRegistry()
-    saved.createChildRegistry("dropped").registerProvider("counter") { 1 }
-    saved.createChildRegistry("kept").registerProvider("counter") { 2 }
+    val saved = savedState(
+        childKey("dropped") to savedState("counter" to 1),
+        childKey("kept") to savedState("counter" to 2),
+    )
     val root =
         LithoSaveableStateRegistry.ownerBacked(null) {
           claims.incrementAndGet()
-          saved.snapshot()
+          saved
         }
 
     root.discardChildState("dropped")
@@ -675,14 +722,17 @@ class LithoSaveableStateRegistryTest {
   @Test
   fun `a child discarding child state before it restores claims nothing from its parent`() {
     val claims = AtomicInteger()
-    val saved = LithoSaveableStateRegistry()
-    val savedList = saved.createChildRegistry("list")
-    savedList.createChildRegistry("dropped").registerProvider("counter") { 1 }
-    savedList.createChildRegistry("kept").registerProvider("counter") { 2 }
+    val saved = savedState(
+        childKey("list") to
+            savedState(
+                childKey("dropped") to savedState("counter" to 1),
+                childKey("kept") to savedState("counter" to 2),
+            ),
+    )
     val root =
         LithoSaveableStateRegistry.ownerBacked(null) {
           claims.incrementAndGet()
-          saved.snapshot()
+          saved
         }
     val list = root.createChildRegistry("list")
 
@@ -694,26 +744,26 @@ class LithoSaveableStateRegistryTest {
   }
 
   @Test
-  fun `a registry holds state while it has a provider, a retained value or an open child`() {
+  fun `a registry holds state while it has a live value, a retained value or an open child`() {
     val parent = LithoSaveableStateRegistry()
-    val withProvider = parent.createChildRegistry("provider")
-    withProvider.registerProvider("counter") { 1 }
+    val withLiveValue = parent.createChildRegistry("live")
+    LiveValue(withLiveValue, "counter", 1)
     val withRetainedValue = parent.createChildRegistry("retained")
-    val registration = withRetainedValue.registerProvider("counter") { 2 }
+    val retained = LiveValue(withRetainedValue, "counter", 2)
     withRetainedValue.retainActiveValues()
-    registration.close()
+    retained.close()
     val withChild = parent.createChildRegistry("parent")
     val child = withChild.createChildRegistry("child")
     child.restoredValue("counter")
 
     assertThat(parent.createChildRegistry("empty").holdsState()).isFalse()
-    assertThat(withProvider.holdsState()).isTrue()
+    assertThat(withLiveValue.holdsState()).isTrue()
     assertThat(withRetainedValue.holdsState()).isTrue()
     assertThat(withChild.holdsState()).isTrue()
     child.close()
     assertThat(withChild.holdsState()).isFalse()
-    withProvider.close()
-    assertThat(withProvider.holdsState()).isFalse()
+    withLiveValue.close()
+    assertThat(withLiveValue.holdsState()).isFalse()
   }
 
   @Test
@@ -728,14 +778,14 @@ class LithoSaveableStateRegistryTest {
   }
 
   /** A saved root with a "header" and the rows "row-0" and "row-1" in its nested "list". */
-  private fun savedList(): Bundle {
-    val root = LithoSaveableStateRegistry()
-    root.registerProvider("header") { "header" }
-    val list = root.createChildRegistry("list")
-    list.createChildRegistry("row-0").registerProvider("label") { "row 0" }
-    list.createChildRegistry("row-1").registerProvider("label") { "row 1" }
-    return root.snapshot()
-  }
+  private fun savedList(): Bundle = savedState(
+      "header" to "header",
+      childKey("list") to
+          savedState(
+              childKey("row-0") to savedState("label" to "row 0"),
+              childKey("row-1") to savedState("label" to "row 1"),
+          ),
+  )
 
   private fun savedLabel(saved: Bundle, row: String): Any? =
       LithoSaveableStateRegistry(saved)
@@ -744,18 +794,36 @@ class LithoSaveableStateRegistryTest {
           .restoredValue("label")
           ?.value
 
+  /** The sources of the restore failures reported while [block] runs. */
+  private fun restoreFailureSources(block: () -> Unit): List<Any?> {
+    val sources = mutableListOf<Any?>()
+    val subscriber =
+        object : DebugEventSubscriber(LithoDebugEvent.DebugInfo) {
+          override fun onEvent(event: DebugEvent) {
+            if (event.attributes[DebugEventAttribute.Name] == RESTORE_FAILED_CATEGORY) {
+              sources += event.attributes["source"]
+            }
+          }
+        }
+    DebugEventBus.subscribe(subscriber)
+    try {
+      block()
+    } finally {
+      DebugEventBus.unsubscribe(subscriber)
+    }
+    return sources
+  }
+
   private fun duplicateKeyWarnings(): Int =
       ShadowLog.getLogs().count { it.msg.orEmpty().startsWith("LithoSaveableState:DuplicateKey") }
 
   private companion object {
     const val TIMEOUT_SECONDS: Long = 5
+    const val RESTORE_FAILED_CATEGORY: String = "LithoSaveableState:RestoreFailed"
 
     /** A snapshot with one child registry, [key], whose `counter` is [value]. */
-    private fun savedChild(key: String, value: Int): Bundle {
-      val source = LithoSaveableStateRegistry()
-      source.createChildRegistry(key).registerProvider("counter") { value }
-      return source.snapshot()
-    }
+    private fun savedChild(key: String, value: Int): Bundle =
+        savedState(childKey(key) to savedState("counter" to value))
 
     private fun restoredChild(snapshot: Bundle, key: String): LithoSaveableStateRegistry =
         LithoSaveableStateRegistry(snapshot).createChildRegistry(key)
