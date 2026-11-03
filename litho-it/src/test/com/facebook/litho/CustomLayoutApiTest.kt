@@ -181,10 +181,18 @@ class CustomLayoutApiTest {
     }
 
     val result = renderAndFindContainer(container(childCount = 3, layout = layout))
+    val xByDeclaredIndex =
+        (0 until result.childCount).associate { slot ->
+          val declaredIndex =
+              (0 until result.node.childCount).single { index ->
+                result.node.getChildAt(index) === result.getChildAt(slot).node
+              }
+          declaredIndex to result.getXForChildAtIndex(slot)
+        }
 
-    assertThat((0 until result.childCount).map { result.getXForChildAtIndex(it) })
+    assertThat(xByDeclaredIndex)
         .describedAs("each placeable placed itself, at its own declared index")
-        .containsExactly(0, STRIDE, STRIDE * 2)
+        .containsExactlyInAnyOrderEntriesOf(mapOf(0 to 0, 1 to STRIDE, 2 to STRIDE * 2))
   }
 
   // ─────────────────────────────────────────────── placeRelative
@@ -1520,6 +1528,40 @@ class CustomLayoutApiTest {
   }
 
   // ─────────────────────────────────────────────── paint order
+
+  /**
+   * Overlapping children are drawn in the order the container's placement block places them, the
+   * last placed on top, whatever order the container declares them in.
+   *
+   * Declared 200, 100, 300 wide and placed second, third, first, so the order they're placed in is
+   * neither the order they're declared in, its reverse, nor their sizes.
+   */
+  @Test
+  fun `overlapping children are painted in placement order, not declaration order`() {
+    val widths = listOf(200, 100, 300)
+    val layout = LayoutFunctionN { measurables, constraints ->
+      val placeables = measurables.mapIndexed { i, measurable ->
+        measurable.measure(SizeConstraints.exact(widths[i], CHILD))
+      }
+      layout(constraints.maxWidth, CHILD) {
+        listOf(1, 2, 0).forEach { index -> placeables[index].place(x = 0, y = 0) }
+      }
+    }
+
+    val testView =
+        lithoTestRule.render(widthPx = VIEWPORT, heightPx = VIEWPORT) {
+          Layout(
+              widths.map { width ->
+                SimpleMountSpecTester(style = Style.width(width.px).height(CHILD.px))
+              },
+              layout = layout,
+          )
+        }
+
+    assertThat(paintedWidths(testView))
+        .describedAs("drawn in placement order, the last placed on top")
+        .containsExactly(100, 300, 200)
+  }
 
   /** The host the two clickable children are mounted in: the deepest host holding two views. */
   private fun hostOf(view: View): ComponentHost {

@@ -306,14 +306,19 @@ internal class DefaultLayoutBuilder(
     // measured within its placeable's width, which differ when the measured size didn't fit the
     // child's constraints. Its border box starts after its left margin.
     val start = if (layoutDirection.isRTL) contentWidth - checkNotNull(declared).width else 0
-    for (i in 0 until node.childCount) {
-      val placeable = placementScope.placedWith[i] ?: continue
+    for (order in 0 until placementScope.placedCount) {
+      val index = placementScope.placedOrder[order]
+      val placeable = checkNotNull(placementScope.placedWith[index])
       val slot = result.childCount * 2
       positions[slot] =
-          left + start + placementScope.placements[i * 2] + placeable.offsetX + placeable.marginLeft
+          left +
+              start +
+              placementScope.placements[index * 2] +
+              placeable.offsetX +
+              placeable.marginLeft
       positions[slot + 1] =
-          top + placementScope.placements[i * 2 + 1] + placeable.offsetY + placeable.marginTop
-      result.addChild(buildChildFor(i, placeable))
+          top + placementScope.placements[index * 2 + 1] + placeable.offsetY + placeable.marginTop
+      result.addChild(buildChildFor(index, placeable))
     }
   }
 

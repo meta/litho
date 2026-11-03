@@ -353,6 +353,11 @@ internal constructor(
   internal var placedCount: Int = 0
     private set
 
+  /**
+   * The index of each child placed, in the order it was placed; the first [placedCount] are set.
+   */
+  internal val placedOrder: IntArray = IntArray(childCount)
+
   /** This dimension in pixels, as the container's resources resolve it. */
   fun Dimen.toPixels(): Int = toPixels(resourceResolver)
 
@@ -369,8 +374,8 @@ internal constructor(
   /**
    * Position this child at [x], [y] relative to this container's top-left.
    *
-   * Paint order is declaration order: two children that overlap are drawn in the order the
-   * container declared them, not the order they were placed in here.
+   * Paint order is placement order: two children that overlap are drawn in the order they were
+   * placed in here, the last placed on top, whatever order the container declared them in.
    *
    * @throws IllegalStateException if this child has already been placed, since one of the two
    *   positions would be discarded
@@ -388,6 +393,7 @@ internal constructor(
           "silently discarded."
     }
     placedWith[index] = this
+    placedOrder[placedCount] = index
     placedCount++
     placements[index * 2] = x
     placements[index * 2 + 1] = y
