@@ -85,6 +85,7 @@ fun ResourcesScope.Text(
     touchableSpanListener: TouchableSpanListener? = null,
     spanListener: ClickableSpanListener? = null,
     clickableSpanExpandedOffset: Dimen = 0.dp,
+    hyphenationFrequency: Int = TextStylesHelper.DEFAULT_HYPHENATION_FREQUENCY,
 ): Text {
   val builder =
       Text.create(context, defStyleAttr, defStyleRes)
@@ -102,6 +103,7 @@ fun ResourcesScope.Text(
           .apply { outlineColor?.let { outlineColor(outlineColor) } }
           .alignment(alignment)
           .breakStrategy(breakStrategy)
+          .hyphenationFrequency(hyphenationFrequency)
           .verticalGravity(verticalGravity)
           .spacingMultiplier(lineSpacingMultiplier)
           .isSingleLine(isSingleLine)
