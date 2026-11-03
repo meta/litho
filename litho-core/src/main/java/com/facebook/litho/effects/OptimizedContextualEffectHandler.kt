@@ -20,6 +20,7 @@ import androidx.annotation.VisibleForTesting
 import androidx.collection.MutableScatterMap
 import androidx.collection.MutableScatterSet
 import androidx.collection.ScatterSet
+import com.facebook.litho.Attachable
 import com.facebook.litho.ThreadUtils
 import com.facebook.litho.attribution
 import com.facebook.litho.debug.DebugInfoReporter
@@ -30,17 +31,17 @@ import com.facebook.litho.state.getEffectDirtyScopes
 
 internal class OptimizedContextualEffectHandler : EffectHandler {
 
-  private var effectsById: MutableScatterMap<Any, Effect>? = null
-  private var effectOrder: List<Effect>? = null
+  private var effectsById: MutableScatterMap<Any, Attachable>? = null
+  private var effectOrder: List<Attachable>? = null
   private var hasPendingEffects = false
   private var stateReadRecords: MutableScatterMap<StateId, MutableScatterSet<Any>>? = null
   private var effectToStateReadRecords: MutableScatterMap<Any, ScatterSet<StateId>>? = null
 
-  override val effects: Collection<Effect>?
+  override val effects: Collection<Attachable>?
     get() = effectOrder
 
   /**
-   * Updates the set of associated [Effects][Effect].
+   * Updates the set of associated [Attachables][Attachable].
    *
    * Running of effects is deferred until [Runnable.run] is called. This is useful for cases where
    * some actions need to happen first. For example, a caller might need to apply state updates and
@@ -49,9 +50,9 @@ internal class OptimizedContextualEffectHandler : EffectHandler {
    * Note that all outgoing effects are always detached as necessary before exiting this function.
    *
    * @return the [Runnable] through which the incoming effects can be executed. This is a
-   *   [EffectHandler.EmptyRunnable] if there are no new effects to run.
+   *   [AttachableHandler.EmptyRunnable] if there are no new effects to run.
    */
-  override fun EffectContext.updateEffects(effects: List<Effect>?): Runnable {
+  override fun EffectContext.updateEffects(effects: List<Attachable>?): Runnable {
     ThreadUtils.assertMainThread()
     if (hasPendingEffects) {
       error("The previously deferred effects have not yet run")
@@ -65,9 +66,9 @@ internal class OptimizedContextualEffectHandler : EffectHandler {
 
     var incomingEffectsInOrder = effects
     val nextEffectsById = effects?.let { nextEffects ->
-      val effectsByUniqueId = MutableScatterMap<Any, Effect>(nextEffects.size)
+      val effectsByUniqueId = MutableScatterMap<Any, Attachable>(nextEffects.size)
       var duplicateEffectCount = 0
-      var firstDuplicateEffect: Effect? = null
+      var firstDuplicateEffect: Attachable? = null
       for (effect in nextEffects) {
         val id = effect.uniqueId
         val previous = effectsByUniqueId.put(id, effect)
@@ -139,9 +140,9 @@ internal class OptimizedContextualEffectHandler : EffectHandler {
       return runLater(incomingEffectsInOrder)
     }
 
-    var toRun: Array<Effect?>? = null
+    var toRun: Array<Attachable?>? = null
     var toRunCount = 0
-    var resolvedEffectsInOrder: MutableList<Effect>? = null
+    var resolvedEffectsInOrder: MutableList<Attachable>? = null
     for (index in incomingEffectsInOrder.indices) {
       val incomingEffect = incomingEffectsInOrder[index]
       val id = incomingEffect.uniqueId
@@ -181,7 +182,7 @@ internal class OptimizedContextualEffectHandler : EffectHandler {
         resolvedOrder.add(resolvedEffect)
       } else if (resolvedEffect !== incomingEffect) {
         resolvedEffectsInOrder =
-            ArrayList<Effect>(incomingEffectsInOrder.size).also { resolvedOrder ->
+            ArrayList<Attachable>(incomingEffectsInOrder.size).also { resolvedOrder ->
               for (copyIndex in 0 until index) {
                 resolvedOrder.add(incomingEffectsInOrder[copyIndex])
               }
@@ -202,7 +203,7 @@ internal class OptimizedContextualEffectHandler : EffectHandler {
     return runLater(effectsToRun, toRunCount)
   }
 
-  private fun EffectContext.runLater(effects: Array<Effect?>, count: Int): Runnable {
+  private fun EffectContext.runLater(effects: Array<Attachable?>, count: Int): Runnable {
     hasPendingEffects = true
     return Runnable {
       ThreadUtils.assertMainThread()
@@ -216,7 +217,7 @@ internal class OptimizedContextualEffectHandler : EffectHandler {
     }
   }
 
-  private fun EffectContext.runLater(effects: Collection<Effect>): Runnable {
+  private fun EffectContext.runLater(effects: Collection<Attachable>): Runnable {
     hasPendingEffects = true
     return Runnable {
       ThreadUtils.assertMainThread()
@@ -230,7 +231,7 @@ internal class OptimizedContextualEffectHandler : EffectHandler {
     }
   }
 
-  private fun EffectContext.run(effects: Array<Effect?>, count: Int) {
+  private fun EffectContext.run(effects: Array<Attachable?>, count: Int) {
     for (index in 0 until count) {
       checkNotNull(effects[index]).runWithTracking(this, count)
     }
@@ -250,18 +251,18 @@ internal class OptimizedContextualEffectHandler : EffectHandler {
     effectOrder = null
   }
 
-  private fun EffectContext.run(effects: Collection<Effect>) {
+  private fun EffectContext.run(effects: Collection<Attachable>) {
     val expectedReadRecordCount = effects.size
     for (effect in effects) {
       effect.runWithTracking(this, expectedReadRecordCount)
     }
   }
 
-  private fun List<Effect>.deduplicateEffectOrder(
-      effectsById: MutableScatterMap<Any, Effect>,
-  ): List<Effect> {
+  private fun List<Attachable>.deduplicateEffectOrder(
+      effectsById: MutableScatterMap<Any, Attachable>,
+  ): List<Attachable> {
     val seenEffectIds = MutableScatterSet<Any>(effectsById.size)
-    val dedupedEffects = ArrayList<Effect>(effectsById.size)
+    val dedupedEffects = ArrayList<Attachable>(effectsById.size)
     for (effect in this) {
       val id = effect.uniqueId
       if (seenEffectIds.add(id)) {
@@ -271,13 +272,13 @@ internal class OptimizedContextualEffectHandler : EffectHandler {
     return dedupedEffects
   }
 
-  private fun cleanup(effects: Collection<Effect>) {
+  private fun cleanup(effects: Collection<Attachable>) {
     for (effect in effects) {
       effect.detach()
     }
   }
 
-  private fun cleanup(effectId: Any, effect: Effect) {
+  private fun cleanup(effectId: Any, effect: Attachable) {
     effect.detach()
     removeStateReadRecords(effectId)
   }
@@ -300,8 +301,8 @@ internal class OptimizedContextualEffectHandler : EffectHandler {
   }
 
   private fun allCurrentEffectsAreDirty(
-      currentEffectsInOrder: List<Effect>,
-      nextEffectsById: MutableScatterMap<Any, Effect>,
+      currentEffectsInOrder: List<Attachable>,
+      nextEffectsById: MutableScatterMap<Any, Attachable>,
       scopesToUpdate: ScatterSet<Any>,
   ): Boolean {
     for (effect in currentEffectsInOrder) {
@@ -315,7 +316,7 @@ internal class OptimizedContextualEffectHandler : EffectHandler {
     return true
   }
 
-  private fun Effect.runWithTracking(context: EffectContext, expectedReadRecordCount: Int) {
+  private fun Attachable.runWithTracking(context: EffectContext, expectedReadRecordCount: Int) {
     if (!context.isReadTrackingEnabled || useLegacyUpdateBehavior()) {
       attach()
       return

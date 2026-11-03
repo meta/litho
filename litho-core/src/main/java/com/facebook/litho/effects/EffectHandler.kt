@@ -25,7 +25,7 @@ import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.state.StateId
 
 /**
- * Manages the execution and update of [effects][Effect] within a [ComponentTree].
+ * Manages the execution and update of [effects][Attachable] within a [ComponentTree].
  *
  * For Spec Components, this will invoke [OnAttached] when a component is attached to the
  * [ComponentTree] and [OnDetached] when a component is detached from the tree.
@@ -36,31 +36,31 @@ import com.facebook.litho.state.StateId
 @UiThread
 interface EffectHandler {
 
-  val effects: Collection<Effect>?
+  val effects: Collection<Attachable>?
 
   /**
-   * Updates the set of [effects][Effect] within the associated [ComponentTree].
+   * Updates the set of [effects][Attachable] within the associated [ComponentTree].
    *
    * When this method is invoked, the existing list is diffed with the incoming [effects] to
    * determine the set of actions needed to advance to the new generation of [effects]. Note that
-   * identity is determined by [Effect.uniqueId].
+   * identity is determined by [Attachable.uniqueId].
    *
    * Effects to cleanup are determined by the following:
-   * - Any existing [Effect] that is no longer present will be cleaned up
-   * - Any [Effect] whose [Effect.shouldUpdate] returns `true` will be cleaned up
-   * - When state tracking is enabled, any [Effect] that reads an updated [State] will also be
+   * - Any existing [Attachable] that is no longer present will be cleaned up
+   * - Any [Attachable] whose [Attachable.shouldUpdate] returns `true` will be cleaned up
+   * - When state tracking is enabled, any [Attachable] that reads an updated [State] will also be
    *   cleaned up
    *
    * Effects to run are determined by the following:
    * - All new effects will be run
-   * - Any [Effect] present in the new generation, but was previously detached will be run
+   * - Any [Attachable] present in the new generation, but was previously detached will be run
    *
    * Note that the returned [Runnable] must be called on the main thread.
    *
    * @return a [Runnable] that runs the incoming effects. Implementations should ensure that the
    *   effects are only ran once, even if the runnable is invoked multiple times.
    */
-  fun EffectContext.updateEffects(effects: List<Effect>?): Runnable
+  fun EffectContext.updateEffects(effects: List<Attachable>?): Runnable
 
   /**
    * Whether any currently-attached effect recorded a read of any of [updatedState].
@@ -72,7 +72,7 @@ interface EffectHandler {
   fun hasReadsFor(updatedState: Set<StateId>): Boolean = false
 
   /**
-   * Removes all associated [Effect]s and any transient state.
+   * Removes all associated [Attachable]s and any transient state.
    *
    * The method is typically called when the owner of this handler is being released and needs to
    * cleanup.
@@ -86,7 +86,7 @@ interface EffectHandler {
 
 inline fun EffectHandler.updateAndRun(
     context: EffectContext,
-    newEffects: List<Effect>?,
+    newEffects: List<Attachable>?,
     onUpdate: () -> Unit,
 ) {
   var runnable: Runnable? = null
@@ -97,8 +97,6 @@ inline fun EffectHandler.updateAndRun(
     runnable?.run()
   }
 }
-
-typealias Effect = Attachable
 
 class EffectContext
 internal constructor(

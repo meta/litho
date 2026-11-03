@@ -19,6 +19,7 @@ package com.facebook.litho.effects
 import androidx.collection.MutableScatterSet
 import androidx.collection.emptyScatterSet
 import androidx.collection.mutableScatterSetOf
+import com.facebook.litho.Attachable
 import com.facebook.litho.ThreadUtils
 import com.facebook.litho.attribution
 import com.facebook.litho.state.StateId
@@ -28,15 +29,15 @@ import kotlin.collections.iterator
 
 internal class ContextualEffectHandler : EffectHandler {
 
-  private var _effects: MutableMap<Any, Effect>? = null
+  private var _effects: MutableMap<Any, Attachable>? = null
   private var hasPendingEffects = false
   private val stateReadRecords = mutableMapOf<StateId, MutableScatterSet<Any>>()
 
-  override val effects: Collection<Effect>?
+  override val effects: Collection<Attachable>?
     get() = _effects?.values
 
   /**
-   * Updates the set of associated [Effects][Effect].
+   * Updates the set of associated [Attachables][Attachable].
    *
    * Running of effects is deferred until [Runnable.run] is called. This is useful for cases where
    * some actions need to happen first. For example, a caller might need to apply state updates and
@@ -45,9 +46,9 @@ internal class ContextualEffectHandler : EffectHandler {
    * Note that all outgoing effects are always detached as necessary before exiting this function.
    *
    * @return the [Runnable] through which the incoming effects can be executed. This is a
-   *   [EffectHandler.EmptyRunnable] if there are no new effects to run.
+   *   [AttachableHandler.EmptyRunnable] if there are no new effects to run.
    */
-  override fun EffectContext.updateEffects(effects: List<Effect>?): Runnable {
+  override fun EffectContext.updateEffects(effects: List<Attachable>?): Runnable {
     ThreadUtils.assertMainThread()
     if (hasPendingEffects) {
       error("The previously deferred effects have not yet been ran")
@@ -57,10 +58,10 @@ internal class ContextualEffectHandler : EffectHandler {
     }
 
     val currentEffects = _effects
-    val newEffects = effects?.associateByTo(linkedMapOf<Any, Effect>()) { it.uniqueId }
+    val newEffects = effects?.associateByTo(linkedMapOf<Any, Attachable>()) { it.uniqueId }
 
-    val toCleanup: Map<Any, Effect>?
-    val toRun: Map<Any, Effect>?
+    val toCleanup: Map<Any, Attachable>?
+    val toRun: Map<Any, Attachable>?
     if (newEffects.isNullOrEmpty()) {
       // 1. if there is nothing to run, then we must cleanup all current effects
       toCleanup = currentEffects
@@ -134,11 +135,11 @@ internal class ContextualEffectHandler : EffectHandler {
     _effects = null
   }
 
-  private fun EffectContext.run(effects: Map<Any, Effect>) {
+  private fun EffectContext.run(effects: Map<Any, Attachable>) {
     effects.forEach { (_, effect) -> effect.runWithTracking(this) }
   }
 
-  private fun cleanup(effects: Map<Any, Effect>) {
+  private fun cleanup(effects: Map<Any, Attachable>) {
     effects.forEach { (_, effect) -> effect.detach() }
   }
 
@@ -147,7 +148,7 @@ internal class ContextualEffectHandler : EffectHandler {
    * effects are removed; records for retained effects are preserved so that future state updates
    * can still trigger them.
    */
-  private fun removeStateReadRecords(effects: Map<Any, Effect>) {
+  private fun removeStateReadRecords(effects: Map<Any, Attachable>) {
     val effectIds = effects.keys
     val iterator = stateReadRecords.iterator()
     while (iterator.hasNext()) {
@@ -159,7 +160,7 @@ internal class ContextualEffectHandler : EffectHandler {
     }
   }
 
-  private fun Effect.runWithTracking(context: EffectContext) {
+  private fun Attachable.runWithTracking(context: EffectContext) {
     val stateReads =
         if (context.isReadTrackingEnabled) {
           StateReadRecorder.record(context.treeId, attribution()) { attach() }
