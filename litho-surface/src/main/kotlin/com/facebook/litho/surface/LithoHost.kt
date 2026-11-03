@@ -91,13 +91,34 @@ internal constructor(
 
   /**
    * Sets the root component, building the tree if the host has none and replacing the root
-   * otherwise. The host keeps [content] to rebuild the tree if the Fragment's Context changes.
-   * After the host's owner is destroyed this does nothing, so content that arrives late, as from a
-   * network callback, is dropped. A Fragment that was only removed keeps the content for when it is
-   * added again.
+   * otherwise. A replaced root is laid out in the background, as `LithoView.setComponentAsync`
+   * does; [setContentSync] lays it out before returning. The host keeps [content] to rebuild the
+   * tree if the Fragment's Context changes. After the host's owner is destroyed this does nothing,
+   * so content that arrives late, as from a network callback, is dropped. A Fragment that was only
+   * removed keeps the content for when it is added again.
    */
   @MainThread
   fun setContent(content: () -> Component) {
+    applyContent(content, sync = false)
+  }
+
+  /** Same as [setContent]: a replaced root is laid out in the background. */
+  @MainThread
+  fun setContentAsync(content: () -> Component) {
+    setContent(content)
+  }
+
+  /**
+   * Like [setContent], but a root that replaces the root of a measured tree is laid out on the
+   * calling thread before this returns, as `LithoView.setComponent` does. Before the tree's first
+   * measure, the root is laid out at that measure.
+   */
+  @MainThread
+  fun setContentSync(content: () -> Component) {
+    applyContent(content, sync = true)
+  }
+
+  private fun applyContent(content: () -> Component, sync: Boolean) {
     ThreadUtils.assertMainThread()
     observeOwner()
     if (destroyed) {
@@ -112,7 +133,7 @@ internal constructor(
     val root = content()
     when (val tree = componentTree) {
       null -> showTree(buildTree(context, root))
-      else -> tree.setRootAsync(root)
+      else -> if (sync) tree.setRoot(root) else tree.setRootAsync(root)
     }
   }
 
@@ -120,8 +141,8 @@ internal constructor(
    * Returns the [LithoView] showing this host's tree for the current view lifecycle, the same one
    * for every call within it. Before the first [setContent] the view has no tree and shows nothing.
    * The first [setContent] gives it one, and the view lays out that content at its next measure, as
-   * `LithoView.setComponentAsync` does for a view without a tree. Later content is laid out in the
-   * background.
+   * `LithoView.setComponentAsync` does for a view without a tree. Later content is laid out as
+   * [setContent] and [setContentSync] describe.
    */
   @MainThread
   fun getLithoView(): LithoView {

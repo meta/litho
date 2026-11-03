@@ -298,7 +298,7 @@ class LithoHostTest {
   }
 
   @Test
-  fun `a later setContent replaces the root of a shown tree`() {
+  fun `a later setContent replaces the root of a shown tree in the background`() {
     val controller = launch<ComponentActivity>()
     val host by controller.get().lithoHost()
     host.setContent { Screen("first") }
@@ -306,8 +306,49 @@ class LithoHostTest {
     assertThat(RENDERED).containsKey("first")
 
     host.setContent { Screen("second") }
+    assertThat(RENDERED).doesNotContainKey("second")
     backgroundLayoutLooper.runToEndOfTasksSync()
 
+    assertThat(RENDERED).containsKey("second")
+  }
+
+  @Test
+  fun `setContentAsync replaces the root of a shown tree in the background`() {
+    val controller = launch<ComponentActivity>()
+    val host by controller.get().lithoHost()
+    host.setContent { Screen("first") }
+    render(host.getLithoView())
+
+    host.setContentAsync { Screen("second") }
+    assertThat(RENDERED).doesNotContainKey("second")
+    backgroundLayoutLooper.runToEndOfTasksSync()
+
+    assertThat(RENDERED).containsKey("second")
+  }
+
+  @Test
+  fun `setContentSync lays out a shown tree's new root right away`() {
+    val controller = launch<ComponentActivity>()
+    val host by controller.get().lithoHost()
+    host.setContent { Screen("first") }
+    render(host.getLithoView())
+
+    host.setContentSync { Screen("second") }
+
+    assertThat(RENDERED).containsKey("second")
+  }
+
+  @Test
+  fun `setContentSync before the first measure lays out at that measure`() {
+    val controller = launch<ComponentActivity>()
+    val host by controller.get().lithoHost()
+    host.setContent { Screen("first") }
+    val view = host.getLithoView()
+
+    host.setContentSync { Screen("second") }
+    assertThat(RENDERED).doesNotContainKey("second")
+
+    render(view)
     assertThat(RENDERED).containsKey("second")
   }
 
