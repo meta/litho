@@ -64,8 +64,6 @@ import com.facebook.yoga.YogaNodeType
 import com.facebook.yoga.YogaUnit
 import com.facebook.yoga.YogaValue
 
-typealias YogaEdgeIntFunction = ((YogaEdge, Int) -> Unit)
-
 typealias YogaEdgeFloatFunction = ((YogaEdge, Float) -> Unit)
 
 /** Layout function for LithoNodes that lay out their children via Flexbox. */

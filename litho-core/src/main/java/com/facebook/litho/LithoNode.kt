@@ -1186,7 +1186,7 @@ open class LithoNode : Node<LithoLayoutContext>, Cloneable {
     }
 
     internal inline fun LithoNode.applyDeferredPadding(
-        paddingPx: YogaEdgeIntFunction,
+        paddingPx: (YogaEdge, Int) -> Unit,
         paddingPercent: YogaEdgeFloatFunction,
     ) {
       paddingsFromDeferredNode?.let { edges ->
