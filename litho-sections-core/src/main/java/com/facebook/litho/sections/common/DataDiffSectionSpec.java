@@ -132,7 +132,7 @@ public class DataDiffSectionSpec<T> {
 
     final List<? extends T> previousData = data.getPrevious();
     final List<? extends T> nextData = data.getNext();
-    final ComponentRenderer componentRenderer =
+    final ComponentRenderer<T> componentRenderer =
         // NULLSAFE_FIXME[Parameter Not Nullable]
         new ComponentRenderer<T>(DataDiffSection.<T>getRenderEventHandler(c), c);
     final DiffSectionOperationExecutor operationExecutor =
@@ -349,7 +349,7 @@ public class DataDiffSectionSpec<T> {
 
     private static List<Object> extractPrevData(List<Diff<?>> dataHolders) {
       final List<Object> data = new ArrayList<>(dataHolders.size());
-      for (Diff diff : dataHolders) {
+      for (Diff<?> diff : dataHolders) {
         data.add(diff.getPrevious());
       }
       return data;
@@ -357,7 +357,7 @@ public class DataDiffSectionSpec<T> {
 
     private static List<Object> extractNextData(List<Diff<?>> dataHolders) {
       final List<Object> data = new ArrayList<>(dataHolders.size());
-      for (Diff diff : dataHolders) {
+      for (Diff<?> diff : dataHolders) {
         data.add(diff.getNext());
       }
       return data;
@@ -365,7 +365,7 @@ public class DataDiffSectionSpec<T> {
   }
 
   private static class ComponentRenderer<T>
-      implements RecyclerBinderUpdateCallback.ComponentRenderer {
+      implements RecyclerBinderUpdateCallback.ComponentRenderer<T> {
 
     private final EventHandler<RenderEvent<T>> mRenderEventEventHandler;
     private final SectionContext mSectionContext;
@@ -407,10 +407,10 @@ public class DataDiffSectionSpec<T> {
     @Nullable private final EventHandler<OnCheckIsSameItemEvent<T>> mIsSameItemEventHandler;
     @Nullable private final EventHandler<OnCheckIsSameContentEvent<T>> mIsSameContentEventHandler;
 
-    private final ThreadLocal<OnCheckIsSameItemEvent> mIsSameItemEventStates;
-    private final OnCheckIsSameItemEvent mIsSameItemEventSingleton;
+    private final ThreadLocal<OnCheckIsSameItemEvent<T>> mIsSameItemEventStates;
+    private final OnCheckIsSameItemEvent<T> mIsSameItemEventSingleton;
     private final AtomicBoolean mIsSameItemEventSingletonUsed;
-    private static final OnCheckIsSameItemEvent sDummy = new OnCheckIsSameItemEvent();
+    private static final OnCheckIsSameItemEvent<?> sDummy = new OnCheckIsSameItemEvent<>();
 
     Callback(
         SectionContext sectionContext,
@@ -425,16 +425,17 @@ public class DataDiffSectionSpec<T> {
       mNextData = nextData;
 
       mIsSameItemEventStates =
-          new ThreadLocal<OnCheckIsSameItemEvent>() {
+          new ThreadLocal<OnCheckIsSameItemEvent<T>>() {
+            @SuppressWarnings("unchecked") // sentinel capture-to-T (reference-compared)
             @Override
-            protected OnCheckIsSameItemEvent initialValue() {
-              OnCheckIsSameItemEvent event = new OnCheckIsSameItemEvent();
-              event.previousItem = sDummy.previousItem;
-              event.nextItem = sDummy.nextItem;
+            protected OnCheckIsSameItemEvent<T> initialValue() {
+              OnCheckIsSameItemEvent<T> event = new OnCheckIsSameItemEvent<>();
+              event.previousItem = (T) sDummy.previousItem;
+              event.nextItem = (T) sDummy.nextItem;
               return event;
             }
           };
-      mIsSameItemEventSingleton = new OnCheckIsSameItemEvent();
+      mIsSameItemEventSingleton = new OnCheckIsSameItemEvent<>();
       mIsSameItemEventSingletonUsed = new AtomicBoolean(false);
     }
 
@@ -459,6 +460,7 @@ public class DataDiffSectionSpec<T> {
       return areItemsTheSame(previous, next);
     }
 
+    @SuppressWarnings("unchecked") // sentinel capture-to-T (reference-compared)
     private boolean areItemsTheSame(T previous, T next) {
       if (previous == next) {
         return true;
@@ -468,7 +470,7 @@ public class DataDiffSectionSpec<T> {
         HasEventDispatcher hasEventDispatcher =
             mIsSameItemEventHandler.dispatchInfo.hasEventDispatcher;
         boolean owned = mIsSameItemEventSingletonUsed.compareAndSet(false, true);
-        OnCheckIsSameItemEvent isSameItemEventState;
+        OnCheckIsSameItemEvent<T> isSameItemEventState;
         if (owned) {
           isSameItemEventState = mIsSameItemEventSingleton;
         } else {
@@ -488,8 +490,8 @@ public class DataDiffSectionSpec<T> {
               return (Boolean) result;
             }
           } finally {
-            isSameItemEventState.previousItem = sDummy.previousItem;
-            isSameItemEventState.nextItem = sDummy.nextItem;
+            isSameItemEventState.previousItem = (T) sDummy.previousItem;
+            isSameItemEventState.nextItem = (T) sDummy.nextItem;
             if (owned) {
               mIsSameItemEventSingletonUsed.set(false);
             }

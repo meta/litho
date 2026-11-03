@@ -56,16 +56,20 @@ public class HideableDataDiffSectionSpec<T> {
 
   @OnCreateInitialState
   public static <T> void onCreateInitialState(
-      SectionContext c, StateValue<HashSet> blacklistState) {
-    blacklistState.set(new HashSet());
+      SectionContext c, StateValue<HashSet<Object>> blacklistState) {
+    blacklistState.set(new HashSet<>());
   }
 
   @OnUpdateState
   public static void onBlacklistUpdate(
-      StateValue<HashSet> blacklistState,
+      StateValue<HashSet<Object>> blacklistState,
       @Param Object modelObject,
       @Param EventHandler<GetUniqueIdentifierEvent> getUniqueIdentifierHandlerParam) {
-    HashSet<Object> newSet = new HashSet<>(blacklistState.get());
+    HashSet<Object> newSet = new HashSet<>();
+    final HashSet<Object> currentBlacklist = blacklistState.get();
+    if (currentBlacklist != null) {
+      newSet.addAll(currentBlacklist);
+    }
     newSet.add(
         HideableDataDiffSection.dispatchGetUniqueIdentifierEvent(
             getUniqueIdentifierHandlerParam, modelObject));
@@ -75,7 +79,7 @@ public class HideableDataDiffSectionSpec<T> {
   @OnCreateChildren
   protected static <T> Children onCreateChildren(
       SectionContext c,
-      @State HashSet blacklistState,
+      @State HashSet<Object> blacklistState,
       @Prop List<T> data,
       @Prop EventHandler<GetUniqueIdentifierEvent> getUniqueIdentifierHandler,
       @Prop(optional = true) EventHandler<OnCheckIsSameItemEvent<T>> onSameItemEventHandler,
@@ -93,7 +97,7 @@ public class HideableDataDiffSectionSpec<T> {
   private static <T> List<T> removeBlacklistedItems(
       SectionContext c,
       List<T> data,
-      HashSet blacklist,
+      HashSet<Object> blacklist,
       EventHandler<GetUniqueIdentifierEvent> getItemUniqueIdentifierHandler) {
     ArrayList<T> builder = new ArrayList<>();
     final int size = data.size();
