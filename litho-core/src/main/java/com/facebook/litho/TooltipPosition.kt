@@ -16,7 +16,7 @@
 
 package com.facebook.litho
 
-/** Specify a position to anchor a [DeprecatedLithoTooltip] on a component. */
+/** Specify a position to anchor a tooltip on a component. */
 enum class TooltipPosition {
   CENTER,
   BOTTOM_LEFT,
