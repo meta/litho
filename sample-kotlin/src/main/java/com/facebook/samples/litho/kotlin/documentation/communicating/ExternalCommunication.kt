@@ -55,7 +55,7 @@ class CartBadge(private val cartListener: CartUpdateListener) : KComponent() {
 // end_component_with_listener
 
 // start_component_event_observer
-interface AnalyticsService {
+fun interface AnalyticsService {
   fun trackPurchaseClicked(productId: String, price: Double)
 }
 
