@@ -21,7 +21,7 @@ package com.facebook.litho.intellij.extensions
  *
  * @see "plugin.xml"
  */
-interface EventLogger {
+fun interface EventLogger {
 
   /**
    * Logs given event.
