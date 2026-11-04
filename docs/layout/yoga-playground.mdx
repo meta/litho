@@ -44,8 +44,8 @@ The following table shows vertically stacked items for Android Views and Litho w
 </td><td>
 
 ```kotlin
-import com.facebook.litho.Column
 import com.facebook.litho.kotlin.widget.Text
+import com.facebook.litho.layout.flexbox.Column
 
 Column {
   child(Text(text = "Text 1"))
@@ -88,10 +88,12 @@ To achieve an effect similar to a `LinearLayout` with weights, Flexbox provides 
 </td><td>
 
 ```kotlin
-import com.facebook.litho.Row
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import com.facebook.litho.Style
 import com.facebook.litho.flexbox.flex
-import com.facebook.litho.widget.Image
+import com.facebook.litho.kotlin.widget.Image
+import com.facebook.litho.layout.flexbox.Row
 
 Row {
   child(Image(style = Style.flex(grow = 1f), drawable = ColorDrawable(Color.RED)))
@@ -131,12 +133,14 @@ To overlay one view on top of another, similar to a `FrameLayout`, Flexbox can a
 </td><td>
 
 ```kotlin
-import com.facebook.litho.Column
 import com.facebook.litho.Style
 import com.facebook.litho.core.height
 import com.facebook.litho.core.width
+import com.facebook.litho.flexbox.positionType
+import com.facebook.litho.kotlin.widget.Image
 import com.facebook.litho.kotlin.widget.Text
-import com.facebook.litho.widget.Image
+import com.facebook.litho.layout.flexbox.Column
+import com.facebook.rendercore.dp
 import com.facebook.rendercore.drawableRes
 import com.facebook.yoga.YogaPositionType
 
