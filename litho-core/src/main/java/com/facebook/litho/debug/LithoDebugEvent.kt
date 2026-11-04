@@ -117,12 +117,6 @@ object LithoDebugEventAttributes {
    * layout-phase events ([LithoDebugEvent.ComponentTreeLayout],
    * [LithoDebugEvent.AsyncLayoutDropped]) and mount events.
    */
-  /**
-   * @deprecated Use [ResolveVersion] or [LayoutVersion] instead. This key was emitted with mixed
-   *   semantics — resolve-phase events used the resolve counter while layout-phase events used the
-   *   layout counter, making cross-phase correlation unreliable.
-   */
-  @Deprecated("Use ResolveVersion or LayoutVersion instead", level = DeprecationLevel.WARNING)
   const val LayoutVersion = "layout_version"
   const val Reason = "reason"
   const val InitialResolve = "initial_resolve"
