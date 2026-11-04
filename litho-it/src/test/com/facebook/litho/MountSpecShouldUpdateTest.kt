@@ -20,26 +20,31 @@ package com.facebook.litho
 // MountSpecLithoRenderUnit.shouldUpdateMountItem which only applies to legacy MountSpec components.
 // Primitive components use a different code path (PrimitiveLithoRenderUnit).
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import android.text.Layout
 import com.facebook.litho.MountSpecLithoRenderUnit.Companion.STATE_DIRTY
 import com.facebook.litho.MountSpecLithoRenderUnit.Companion.STATE_UNKNOWN
 import com.facebook.litho.MountSpecLithoRenderUnit.Companion.STATE_UPDATED
+import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.testing.LithoTestRule
 import com.facebook.litho.testing.TestDrawableComponent
+import com.facebook.litho.testing.TestLithoView
 import com.facebook.litho.testing.exactly
 import com.facebook.litho.testing.testrunner.LithoTestRunner
+import com.facebook.litho.widget.TextAlignment
+import com.facebook.litho.widget.TextComponent
+import com.facebook.litho.widget.TextDrawable
+import com.facebook.yoga.YogaDirection
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Tests for [MountSpecLithoRenderUnit.shouldUpdateMountItem] verifying no behavior change after
- * removing the chain-continuity check (previousLayoutStateId == currentLayoutStateId) and its
- * associated IDs from LithoLayoutData.
- *
- * These tests use render units from DIFFERENT layout passes (mounted vs new) to verify real mount
- * scenarios. They confirm the same results as the old code: STATE_DIRTY forces update,
- * STATE_UPDATED skips, STATE_UNKNOWN falls through to shouldComponentUpdate.
+ * Tests for [MountSpecLithoRenderUnit.shouldUpdateMountItem] with render units from different
+ * layout passes (mounted vs new). A unit is skipped when its content version equals the mounted
+ * unit's; otherwise STATE_DIRTY forces an update, and everything else is compared with the mounted
+ * unit. The mount-level tests commit layouts while the view is detached, so they never mount.
  */
 @RunWith(LithoTestRunner::class)
 class MountSpecShouldUpdateTest {
@@ -98,14 +103,7 @@ class MountSpecShouldUpdateTest {
     findRenderUnitWithState(secondLayoutState, STATE_DIRTY)
   }
 
-  /**
-   * STATE_UPDATED skips update when the component hasn't changed across layout passes.
-   *
-   * This validates the chain check removal: STATE_UPDATED is only set when the component is
-   * genuinely unchanged from the diff baseline. Due to state accumulation, if any intermediate
-   * layout changed this component, this layout would also see the change and set STATE_DIRTY
-   * instead. So STATE_UPDATED always means "safe to skip."
-   */
+  /** A unit equal to the mounted one keeps its content version, so the update is skipped. */
   @Test
   fun stateUpdated_skipsUpdate_acrossLayoutPasses() {
     // Layout pass 1: RED component (isPureRender so shouldComponentUpdate compares props)
@@ -135,13 +133,8 @@ class MountSpecShouldUpdateTest {
   }
 
   /**
-   * STATE_UPDATED skips update even across THREE layout passes, simulating the concurrent layout
-   * scenario where an intermediate layout was mounted.
-   *
-   * Pass 1 (baseline N) → Pass 2 (same props, mounted as intermediate A) → Pass 3 (same props).
-   * Pass 3 is reduced against Pass 2, but we mount with Pass 1's render unit as "current." Without
-   * the chain check, STATE_UPDATED still correctly skips because the component is genuinely
-   * unchanged across all passes.
+   * Pass 1 (mounted) → Pass 2 (same props, never mounted) → Pass 3 (same props). Pass 3 keeps Pass
+   * 1's content version through Pass 2, so the update is skipped without comparing props.
    */
   @Test
   fun stateUpdated_skipsUpdate_withIntermediateLayout() {
@@ -172,6 +165,7 @@ class MountSpecShouldUpdateTest {
 
     // Simulate: pass 1 is mounted, pass 3 is the new layout (pass 2 was intermediate)
     assertThat(pass1Unit).isNotSameAs(pass3Unit)
+    assertThat(pass3Unit.contentVersion).isEqualTo(pass1Unit.contentVersion)
     val result =
         MountSpecLithoRenderUnit.shouldUpdateMountItem(pass1Unit, pass3Unit, pass1Data, pass3Data)
     assertThat(result).isFalse()
@@ -213,6 +207,134 @@ class MountSpecShouldUpdateTest {
         MountSpecLithoRenderUnit.shouldUpdateMountItem(pass1Unit, pass3Unit, pass1Data, pass3Data)
     assertThat(result).isTrue()
   }
+
+  /**
+   * Pass 1 (RED, mounted) → Pass 2 (BLUE, never mounted) → Pass 3 (BLUE). Pass 3 is STATE_UPDATED
+   * against Pass 2, but the mounted content is still Pass 1's RED, so it must update.
+   */
+  @Test
+  fun stateUpdated_forcesUpdate_whenDiffedLayoutWasNotMounted() {
+    val testLithoView =
+        lithoTestRule.render(widthSpec = exactly(10), heightSpec = exactly(10)) {
+          drawable(Color.RED)
+        }
+    val pass1State = testLithoView.componentTree.mainThreadLayoutState!!
+    val (pass1Unit, pass1Data) = findRenderUnitWithState(pass1State, STATE_UNKNOWN)
+
+    testLithoView.setRoot(drawable(Color.BLUE))
+    testLithoView.setRoot(drawable(Color.BLUE))
+    val pass3State = testLithoView.componentTree.mainThreadLayoutState!!
+    val (pass3Unit, pass3Data) = findRenderUnitWithState(pass3State, STATE_UPDATED)
+
+    val result =
+        MountSpecLithoRenderUnit.shouldUpdateMountItem(pass1Unit, pass3Unit, pass1Data, pass3Data)
+    assertThat(result).isTrue()
+  }
+
+  /** RED is mounted, BLUE is committed twice while detached, then the view is attached again. */
+  @Test
+  fun mountedColor_followsLatestLayout_whenDiffedLayoutWasNotMounted() {
+    val testLithoView =
+        lithoTestRule.render(widthSpec = exactly(10), heightSpec = exactly(10)) {
+          drawable(Color.RED)
+        }
+    assertThat(mountedColor(testLithoView)).isEqualTo(Color.RED)
+
+    testLithoView.detachFromWindow()
+    testLithoView.componentTree.setRootAndSizeSpecSync(
+        drawable(Color.BLUE),
+        exactly(10),
+        exactly(10),
+    )
+    testLithoView.componentTree.setRootAndSizeSpecSync(
+        drawable(Color.BLUE),
+        exactly(10),
+        exactly(10),
+    )
+    val committed = checkNotNull(testLithoView.committedLayoutState)
+    findRenderUnitWithState(committed, STATE_UPDATED)
+
+    testLithoView.attachToWindow().measure().layout()
+    assertThat(mountedColor(testLithoView)).isEqualTo(Color.BLUE)
+  }
+
+  /**
+   * LTR text is mounted, RTL is committed twice while detached, then the view is attached again.
+   * The props never change, so only the layout direction tells the two apart.
+   */
+  @Test
+  fun mountedText_followsLayoutDirection_whenDiffedLayoutWasNotMounted() {
+    val ltrAlignment = expectedTextAlignment(rtl = false)
+    val rtlAlignment = expectedTextAlignment(rtl = true)
+    assertThat(rtlAlignment).isNotEqualTo(ltrAlignment)
+
+    val testLithoView =
+        lithoTestRule.render(widthSpec = exactly(300), heightSpec = exactly(300)) {
+          text(rtl = false)
+        }
+    assertThat(mountedTextAlignment(testLithoView)).isEqualTo(ltrAlignment)
+
+    testLithoView.detachFromWindow()
+    testLithoView.componentTree.setRootAndSizeSpecSync(text(rtl = true), exactly(300), exactly(300))
+    testLithoView.componentTree.setRootAndSizeSpecSync(text(rtl = true), exactly(300), exactly(300))
+    testLithoView.attachToWindow().measure().layout()
+
+    assertThat(mountedTextAlignment(testLithoView)).isEqualTo(rtlAlignment)
+  }
+
+  /**
+   * With [ComponentsConfiguration.useMountSpecContentVersion] off, mount trusts STATE_UPDATED
+   * again: Pass 3 is skipped against Pass 1's RED although Pass 2 (BLUE) never mounted.
+   */
+  @Test
+  fun stateUpdated_skipsUpdate_whenDiffedLayoutWasNotMounted_withContentVersionOff() {
+    val useMountSpecContentVersion = ComponentsConfiguration.useMountSpecContentVersion
+    ComponentsConfiguration.useMountSpecContentVersion = false
+    try {
+      val testLithoView =
+          lithoTestRule.render(widthSpec = exactly(10), heightSpec = exactly(10)) {
+            drawable(Color.RED)
+          }
+      val pass1State = testLithoView.componentTree.mainThreadLayoutState!!
+      val (pass1Unit, pass1Data) = findRenderUnitWithState(pass1State, STATE_UNKNOWN)
+
+      testLithoView.setRoot(drawable(Color.BLUE))
+      testLithoView.setRoot(drawable(Color.BLUE))
+      val pass3State = testLithoView.componentTree.mainThreadLayoutState!!
+      val (pass3Unit, pass3Data) = findRenderUnitWithState(pass3State, STATE_UPDATED)
+
+      val result =
+          MountSpecLithoRenderUnit.shouldUpdateMountItem(pass1Unit, pass3Unit, pass1Data, pass3Data)
+      assertThat(result).isFalse()
+    } finally {
+      ComponentsConfiguration.useMountSpecContentVersion = useMountSpecContentVersion
+    }
+  }
+
+  private fun drawable(color: Int): Component =
+      TestDrawableComponent.create(lithoTestRule.context, true, false, false).color(color).build()
+
+  private fun text(rtl: Boolean): Component =
+      Column.create(lithoTestRule.context)
+          .layoutDirection(if (rtl) YogaDirection.RTL else YogaDirection.LTR)
+          .child(
+              TextComponent.create(lithoTestRule.context)
+                  .text("abc")
+                  .alignment(TextAlignment.LAYOUT_START)
+                  .widthPx(200)
+                  .heightPx(50),
+          )
+          .build()
+
+  private fun mountedColor(testLithoView: TestLithoView): Int =
+      testLithoView.lithoView.drawables.filterIsInstance<ColorDrawable>().single().color
+
+  private fun mountedTextAlignment(testLithoView: TestLithoView): Layout.Alignment? =
+      testLithoView.lithoView.drawables.filterIsInstance<TextDrawable>().single().layout?.alignment
+
+  private fun expectedTextAlignment(rtl: Boolean): Layout.Alignment? = mountedTextAlignment(
+      lithoTestRule.render(widthSpec = exactly(300), heightSpec = exactly(300)) { text(rtl) },
+  )
 
   private fun findRenderUnitWithState(
       layoutState: LayoutState,

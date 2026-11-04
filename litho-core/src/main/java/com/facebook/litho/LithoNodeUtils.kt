@@ -39,11 +39,17 @@ import com.facebook.rendercore.transitions.TransitionUtils
 
 object LithoNodeUtils {
 
-  /** Creates a [LithoRenderUnit] for the content output iff the result mounts content. */
+  /**
+   * Creates a [LithoRenderUnit] for the content output iff the result mounts content. Its content
+   * version is its diff base's when layout found the two equal, else [layoutStateId]. A result
+   * copied from the layout cache ([isCachedLayout]) was never compared with its diff base.
+   */
   @JvmStatic
   fun createContentRenderUnit(
       node: LithoNode,
       areCachedMeasuresValid: Boolean,
+      layoutStateId: Int,
+      isCachedLayout: Boolean,
       diffNode: DiffNode? = null,
   ): LithoRenderUnit? {
     val component: Component = node.tailComponent
@@ -74,6 +80,16 @@ object LithoNodeUtils {
       node.customViewBindersForMountSpec?.let { additionalBinders.putAll(it) }
     }
 
+    @UpdateState
+    val updateState =
+        if (previousId != id) {
+          MountSpecLithoRenderUnit.STATE_UNKNOWN
+        } else if (areCachedMeasuresValid) {
+          MountSpecLithoRenderUnit.STATE_UPDATED
+        } else {
+          MountSpecLithoRenderUnit.STATE_DIRTY
+        }
+    val diffBase = diffNode?.contentOutput as? MountSpecLithoRenderUnit
     return createRenderUnit(
         id = id,
         component = component,
@@ -81,13 +97,16 @@ object LithoNodeUtils {
         context = context,
         node = node,
         importantForAccessibility = node.importantForAccessibility,
-        updateState =
-            if (previousId != id) {
-              MountSpecLithoRenderUnit.STATE_UNKNOWN
-            } else if (areCachedMeasuresValid) {
-              MountSpecLithoRenderUnit.STATE_UPDATED
+        updateState = updateState,
+        contentVersion =
+            if (
+                updateState == MountSpecLithoRenderUnit.STATE_UPDATED &&
+                    !isCachedLayout &&
+                    diffBase != null
+            ) {
+              diffBase.contentVersion
             } else {
-              MountSpecLithoRenderUnit.STATE_DIRTY
+              layoutStateId
             },
         duplicateParentState = node.isDuplicateParentStateEnabled,
         hasHostView = node.needsHostView(),
@@ -110,7 +129,7 @@ object LithoNodeUtils {
 
   /** Creates a [LithoRenderUnit] for the host output iff the result needs a host view. */
   @JvmStatic
-  fun createHostRenderUnit(node: LithoNode): LithoRenderUnit? {
+  fun createHostRenderUnit(node: LithoNode, layoutStateId: Int): LithoRenderUnit? {
     if (!node.needsHostView()) {
       return null
     }
@@ -144,6 +163,7 @@ object LithoNodeUtils {
         node = node,
         importantForAccessibility = node.importantForAccessibility,
         updateState = MountSpecLithoRenderUnit.STATE_UNKNOWN,
+        contentVersion = layoutStateId,
         duplicateParentState = node.isHostDuplicateParentStateEnabled,
         duplicateChildrenStates = node.isDuplicateChildrenStatesEnabled,
         isMountViewSpec = true,
@@ -161,7 +181,7 @@ object LithoNodeUtils {
 
   /** Creates a [LithoRenderUnit] for the root host */
   @JvmStatic
-  fun createRootHostRenderUnit(node: LithoNode): LithoRenderUnit {
+  fun createRootHostRenderUnit(node: LithoNode, layoutStateId: Int): LithoRenderUnit {
     val context = node.tailComponentContext
     val hostComponent: HostComponent = HostComponent.create(context)
 
@@ -190,6 +210,7 @@ object LithoNodeUtils {
         importantForAccessibility = node.importantForAccessibility,
         updateState =
             MountSpecLithoRenderUnit.STATE_DIRTY, // set as dirty to skip shouldComponentUpdate()
+        contentVersion = layoutStateId,
         duplicateParentState = node.isHostDuplicateParentStateEnabled,
         duplicateChildrenStates = node.isDuplicateChildrenStatesEnabled,
         isMountViewSpec = true,
@@ -212,9 +233,17 @@ object LithoNodeUtils {
       border: BorderColorDrawable,
       width: Int,
       height: Int,
+      layoutStateId: Int,
       diffNode: DiffNode? = null,
-  ): LithoRenderUnit =
-      createDrawableRenderUnit(node, border, width, height, OutputUnitType.BORDER, diffNode)
+  ): LithoRenderUnit = createDrawableRenderUnit(
+      node,
+      border,
+      width,
+      height,
+      OutputUnitType.BORDER,
+      layoutStateId,
+      diffNode,
+  )
 
   /**
    * Common method to create the [LithoRenderUnit] for backgrounds, foregrounds, and border. The
@@ -228,6 +257,7 @@ object LithoNodeUtils {
       width: Int,
       height: Int,
       @OutputUnitType outputType: Int,
+      layoutStateId: Int,
       diffNode: DiffNode? = null,
   ): LithoRenderUnit {
     val component: DrawableComponent = DrawableComponent.create(drawable, width, height)
@@ -259,6 +289,18 @@ object LithoNodeUtils {
     val previousId: Long = recycle?.id ?: -1
     val id: Long = context.calculateLayoutOutputId(componentKey, outputType)
 
+    @UpdateState
+    val updateState =
+        if (previousId != id) {
+          MountSpecLithoRenderUnit.STATE_UNKNOWN
+        } else if (isCachedOutputUpdated) {
+          MountSpecLithoRenderUnit.STATE_UPDATED
+        } else {
+          MountSpecLithoRenderUnit.STATE_DIRTY
+        }
+    // updateState comes from comparing with recycle itself, so a border found equal keeps recycle's
+    // version.
+    val diffBase = recycle as? MountSpecLithoRenderUnit
     return createRenderUnit(
         id = id,
         component = component,
@@ -266,13 +308,12 @@ object LithoNodeUtils {
         context = context,
         node = node,
         importantForAccessibility = ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_NO,
-        updateState =
-            if (previousId != id) {
-              MountSpecLithoRenderUnit.STATE_UNKNOWN
-            } else if (isCachedOutputUpdated) {
-              MountSpecLithoRenderUnit.STATE_UPDATED
+        updateState = updateState,
+        contentVersion =
+            if (updateState == MountSpecLithoRenderUnit.STATE_UPDATED && diffBase != null) {
+              diffBase.contentVersion
             } else {
-              MountSpecLithoRenderUnit.STATE_DIRTY
+              layoutStateId
             },
         duplicateParentState = node.isDuplicateParentStateEnabled,
         hasHostView = node.needsHostView(),
@@ -291,6 +332,7 @@ object LithoNodeUtils {
       node: LithoNode,
       importantForAccessibility: Int,
       @UpdateState updateState: Int,
+      contentVersion: Int,
       duplicateParentState: Boolean = false,
       duplicateChildrenStates: Boolean = false,
       hasHostView: Boolean = false,
@@ -363,6 +405,7 @@ object LithoNodeUtils {
             flags,
             importantForAccessibility,
             updateState,
+            contentVersion,
             debugKey,
         )
 

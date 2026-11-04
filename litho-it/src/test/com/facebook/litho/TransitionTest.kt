@@ -145,6 +145,7 @@ class TransitionTest {
             0,
             0,
             MountSpecLithoRenderUnit.STATE_UNKNOWN,
+            0,
             null,
         )
     whenever(layoutState.getMountableOutputAt(0))

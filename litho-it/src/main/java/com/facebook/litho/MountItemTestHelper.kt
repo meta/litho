@@ -42,6 +42,7 @@ object MountItemTestHelper {
             flags,
             importantForAccessibility,
             STATE_UNKNOWN,
+            0,
             null,
         )
     val width = bounds?.width() ?: 0

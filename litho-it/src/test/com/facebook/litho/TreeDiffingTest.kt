@@ -669,6 +669,7 @@ class TreeDiffingTest {
             0,
             0,
             MountSpecLithoRenderUnit.STATE_UNKNOWN,
+            0,
             null,
         )
     return create(

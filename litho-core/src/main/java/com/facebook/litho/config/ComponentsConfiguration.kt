@@ -331,6 +331,13 @@ internal constructor(
      */
     @JvmField var cacheSolidColorDrawable: Boolean = false
 
+    /**
+     * When true, mount skips a MountSpec update only when the next render unit's content version
+     * equals the mounted unit's. When false, mount trusts `STATE_UPDATED`, which compares with the
+     * last committed layout and goes stale when that layout never mounted.
+     */
+    @JvmField var useMountSpecContentVersion: Boolean = true
+
     @JvmField var shouldOverrideHasTransientState: Boolean = false
     @JvmField var reduceMemorySpikeUserSession: Boolean = false
     @JvmField var reduceMemorySpikeDataDiffSection: Boolean = false

@@ -243,7 +243,12 @@ internal object LayoutUtils {
       }
     }
 
-    LithoYogaLayoutFunction.onBoundsDefined(result, xInParent, yInParent)
+    LithoYogaLayoutFunction.onBoundsDefined(
+        result,
+        xInParent,
+        yInParent,
+        reductionState.id,
+    )
 
     registerWorkingRange(reductionState, result)
   }

@@ -1184,7 +1184,12 @@ internal object LithoYogaLayoutFunction {
     return size
   }
 
-  fun onBoundsDefined(layoutResult: LithoLayoutResult, xInParent: Int, yInParent: Int) {
+  fun onBoundsDefined(
+      layoutResult: LithoLayoutResult,
+      xInParent: Int,
+      yInParent: Int,
+      layoutStateId: Int,
+  ) {
     val context = layoutResult.node.tailComponentContext
     val component = layoutResult.node.tailComponent
     val hasLayoutSizeChanged: Boolean
@@ -1316,9 +1321,11 @@ internal object LithoYogaLayoutFunction {
     if (layoutResult.contentRenderUnit == null) {
       layoutResult.contentRenderUnit =
           LithoNodeUtils.createContentRenderUnit(
-              layoutResult.node,
-              layoutResult.cachedMeasuresValid,
-              layoutResult.diffNode,
+              node = layoutResult.node,
+              areCachedMeasuresValid = layoutResult.cachedMeasuresValid,
+              layoutStateId = layoutStateId,
+              isCachedLayout = layoutResult.isCachedLayout,
+              diffNode = layoutResult.diffNode,
           )
       adjustRenderUnitBounds(layoutResult)
     } else if (!Component.isPrimitive(component)) {
@@ -1328,7 +1335,8 @@ internal object LithoYogaLayoutFunction {
       adjustRenderUnitBounds(layoutResult)
     }
     if (layoutResult.hostRenderUnit == null) {
-      layoutResult.hostRenderUnit = LithoNodeUtils.createHostRenderUnit(layoutResult.node)
+      layoutResult.hostRenderUnit =
+          LithoNodeUtils.createHostRenderUnit(layoutResult.node, layoutStateId)
     }
     if (
         layoutResult.shouldDrawBorders() &&
@@ -1340,6 +1348,7 @@ internal object LithoYogaLayoutFunction {
               createBorderColorDrawable(layoutResult),
               layoutResult.width,
               layoutResult.height,
+              layoutStateId,
               layoutResult.diffNode,
           )
     }

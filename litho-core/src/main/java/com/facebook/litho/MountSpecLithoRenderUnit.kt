@@ -24,6 +24,7 @@ import androidx.annotation.IntDef
 import com.facebook.litho.ComponentHostUtils.maybeSetDrawableState
 import com.facebook.litho.ComponentsSystrace.trace
 import com.facebook.litho.LithoLayoutData.Companion.getInterStageProps
+import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.rendercore.ContentAllocator
 import com.facebook.rendercore.MountContentPools.ContentPool
 import com.facebook.rendercore.PoolingPolicy
@@ -41,6 +42,12 @@ private constructor(
     flags: Int,
     importantForAccessibility: Int,
     @UpdateState val updateState: Int,
+    /**
+     * The id of the [LayoutState] in which this unit's props, state or layout direction last
+     * changed: its diff base's when layout found the two equal, else that of the [LayoutState] that
+     * created it. These ids are unique across trees. Mount compares it with the mounted unit's.
+     */
+    internal val contentVersion: Int,
     context: ComponentContext,
     debugKey: String?,
 ) :
@@ -227,6 +234,7 @@ private constructor(
         flags: Int,
         importantForAccessibility: Int,
         @UpdateState updateState: Int,
+        contentVersion: Int,
         debugKey: String?,
     ): MountSpecLithoRenderUnit {
       return MountSpecLithoRenderUnit(
@@ -237,6 +245,7 @@ private constructor(
           flags,
           importantForAccessibility,
           updateState,
+          contentVersion,
           context,
           debugKey,
       )
@@ -289,12 +298,13 @@ private constructor(
       @UpdateState val updateState = nextRenderUnit.updateState
       val currentComponent = currentRenderUnit.component
       val nextComponent = nextRenderUnit.component
+      val isMountSizeDependent =
+          nextComponent is SpecGeneratedComponent && nextComponent.isMountSizeDependent
 
       // If the two components have different sizes and the mounted content depends on the size we
       // just return true immediately.
       if (
-          nextComponent is SpecGeneratedComponent &&
-              nextComponent.isMountSizeDependent &&
+          isMountSizeDependent &&
               !sameSize(
                   checkNotNull(nextLayoutData),
                   checkNotNull(currentLayoutData),
@@ -302,16 +312,25 @@ private constructor(
       ) {
         return true
       }
-      // updateState is always trusted without chain-continuity checks. This is safe because
-      // state updates accumulate via TreeState — all concurrent resolves see all pending updates.
-      // STATE_UPDATED can only be set when the component is unchanged from baseline, and if it's
-      // unchanged in this layout, it's also unchanged in any intermediate mounted layout (since
-      // both resolves accumulated the same state). STATE_DIRTY always forces update.
-      if (updateState == STATE_DIRTY) {
-        return true
-      }
-      if (updateState == STATE_UPDATED) {
-        return false
+      if (ComponentsConfiguration.useMountSpecContentVersion) {
+        // Equal versions mean equal props, state and direction, however many layouts were
+        // committed without mounting in between. updateState only compares with the layout this
+        // one was diffed against, which may never have mounted.
+        if (nextRenderUnit.contentVersion == currentRenderUnit.contentVersion) {
+          return false
+        }
+        // A size-dependent spec mounts from inter-stage props, which can't be proven equal: layout
+        // rebuilds them, and they hold objects, such as a text Layout, that compare by identity.
+        if (updateState == STATE_DIRTY || isMountSizeDependent) {
+          return true
+        }
+      } else {
+        if (updateState == STATE_DIRTY) {
+          return true
+        }
+        if (updateState == STATE_UPDATED) {
+          return false
+        }
       }
       return shouldUpdate(currentComponent, currentContext, nextComponent, nextContext)
     }

@@ -358,6 +358,7 @@ class ComponentHostTest {
             0,
             View.IMPORTANT_FOR_ACCESSIBILITY_AUTO,
             MountSpecLithoRenderUnit.STATE_UNKNOWN,
+            0,
             null,
         )
     val node = create(

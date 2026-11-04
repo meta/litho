@@ -185,7 +185,8 @@ internal object LithoReducer {
     val width: Int = result?.width ?: 0
     val height: Int = result?.height ?: 0
     val debugNode: DebugHierarchy.Node? = hierarchy?.mutateType(OutputUnitType.HOST)
-    val rootHostRenderUnit = createRootHostRenderUnit(reductionState.componentContext)
+    val rootHostRenderUnit =
+        createRootHostRenderUnit(reductionState.componentContext, reductionState.id)
 
     val node: RenderTreeNode = create(
         unit = rootHostRenderUnit,
@@ -213,7 +214,10 @@ internal object LithoReducer {
     )
   }
 
-  private fun createRootHostRenderUnit(context: ComponentContext): MountSpecLithoRenderUnit {
+  private fun createRootHostRenderUnit(
+      context: ComponentContext,
+      layoutStateId: Int,
+  ): MountSpecLithoRenderUnit {
     val component = HostComponent.create(context)
     val globalKey: GlobalKey = ComponentKeyUtils.generateGlobalKey(context, null, component)
     val c: ComponentContext = ComponentContext.withComponentScope(context, component, globalKey)
@@ -226,6 +230,7 @@ internal object LithoReducer {
         flags = 0,
         importantForAccessibility = ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_AUTO,
         updateState = MountSpecLithoRenderUnit.STATE_DIRTY,
+        contentVersion = layoutStateId,
         debugKey = LithoNodeUtils.getDebugKey("root-host", OutputUnitType.HOST),
     )
   }
@@ -646,7 +651,7 @@ internal object LithoReducer {
     var parentRenderTreeNode: RenderTreeNode? = parent
     val hostRenderUnit: LithoRenderUnit? =
         if (parentRenderTreeNode == null /* isRoot */) {
-          LithoNodeUtils.createRootHostRenderUnit(result.node)
+          LithoNodeUtils.createRootHostRenderUnit(result.node, reductionState.id)
         } else {
           result.hostRenderUnit
         }
