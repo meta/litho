@@ -44,9 +44,9 @@ import com.facebook.rendercore.Dimen
  * RecyclerView. The properties named "recyclerView*" allow you to apply some of these properties to
  * the underlying RecyclerView instead.
  *
- * @deprecated Use LazyCollections instead.
+ * @deprecated Use LazyList, LazyGrid, or LazyStaggeredGrid instead.
  */
-@Deprecated("Use LazyCollections instead.")
+@Deprecated("Use LazyList, LazyGrid, or LazyStaggeredGrid instead.")
 @Suppress("FunctionName")
 fun ResourcesScope.RecyclerCollectionComponent(
     section: Section,
