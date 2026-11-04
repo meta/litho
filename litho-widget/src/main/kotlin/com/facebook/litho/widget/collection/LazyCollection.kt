@@ -93,7 +93,7 @@ class LazyCollection(
             lastVisibleIndex: Int,
         ) -> Unit)? =
         null,
-    private val onDataBound: OnDataBound? = null,
+    private val onDataBound: (() -> Unit)? = null,
     private val alwaysDetectDuplicates: Boolean = false,
     private val isLeftFadingEnabled: Boolean = true,
     private val isRightFadingEnabled: Boolean = true,

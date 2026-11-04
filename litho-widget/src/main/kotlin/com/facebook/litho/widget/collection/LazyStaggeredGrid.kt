@@ -76,7 +76,7 @@ inline fun ResourcesScope.LazyStaggeredGrid(
             lastFullyVisibleIndex: Int,
         ) -> Unit)? =
         null,
-    noinline onDataBound: OnDataBound? = null,
+    noinline onDataBound: (() -> Unit)? = null,
     handle: Handle? = null,
     noinline onPullToRefresh: (() -> Unit)? = null,
     onNearEnd: OnNearCallback? = null,

@@ -15,6 +15,3 @@
  */
 
 package com.facebook.litho.widget.collection
-
-/** Callbacks for [LazyCollection]'s data changes. */
-typealias OnDataBound = () -> Unit

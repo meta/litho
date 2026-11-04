@@ -131,7 +131,7 @@ class CollectionRecyclerComponent(
     private val nestedScrollingEnabled: Boolean = true,
     private val onAfterLayoutListener: OnAfterLayoutListener? = null,
     private val onBeforeLayoutListener: OnBeforeLayoutListener? = null,
-    private val onDataBound: OnDataBound? = null,
+    private val onDataBound: (() -> Unit)? = null,
     private val onDataRendered:
         ((
             isDataChanged: Boolean,
@@ -869,7 +869,7 @@ private fun dispatchUpdateCallback(
     firstVisiblePosition: Int,
     lastVisiblePosition: Int,
     isDataChanged: Boolean,
-    onDataBound: OnDataBound?,
+    onDataBound: (() -> Unit)?,
     onDataRendered:
         ((
             isDataChanged: Boolean,
@@ -908,7 +908,7 @@ private class CollectionPrimitiveViewLayoutBehavior(
         (previousItem: CollectionChild, nextItem: CollectionChild) -> Boolean,
     private val idComparator: (previousItem: CollectionChild, nextItem: CollectionChild) -> Boolean,
     private val latestCommittedData: LatestCommittedData,
-    private val onDataBound: OnDataBound?,
+    private val onDataBound: (() -> Unit)?,
     private val onDataRendered:
         ((
             isDataChanged: Boolean,
@@ -1212,7 +1212,7 @@ private class CollectionPrimitiveViewLayoutBehavior(
         latestCommittedData: LatestCommittedData,
         adapter: CollectionPrimitiveViewAdapter,
         layoutInfo: LayoutInfo,
-        onDataBound: OnDataBound?,
+        onDataBound: (() -> Unit)?,
         onDataRendered:
             ((
                 isDataChanged: Boolean,
