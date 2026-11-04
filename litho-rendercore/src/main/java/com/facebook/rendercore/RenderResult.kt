@@ -160,25 +160,6 @@ class RenderResult<State, RenderContext>(
       return renderResult
     }
 
-    @Deprecated(message = "Use create function that accepts SizeConstraints")
-    @JvmStatic
-    fun <State, RenderContext> create(
-        c: LayoutContext<RenderContext>,
-        node: Node<RenderContext>,
-        layoutResult: LayoutResult,
-        widthSpec: Int,
-        heightSpec: Int,
-        state: State?,
-    ): RenderResult<State, RenderContext> {
-      return create(
-          c,
-          node,
-          layoutResult,
-          SizeConstraints.fromMeasureSpecs(widthSpec, heightSpec),
-          state,
-      )
-    }
-
     @JvmStatic
     fun <State, RenderContext> create(
         c: LayoutContext<RenderContext>,
