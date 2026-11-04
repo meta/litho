@@ -15,5 +15,3 @@
  */
 
 package com.facebook.samples.litho.kotlin.lithography.data
-
-typealias Fetcher = (lastFetchedDecade: Int) -> Unit

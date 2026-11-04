@@ -19,7 +19,7 @@ package com.facebook.samples.litho.kotlin.lithography.data
 import android.os.AsyncTask
 import androidx.lifecycle.MutableLiveData
 
-class DataFetcher(val model: MutableLiveData<Model>) : Fetcher {
+class DataFetcher(val model: MutableLiveData<Model>) : (Int) -> Unit {
   private var fetching = -1
 
   override fun invoke(lastFetchedDecade: Int) {

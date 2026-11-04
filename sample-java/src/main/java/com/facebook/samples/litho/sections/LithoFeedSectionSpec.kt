@@ -25,7 +25,6 @@ import com.facebook.litho.sections.annotations.OnViewportChanged
 import com.facebook.litho.sections.common.SingleComponentSection
 import com.facebook.samples.litho.kotlin.lithography.components.LoadingComponent
 import com.facebook.samples.litho.kotlin.lithography.data.Decade
-import com.facebook.samples.litho.kotlin.lithography.data.Fetcher
 import com.facebook.samples.litho.kotlin.sections.DecadeSection
 
 @GroupSectionSpec
@@ -59,7 +58,7 @@ object LithoFeedSectionSpec {
       totalCount: Int,
       fistFullyVisible: Int,
       lastFullyVisible: Int,
-      @Prop fetcher: Fetcher,
+      @Prop fetcher: (lastFetchedDecade: Int) -> Unit,
       @Prop decades: List<Decade>,
   ) {
     val threshold = 2
