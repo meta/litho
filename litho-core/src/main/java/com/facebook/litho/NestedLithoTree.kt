@@ -437,9 +437,16 @@ class NestedLithoTreeLifecycleProvider : LithoTreeLifecycleProvider {
   @UiThread
   fun release() {
     assertMainThread()
-    _isReleased = true
-    listeners.forEach { it.onReleased() }
-    listeners.clear()
+    // Snapshot first: a listener that removes itself must not make the loop skip the next one.
+    val toNotify =
+        synchronized(this) {
+          if (_isReleased) {
+            return
+          }
+          _isReleased = true
+          listeners.toList().also { listeners.clear() }
+        }
+    toNotify.forEach { it.onReleased() }
   }
 }
 

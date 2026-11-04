@@ -41,6 +41,7 @@ import com.facebook.rendercore.px
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -418,6 +419,244 @@ class LithoRendererTest {
         .isEmpty()
   }
 
+  // ========== Release Tests ==========
+
+  @Test
+  fun `release drops the root, the layout and the tree state`() {
+    val payload = renderSyncAndReturnPayload(renderer, RenderCounter())
+
+    renderer.release()
+
+    assertThat(renderer.treeState).isNull()
+    assertThat(renderer.currentLayoutState).isNull()
+    awaitCollected(payload)
+  }
+
+  @Test
+  fun `release releases the tree lifecycle and notifies its listeners`() {
+    var notified = 0
+    val tree = checkNotNull(Whitebox.getInternalState<LithoTree>(renderer, "lithoTree"))
+    tree.treeLifecycle.addOnReleaseListener { notified++ }
+
+    renderer.release()
+    renderer.release()
+
+    assertThat(tree.treeLifecycle.isReleased).isTrue
+    assertThat(notified).isEqualTo(1)
+  }
+
+  @Test
+  fun `a released renderer neither binds nor keeps what it renders`() {
+    val renders = RenderCounter()
+    renderer.release()
+    val view = LithoRenderTreeView(context)
+
+    renderer.bindTo(view)
+    val payload = renderSyncAndReturnPayload(renderer, renders)
+    ShadowLooper.idleMainLooper()
+
+    assertThat(renders.count).describedAs("a synchronous render still runs").isEqualTo(1)
+    assertThat(renderer.mountedView).describedAs("the view isn't kept as its host").isNull()
+    assertThat(view.layoutState).describedAs("nothing is mounted").isNull()
+    assertThat(renderer.currentLayoutState).isNull()
+    awaitCollected(payload)
+  }
+
+  @Test
+  fun `an asynchronous render after release does nothing`() {
+    val handler = QueueRunnableHandler()
+    val renderer = LithoRenderer(context = context, runnableHandlerProvider = handler.provider)
+    renderer.release()
+
+    renderer.render(TestComponent(), testConstraints)
+
+    assertThat(handler.queue).isEmpty()
+  }
+
+  /**
+   * A layout that committed just before [LithoRenderer.release] posts its rebind afterwards. The
+   * released renderer must not keep that layout, or a state handle that outlives it would keep the
+   * layout's components alive.
+   */
+  @Test
+  fun `a layout committed just before release isn't kept by the released renderer`() {
+    val handler = QueueRunnableHandler()
+    val renderer = LithoRenderer(context = context, runnableHandlerProvider = handler.provider)
+    val payload = renderWithPayload(renderer)
+    runOnWorker(handler.queue.take()) // Resolves, then posts the layout.
+    val layout = handler.queue.take()
+
+    // The worker commits the layout, then waits for this lock to post the rebind.
+    val runnableLock = checkNotNull(Whitebox.getInternalState<Any>(renderer, "runnableLock"))
+    val worker = Thread(layout)
+    synchronized(runnableLock) {
+      worker.start()
+      awaitBlocked(worker)
+      assertThat(renderer.currentLayoutState).describedAs("the layout committed").isNotNull
+      renderer.release()
+    }
+    worker.join(WORKER_TIMEOUT_MS)
+    ShadowLooper.idleMainLooper()
+
+    assertThat(Whitebox.getInternalState<Runnable?>(renderer, "currentRebindRunnable")).isNull()
+    awaitCollected(payload)
+  }
+
+  @Test
+  fun `a render racing release doesn't restore its root`() {
+    assertRootNotRestoredByRacingRelease { renderer, root ->
+      renderer.render(root, testConstraints)
+    }
+  }
+
+  @Test
+  fun `a resolve racing release doesn't restore its root`() {
+    assertRootNotRestoredByRacingRelease { renderer, root -> renderer.resolve(root) }
+  }
+
+  @Test
+  fun `a throwing release listener doesn't stop the renderer from dropping what it rendered`() {
+    val payload = renderSyncAndReturnPayload(renderer, RenderCounter())
+    treeLifecycle(renderer).addOnReleaseListener { error("listener failed") }
+
+    assertThatThrownBy { renderer.release() }.hasMessage("listener failed")
+
+    assertThat(renderer.treeState).isNull()
+    assertThat(renderer.currentLayoutState).isNull()
+    awaitCollected(payload)
+  }
+
+  @Test
+  fun `a release listener that removes itself doesn't skip the next one`() {
+    val lifecycle = treeLifecycle(renderer)
+    var secondNotified = 0
+    lifecycle.addOnReleaseListener(
+        object : LithoTreeLifecycleProvider.OnReleaseListener {
+          override fun onReleased() {
+            lifecycle.removeOnReleaseListener(this)
+          }
+        },
+    )
+    lifecycle.addOnReleaseListener { secondNotified++ }
+
+    renderer.release()
+
+    assertThat(secondNotified).isEqualTo(1)
+  }
+
+  private fun treeLifecycle(renderer: LithoRenderer): LithoTreeLifecycleProvider =
+      checkNotNull(Whitebox.getInternalState<LithoTree>(renderer, "lithoTree")).treeLifecycle
+
+  /**
+   * The worker enters [start] before [LithoRenderer.release] and waits for the renderer's monitor
+   * to store its root, which it gets only after the release has dropped the inputs.
+   */
+  private fun assertRootNotRestoredByRacingRelease(start: (LithoRenderer, Component) -> Unit) {
+    val handler = QueueRunnableHandler()
+    val renderer = LithoRenderer(context = context, runnableHandlerProvider = handler.provider)
+
+    val payload = startWhileReleasing(renderer, start)
+
+    assertThat(handler.queue).describedAs("nothing is scheduled").isEmpty()
+    awaitCollected(payload)
+  }
+
+  private fun startWhileReleasing(
+      renderer: LithoRenderer,
+      start: (LithoRenderer, Component) -> Unit,
+  ): java.lang.ref.WeakReference<Any> {
+    val payload = Any()
+    val root = PayloadComponent(payload, RenderCounter())
+    val worker = Thread { start(renderer, root) }
+    synchronized(renderer) {
+      worker.start()
+      awaitBlocked(worker)
+      renderer.release()
+    }
+    worker.join(WORKER_TIMEOUT_MS)
+    return java.lang.ref.WeakReference(payload)
+  }
+
+  private fun renderSyncAndReturnPayload(
+      renderer: LithoRenderer,
+      renders: RenderCounter,
+  ): java.lang.ref.WeakReference<Any> {
+    val payload = Any()
+    renderer.renderSync(PayloadComponent(payload, renders), testConstraints)
+    return java.lang.ref.WeakReference(payload)
+  }
+
+  private fun renderWithPayload(renderer: LithoRenderer): java.lang.ref.WeakReference<Any> {
+    val payload = Any()
+    renderer.render(PayloadComponent(payload, RenderCounter()), testConstraints)
+    return java.lang.ref.WeakReference(payload)
+  }
+
+  private fun runOnWorker(runnable: Runnable) {
+    val worker = Thread(runnable)
+    worker.start()
+    worker.join(WORKER_TIMEOUT_MS)
+  }
+
+  private fun awaitBlocked(thread: Thread) {
+    repeat(WORKER_TIMEOUT_MS.toInt()) {
+      if (thread.state == Thread.State.BLOCKED) {
+        return
+      }
+      Thread.sleep(1)
+    }
+    error("worker never blocked on the lock")
+  }
+
+  private fun awaitCollected(ref: java.lang.ref.WeakReference<*>) {
+    repeat(20) {
+      if (ref.get() == null) {
+        return
+      }
+      Runtime.getRuntime().gc()
+      Thread.sleep(10)
+    }
+    assertThat(ref.get()).describedAs("rendered props kept by the released renderer").isNull()
+  }
+
+  /** Runs nothing by itself: tests take the posted runnables and run them where they need to. */
+  private class QueueRunnableHandler : com.facebook.rendercore.RunnableHandler {
+    val queue = java.util.concurrent.LinkedBlockingDeque<Runnable>()
+
+    val provider =
+        object : com.facebook.litho.config.RunnableHandlerProvider {
+          override fun getRunnableHandler() = this@QueueRunnableHandler
+        }
+
+    override fun isTracing(): Boolean = false
+
+    override fun post(runnable: Runnable, tag: String) {
+      queue.add(runnable)
+    }
+
+    override fun postAtFront(runnable: Runnable, tag: String) {
+      queue.addFirst(runnable)
+    }
+
+    override fun remove(runnable: Runnable) {
+      queue.remove(runnable)
+    }
+  }
+
+  private class RenderCounter {
+    @Volatile var count = 0
+  }
+
+  private class PayloadComponent(
+      @Suppress("unused") private val payload: Any,
+      private val renders: RenderCounter,
+  ) : KComponent() {
+    override fun ComponentScope.render(): Component {
+      renders.count++
+      return Column(style = Style.height(10.px))
+    }
+  }
+
   // ========== Test Components ==========
 
   private class RendererHeightReader(
@@ -464,5 +703,9 @@ class LithoRendererTest {
         child(Column { child(Text(text = "Different Test Component")) })
       }
     }
+  }
+
+  private companion object {
+    const val WORKER_TIMEOUT_MS = 5_000L
   }
 }

@@ -99,6 +99,8 @@ import com.facebook.rendercore.primitives.ViewAllocator
 import com.facebook.rendercore.thread.utils.ThreadUtils
 import com.facebook.rendercore.toHeightSpec
 import com.facebook.rendercore.toWidthSpec
+import java.util.Collections
+import java.util.IdentityHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.collections.toMutableList
 import kotlin.math.max
@@ -336,6 +338,13 @@ class CollectionRecyclerComponent(
       onCleanup {
         poolScope.releaseScope()
         latestCommittedData.saveableStateRegistries.detach()
+        // A row's state handle can outlive the list, e.g. held by a pooled view, so the rows are
+        // released here or that handle would keep them, and all they reference, alive. This also
+        // runs when the row holding a nested list is recycled: the inner rows then render again
+        // from scratch when it is bound again, keeping only their saveable state.
+        latestCommittedData.items.forEach { item ->
+          (item as? LithoCollectionItem)?.releaseRenderer()
+        }
       }
     }
 
@@ -571,16 +580,34 @@ internal class LatestCommittedData(
   @UiThread
   fun commit(changeset: Changeset) {
     ThreadUtils.assertMainThread()
-    synchronized(lock) {
-      data = changeset.operation.nextData
-      changeset.items?.let {
-        // Update the items list with new data from the changeset if available. This prevents
-        // unnecessary UI updates when the underlying data has changed but nothing should be
-        // reflected.
-        items = it
-      }
-    }
+    val removedItems =
+        synchronized(lock) {
+          data = changeset.operation.nextData
+          val newItems = changeset.items ?: return@synchronized emptyList()
+          val removed = itemsRemoved(from = items, to = newItems)
+          // Update the items list with new data from the changeset if available. This prevents
+          // unnecessary UI updates when the underlying data has changed but nothing should be
+          // reflected.
+          items = newItems
+          removed
+        }
     changeset.rowKeys?.let(saveableStateRegistries::onCommit)
+    // A removed row's state handle can outlive it, e.g. held by a pooled view, so the row is
+    // released or that handle would keep it alive.
+    removedItems.forEach { item -> (item as? LithoCollectionItem)?.releaseRenderer() }
+  }
+
+  /** The items in [from] that are not in [to], compared by identity. */
+  private fun itemsRemoved(
+      from: List<CollectionItem<*>>,
+      to: List<CollectionItem<*>>,
+  ): List<CollectionItem<*>> {
+    if (from.isEmpty()) {
+      return emptyList()
+    }
+    val kept = Collections.newSetFromMap(IdentityHashMap<CollectionItem<*>, Boolean>())
+    kept.addAll(to)
+    return from.filter { item -> item !in kept }
   }
 
   /**

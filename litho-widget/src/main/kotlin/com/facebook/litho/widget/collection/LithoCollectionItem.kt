@@ -17,6 +17,7 @@
 package com.facebook.litho.widget.collection
 
 import android.content.Context
+import androidx.annotation.UiThread
 import com.facebook.litho.ComponentContext
 import com.facebook.litho.ComponentTree
 import com.facebook.litho.LithoRenderTreeView
@@ -85,7 +86,26 @@ class LithoCollectionItem(
   /** The generation of [saveableStateRegistry] that the renderer's layout may have read. */
   @Volatile private var renderedGeneration: Int = 0
 
-  private val _lazyRenderer = lazy {
+  private val renderer: LithoRenderer
+    get() =
+        _renderer ?: synchronized(this) { _renderer ?: createRenderer().also { _renderer = it } }
+
+  /** Returns the renderer only if it has already been created, without creating it. */
+  private val rendererOrNull: LithoRenderer?
+    get() = _renderer
+
+  /**
+   * The item's renderer, created on first use and dropped by [releaseRenderer].
+   *
+   * Creating it lazily avoids the cost rather than moving it: a renderer is the heaviest per-item
+   * allocation (a TreeState with its state handlers, a LithoTree, a RenderUnitIdGenerator), and
+   * most items of a long list are never prepared or bound, so they never create one. It is a
+   * nullable field rather than a `lazy` so [releaseRenderer] can drop it; an item used again after
+   * that creates a new one.
+   */
+  @Volatile private var _renderer: LithoRenderer? = null
+
+  private fun createRenderer(): LithoRenderer {
     parentSaveableStateRegistry?.let { parent ->
       // A bare `renderInfo` here is the constructor argument, which inserted items replace later.
       val key = readKey(this.renderInfo)
@@ -95,7 +115,7 @@ class LithoCollectionItem(
       saveableStateRegistry = registry
       renderedGeneration = registry.generation
     }
-    LithoRenderer(
+    return LithoRenderer(
         context = _androidContext,
         id = id,
         componentsConfig = _componentsConfig,
@@ -105,12 +125,6 @@ class LithoCollectionItem(
         visibilityController = _visibilityController,
     )
   }
-
-  private val renderer: LithoRenderer by _lazyRenderer
-
-  /** Returns the renderer only if it has already been initialized, without triggering lazy init. */
-  private val rendererOrNull: LithoRenderer?
-    get() = if (_lazyRenderer.isInitialized()) renderer else null
 
   /**
    * Track the currently bound view to handle RecyclerView change animations correctly. During
@@ -165,6 +179,8 @@ class LithoCollectionItem(
 
   override fun ItemSizeConstraintsProviderScope.onBindView(view: LithoRenderTreeView) {
     val previousView = currentBoundView
+    // Bound again before it was recycled, so it is still in use.
+    releaseWhenRecycled = false
 
     // If we're binding to a different view (RecyclerView change animation scenario),
     // we must clean up the old view first since onViewRecycled will skip it
@@ -226,11 +242,35 @@ class LithoCollectionItem(
     view.clean()
     currentBoundView = null
     saveableStateRegistry?.let(saveableStateRegistries::onItemUnbound)
+    if (releaseWhenRecycled) {
+      releaseRenderer()
+    }
   }
 
   override fun PrepareScope.unprepare() {
     rendererOrNull?.cleanup()
   }
+
+  /**
+   * Releases the item's renderer and everything it holds: its components and their hook state. A
+   * state handle that outlives the item, e.g. one a pooled view still holds, then can't keep them
+   * alive. While a view is still bound, e.g. a removed row animating out, the renderer is released
+   * once that view is recycled. The item renders again from scratch, with a new renderer, if it is
+   * used after this.
+   */
+  @UiThread
+  fun releaseRenderer() {
+    if (currentBoundView != null) {
+      releaseWhenRecycled = true
+      return
+    }
+    releaseWhenRecycled = false
+    val released = synchronized(this) { _renderer.also { _renderer = null } } ?: return
+    released.release()
+  }
+
+  /** Whether [releaseRenderer] was called while a view was bound. Main thread only. */
+  private var releaseWhenRecycled: Boolean = false
 
   /** The key of this item's registry in [CollectionSaveableStateRegistries]. */
   internal val saveableStateKey: String?

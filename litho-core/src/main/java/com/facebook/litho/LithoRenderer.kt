@@ -44,7 +44,7 @@ class LithoRenderer(
     val id: Int = LithoTree.generateComponentTreeId(),
     val componentsConfig: ComponentsConfiguration = ComponentsConfiguration.defaultInstance,
     val renderUnitIdGenerator: RenderUnitIdGenerator = RenderUnitIdGenerator(id),
-    val treeState: TreeState? = TreeState(),
+    treeState: TreeState? = TreeState(),
     val parentTreePropContainer: TreePropContainer? = TreePropContainer(),
     val treePropContainer: TreePropContainer? = TreePropContainer(),
     runnableHandlerProvider: RunnableHandlerProvider = ComponentTree.DefaultLayoutHandlerProvider(),
@@ -66,13 +66,14 @@ class LithoRenderer(
   )
   private val combinedTreePropContainer: TreePropContainer? =
       mergeTreePropContainersIfNeeded(parentTreePropContainer, treePropContainer)
+  private val treeLifecycleProvider = NestedLithoTreeLifecycleProvider()
   private val lithoTree: LithoTree = LithoTree(
       id = id,
       treeStateProvider = this,
       stateUpdater = this,
       rootHost = this,
       errorComponentReceiver = this,
-      treeLifecycle = NoOpLifecycleProvider(),
+      treeLifecycle = treeLifecycleProvider,
       uiStateReadRecordsProvider = {
         val host =
             rootHost as? BaseMountingView
@@ -83,6 +84,18 @@ class LithoRenderer(
   )
   private val errorComponentRef = AtomicReference<Component?>(null)
   private val renderHandler = runnableHandlerProvider.getRunnableHandler()
+
+  /** The tree's state. Dropped by [release]. */
+  @Volatile
+  var treeState: TreeState? = treeState
+    private set
+
+  /**
+   * Read only where [release] has to be ordered against: input writes and commits under this
+   * renderer's monitor, scheduling under [runnableLock], and [bindTo] and [onErrorComponent].
+   */
+  private val isReleased: Boolean
+    get() = treeLifecycleProvider.isReleased
 
   init {
     treeState?.clearResolveUpdates()
@@ -136,7 +149,7 @@ class LithoRenderer(
    * @param root The root component to resolve.
    */
   fun resolve(root: Component) {
-    if (checkIfCanSkipResolveAndUpdateInputs(root)) {
+    if (!updateInputs(newRoot = root)) {
       return
     }
 
@@ -150,7 +163,7 @@ class LithoRenderer(
    * @param constraints The size constraints to use for layout.
    */
   fun layout(constraints: SizeConstraints) {
-    if (checkIfCanSkipLayoutAndUpdateInputs(constraints)) {
+    if (!updateInputs(newConstraints = constraints)) {
       return
     }
 
@@ -187,7 +200,7 @@ class LithoRenderer(
    * @param constraints The size constraints to use.
    */
   fun render(root: Component, constraints: SizeConstraints) {
-    if (checkIfCanSkipRenderAndUpdateInputs(newRoot = root, newConstraints = constraints)) {
+    if (!updateInputs(newRoot = root, newConstraints = constraints)) {
       return
     }
 
@@ -211,6 +224,27 @@ class LithoRenderer(
     val layoutInputs = deriveFromResolveInputs(resolveInputs, resolveResult)
 
     return layoutSync(layoutInputs)
+  }
+
+  /**
+   * Releases the renderer for good: like [cleanup], and also drops the tree's state and releases
+   * the tree's lifecycle, so nothing the rendered components or their hooks reference is kept. A
+   * state handle that outlives the renderer, e.g. one captured by a pooled view, keeps only an
+   * empty renderer. From then on nothing is committed or kept: asynchronous renders and state
+   * updates are dropped, [bindTo] is ignored, and a synchronous render returns a layout that isn't
+   * stored.
+   */
+  @UiThread
+  fun release() {
+    try {
+      // Marked first, so a background render that commits from now on is dropped.
+      treeLifecycleProvider.release()
+    } finally {
+      // A throwing release listener must not leave the renderer holding what it rendered.
+      unbind()
+      cleanup()
+      synchronized(this) { treeState = null }
+    }
   }
 
   /** Cleans up any pending resolve or layout operations and resets the renderer state. */
@@ -291,7 +325,7 @@ class LithoRenderer(
     ) {
       attachSkippedEffects(committed)
     }
-    val inputsChanged = !checkIfCanSkipRenderAndUpdateInputs(root, constraints)
+    val inputsChanged = updateInputs(newRoot = root, newConstraints = constraints)
     if (inputsChanged || !committedIsCurrent) {
       // Always re-post: a previously queued render may never commit.
       resolveAsync(RenderMode.SetRoot, atFront = postAtFront)
@@ -301,6 +335,9 @@ class LithoRenderer(
 
   @UiThread
   fun bindTo(host: Host) {
+    if (isReleased) {
+      return
+    }
     rootHost = host
     synchronized(this) { currentLifecycle = LithoRendererLifecycle.STARTED }
   }
@@ -354,6 +391,7 @@ class LithoRenderer(
   @UiThread
   @Synchronized
   private fun rebind(layoutState: LayoutState, runEffects: Boolean) {
+    // A released renderer has no host (see [bindTo]), so nothing below is stored for it.
     if (layoutState === uiThreadLayoutState) return
 
     val previousUiThreadLayoutState = uiThreadLayoutState
@@ -405,57 +443,48 @@ class LithoRenderer(
   }
 
   /**
-   * Determines whether a render operation can be skipped based on whether the root component or
-   * size constraints have changed. Updates the internal state with new values if they differ.
+   * Stores the given inputs if either differs from the current one; a null input is left as is.
    *
-   * @param newRoot The new root component to compare against the current root
-   * @param newConstraints The new size constraints to compare against current constraints
-   * @return true if the render can be skipped (no changes detected), false if a render is needed
+   * @return true if the inputs were stored and a render is needed, false if they are unchanged or
+   *   the renderer is released.
    */
   @Synchronized
-  private fun checkIfCanSkipRenderAndUpdateInputs(
-      newRoot: Component,
-      newConstraints: SizeConstraints,
+  private fun updateInputs(
+      newRoot: Component? = null,
+      newConstraints: SizeConstraints? = null,
   ): Boolean {
     val canSkip =
-        ComponentUtils.isEquivalent(this.root, newRoot) && this.sizeConstraints == newConstraints
-    if (!canSkip) {
-      this.root = newRoot
-      this.sizeConstraints = newConstraints
-    }
-    return canSkip
+        (newRoot == null || ComponentUtils.isEquivalent(root, newRoot)) &&
+            (newConstraints == null || sizeConstraints == newConstraints)
+    return !canSkip && setInputs(newRoot, newConstraints)
   }
 
   /**
-   * Determines whether a resolve operation can be skipped based on whether the root component has
-   * changed. Updates the internal state with the new root if it differs.
+   * The only writer of [root] and [sizeConstraints]. Checked under the monitor [cleanup] resets
+   * them with, so a render racing [release] can't restore them after it.
    *
-   * @param newRoot The new root component to compare against the current root
-   * @return true if the resolve can be skipped (no changes detected), false if a resolve is needed
+   * @return false if the renderer is released and nothing was stored.
    */
-  @Synchronized
-  private fun checkIfCanSkipResolveAndUpdateInputs(newRoot: Component): Boolean {
-    val canSkip = ComponentUtils.isEquivalent(this.root, newRoot)
-    if (!canSkip) {
-      this.root = newRoot
+  @GuardedBy("this")
+  private fun setInputs(newRoot: Component?, newConstraints: SizeConstraints?): Boolean {
+    if (isReleased) {
+      return false
     }
-    return canSkip
+    newRoot?.let { root = it }
+    newConstraints?.let { sizeConstraints = it }
+    return true
   }
 
   /**
-   * Determines whether a layout operation can be skipped based on whether the size constraints have
-   * changed. Updates the internal state with the new constraints if they differ.
-   *
-   * @param newConstraints The new size constraints to compare against current constraints
-   * @return true if the layout can be skipped (no changes detected), false if a layout is needed
+   * Runs [schedule] under the lock [cleanup] removes scheduled work with, unless the renderer is
+   * released, so nothing is scheduled after [release].
    */
-  @Synchronized
-  private fun checkIfCanSkipLayoutAndUpdateInputs(newConstraints: SizeConstraints): Boolean {
-    val canSkip = this.sizeConstraints == newConstraints
-    if (!canSkip) {
-      this.sizeConstraints = newConstraints
+  private inline fun scheduleUnlessReleased(schedule: () -> Unit) {
+    synchronized(runnableLock) {
+      if (!isReleased) {
+        schedule()
+      }
     }
-    return canSkip
   }
 
   /** Creates a new [ComponentContext] for the resolution. */
@@ -499,7 +528,7 @@ class LithoRenderer(
 
   /** Initiates a resolve for the given component in an async way. */
   private fun resolveAsync(renderMode: RenderMode, atFront: Boolean = false) {
-    synchronized(runnableLock) {
+    scheduleUnlessReleased {
       // clear pending resolve runnable
       currentResolveRunnable?.let { runnable ->
         renderHandler.remove(runnable)
@@ -556,7 +585,7 @@ class LithoRenderer(
 
   /** Initiates an async layout with the latest resolve result and size constraints. */
   private fun layoutAsync(renderMode: RenderMode, atFront: Boolean = false) {
-    synchronized(runnableLock) {
+    scheduleUnlessReleased {
       // clear pending layout runnable
       currentLayoutRunnable?.let { runnable ->
         renderHandler.remove(runnable)
@@ -645,6 +674,9 @@ class LithoRenderer(
   /** Commits the given resolve result if it is newer than the committed resolve result. */
   @Synchronized
   private fun commitResolveResult(resolveResult: ResolveResult) {
+    if (isReleased) {
+      return
+    }
     val committedResolveResult = currentResolveResult
     if (committedResolveResult == null || committedResolveResult.version < resolveResult.version) {
       currentResolveResult = resolveResult
@@ -682,7 +714,9 @@ class LithoRenderer(
           layoutState.toRenderTree()
 
           if (commitLayoutState(layoutState)) {
-            synchronized(runnableLock) {
+            // Committed before release() and posting after it: a rebind stored now would never
+            // be cleared and would keep this layout, and its components, alive.
+            scheduleUnlessReleased {
               currentRebindRunnable?.let { runnable ->
                 uiThreadHandler.remove(runnable)
                 currentRebindRunnable = null
@@ -703,6 +737,9 @@ class LithoRenderer(
    */
   @Synchronized
   private fun commitLayoutState(layoutState: LayoutState): Boolean {
+    if (isReleased) {
+      return false
+    }
     val currentVersion = currentLayoutState?.version ?: com.facebook.rendercore.RenderState.UNSET
     if (
         (layoutState.version > currentVersion) &&
@@ -939,6 +976,9 @@ class LithoRenderer(
 
   // region ErrorComponentReceiver
   override fun onErrorComponent(component: Component?) {
+    if (isReleased) {
+      return
+    }
     errorComponentRef.compareAndSet(null, component)
   }
 
@@ -994,12 +1034,11 @@ class LithoRenderer(
       constraints: SizeConstraints? = null,
   ): ResolveInputs {
     return synchronized(this) {
-      rootComponent?.let { root = it }
-      constraints?.let { sizeConstraints = it }
+      setInputs(rootComponent, constraints)
       ResolveInputs(
           resolveVersion = nextResolveVersionCounter++,
           layoutVersion = nextLayoutVersionCounter++,
-          rootComponent = errorComponentRef.getAndSet(null) ?: root,
+          rootComponent = errorComponentRef.getAndSet(null) ?: rootComponent ?: root,
           constraints = constraints ?: sizeConstraints,
           localTreeState = TreeState(treeState),
           currentResolveResult = currentResolveResult,
@@ -1080,21 +1119,6 @@ class LithoRenderer(
     private const val EMPTY_STRING: String = ""
     private const val ROOT_KEY: String = "TreeRoot"
     private const val TAG_STATE_UPDATE: String = "StateUpdate"
-  }
-}
-
-/** A no-op implementation of [LithoTreeLifecycleProvider] that does nothing. */
-private class NoOpLifecycleProvider : LithoTreeLifecycleProvider {
-
-  override val isReleased: Boolean
-    get() = false
-
-  override fun addOnReleaseListener(listener: LithoTreeLifecycleProvider.OnReleaseListener) {
-    // no ops
-  }
-
-  override fun removeOnReleaseListener(listener: LithoTreeLifecycleProvider.OnReleaseListener) {
-    // no ops
   }
 }
 

@@ -217,6 +217,8 @@ class NewStickyHeaderController(
     if (stickyHeaderView is LithoRenderTreeView) {
       item.onViewRecycled(stickyHeaderView)
     }
+    // The copy is never used again, and a state handle it handed out must not keep the row alive.
+    item.releaseRenderer()
   }
 
   private fun setStickyHeaderVerticalOffset(stickyHeaderView: View, verticalOffset: Int) {
@@ -304,7 +306,11 @@ class NewStickyHeaderController(
    */
   fun updateStickyHeaderIfNeeded() {
     if (headPosition == null) {
-      // No sticky header available
+      // No sticky item is left, so the copy of the last one is never shown again.
+      hideStickyHeader()
+      sectionsRecyclerView?.stickyHeaderView?.let { resetStickHeader(it) }
+      stickyHeaderItem = null
+      previousStickyHeaderPosition = null
       return
     }
     val stickyHeaderPosition =
