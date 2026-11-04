@@ -57,6 +57,23 @@ internal constructor(override val context: ComponentContext) : ResourcesScope {
   internal val resolveVersion: Int
     get() = resolveContext.layoutVersion
 
+  /**
+   * Whether Litho asked this background resolve to stop so that the main thread can finish it.
+   * Render can stop work it is able to resume later and leave the rest to the main thread. Always
+   * false on the main thread, and false once render returns.
+   */
+  val isResolveInterrupted: Boolean
+    get() = _resolveContext?.isResolveInterrupted ?: false
+
+  /**
+   * Whether this resolve was cancelled: its tree was released while it ran, so Litho discards its
+   * result, and render can stop and drop its own work. False once render returns: Litho also
+   * releases a future once it finishes and no caller waits for it any more, so a released future
+   * only means a cancelled resolve while render runs.
+   */
+  val isResolveCancelled: Boolean
+    get() = _resolveContext?.isFutureReleased ?: false
+
   // TODO: Extract into more generic container to track hooks when needed
   internal var stateAlreadyMarkedAsUsed: Boolean = false
 
