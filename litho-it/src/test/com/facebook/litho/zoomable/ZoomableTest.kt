@@ -28,6 +28,7 @@ import android.view.ViewGroup
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.get
 import com.facebook.litho.Component
+import com.facebook.litho.ComponentHost
 import com.facebook.litho.LithoRenderTreeView
 import com.facebook.litho.LithoView
 import com.facebook.litho.Style
@@ -38,10 +39,13 @@ import com.facebook.litho.layout.flexbox.Column
 import com.facebook.litho.testing.testrunner.LithoTestRunner
 import com.facebook.litho.view.backgroundColor
 import com.facebook.litho.view.onClick
+import com.facebook.litho.view.onTouch
 import com.facebook.litho.widget.SolidColor
 import com.facebook.litho.widget.zoomable.Zoomable
+import com.facebook.litho.widget.zoomable.ZoomableTouchGestureListener
 import com.facebook.rendercore.px
 import com.facebook.rendercore.zoomable.ZoomableViewBaseController
+import java.lang.ref.WeakReference
 import java.util.concurrent.TimeUnit
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.Test
@@ -98,12 +102,38 @@ class ZoomableTest {
         child(Zoomable(zoomableEventListener = zoomableEventListener, child = content))
       }
 
-  private fun setUp(content: () -> Component = ::content): Screen {
+  /** Zoomable content that handles no touch, inside an ancestor with [ancestorStyle]. */
+  private fun rootWithAncestor(
+      ancestorStyle: Style,
+      keepUnhandledTouches: Boolean,
+      gestureListener: ZoomableTouchGestureListener? = null,
+  ): Component =
+      Column(style = Style.backgroundColor(Color.WHITE).width(400.px).height(800.px)) {
+        child(SolidColor(Color.GRAY, style = Style.width(400.px).height(50.px)))
+        child(
+            Column(style = ancestorStyle) {
+              child(
+                  Zoomable(
+                      zoomableTouchGestureListener = gestureListener,
+                      zoomableEventListener = listener,
+                      keepUnhandledTouches = keepUnhandledTouches,
+                  ) {
+                    SolidColor(Color.RED, style = Style.width(300.px).height(300.px))
+                  },
+              )
+            },
+        )
+      }
+
+  private fun setUp(content: () -> Component = ::content): Screen =
+      setUpRoot(root(content = content))
+
+  private fun setUpRoot(rootComponent: Component): Screen {
     // The spring that animates the copy back runs on frame callbacks: give them a frame's delay so
     // advancing the clock steps it.
     ShadowChoreographer.setPostFrameCallbackDelay(16)
     val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
-    val lithoView = LithoView.create(activity, root(content = content))
+    val lithoView = LithoView.create(activity, rootComponent)
     activity.setContentView(lithoView)
     val decor = activity.window.decorView
     decor.measure(
@@ -120,6 +150,75 @@ class ZoomableTest {
     val screen = setUp()
     assertThat(findRenderTreeView(screen.lithoView)).isNull()
     assertThat(screen.host.parent).isSameAs(screen.lithoView)
+  }
+
+  @Test
+  fun theZoomableAddsNoHostView() {
+    val screen = setUp()
+    val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+    val unwrapped =
+        LithoView.create(
+            activity,
+            Column(style = Style.backgroundColor(Color.WHITE).width(400.px).height(800.px)) {
+              child(SolidColor(Color.GRAY, style = Style.width(400.px).height(50.px)))
+              child(content())
+            },
+        )
+    unwrapped.measure(
+        View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+        View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY),
+    )
+    unwrapped.layout(0, 0, 400, 800)
+    idle()
+    assertThat(countHosts(screen.lithoView)).isEqualTo(countHosts(unwrapped))
+  }
+
+  @Test
+  fun withoutKeepingUnhandledTouchesATapReachesTheAncestor() {
+    var ancestorClicks = 0
+    val screen = setUpRoot(
+        rootWithAncestor(
+            ancestorStyle = Style.onClick { ancestorClicks++ },
+            keepUnhandledTouches = false,
+        ),
+    )
+    tap(screen)
+    assertThat(ancestorClicks).isEqualTo(1)
+  }
+
+  @Test
+  fun keepingUnhandledTouchesKeepsATapFromTheAncestor() {
+    var ancestorClicks = 0
+    val screen = setUpRoot(
+        rootWithAncestor(
+            ancestorStyle = Style.onClick { ancestorClicks++ },
+            keepUnhandledTouches = true,
+        ),
+    )
+    tap(screen)
+    assertThat(ancestorClicks).isEqualTo(0)
+  }
+
+  @Test
+  fun withoutKeepingUnhandledTouchesAPinchTheAncestorPassesOnZooms() {
+    val gestureListener = ZoomableTouchGestureListener()
+    val screen = setUpRoot(
+        rootWithAncestor(
+            // As a pager does: takes the gesture and passes its events to the shared listener.
+            ancestorStyle =
+                Style.onTouch { touchEvent ->
+                  gestureListener.onTouch(touchEvent.motionEvent)
+                  true
+                },
+            keepUnhandledTouches = false,
+            gestureListener = gestureListener,
+        ),
+    )
+    val end = pinchOut(screen)
+    assertThat(zoomStarts).isEqualTo(1)
+    dispatch(screen, end, MotionEvent.ACTION_UP, screen.x(-150) to screen.y(150))
+    shadowOf(Looper.getMainLooper()).idleFor(5, TimeUnit.SECONDS)
+    assertThat(zoomEnds).isEqualTo(1)
   }
 
   @Test
@@ -259,6 +358,58 @@ class ZoomableTest {
     assertThat(screen.lithoView.hasTransientState()).isFalse()
   }
 
+  @Test
+  fun unmountingARootZoomableMidZoomReleasesItsEventListenerWhileTheTreeLives() {
+    val screen = setUpRoot(zoomableRoot(listener))
+    pinchOut(screen)
+    val released = renderNewListener(screen)
+    val tree = checkNotNull(screen.lithoView.componentTree)
+    // The LithoView stays attached, so the root's binders unbind while it still zooms.
+    screen.lithoView.componentTree = null
+    idle()
+    tree.setRootSync(zoomableRoot(listener))
+    assertThat(collected(released)).isTrue()
+  }
+
+  /** A [Zoomable] as the root, so it binds to the LithoView itself. */
+  private fun zoomableRoot(
+      zoomableEventListener: ZoomableViewBaseController.Listener,
+  ): Component = Zoomable(
+      zoomableEventListener = zoomableEventListener,
+      style = Style.backgroundColor(Color.WHITE).width(400.px).height(800.px),
+  ) {
+    Column { child(content()) }
+  }
+
+  /** Renders a new event listener into the root [Zoomable]; returns a weak reference to it. */
+  private fun renderNewListener(screen: Screen): WeakReference<*> {
+    val eventListener =
+        object : ZoomableViewBaseController.Listener {
+          override fun onZoomStarted() = Unit
+
+          override fun onZoomFinished() = Unit
+        }
+    checkNotNull(screen.lithoView.componentTree).setRootSync(zoomableRoot(eventListener))
+    idle()
+    return WeakReference(eventListener)
+  }
+
+  private fun collected(ref: WeakReference<*>): Boolean {
+    repeat(20) {
+      if (ref.get() == null) return true
+      System.gc()
+      @Suppress("UNUSED_VARIABLE") val pressure = ByteArray(1 shl 20)
+      Thread.sleep(10)
+    }
+    return ref.get() == null
+  }
+
+  private fun tap(screen: Screen) {
+    val time = SystemClock.uptimeMillis()
+    dispatch(screen, time, MotionEvent.ACTION_DOWN, screen.x(50) to screen.y(50))
+    dispatch(screen, time + 10, MotionEvent.ACTION_UP, screen.x(50) to screen.y(50))
+  }
+
   /** Pinches out around the content's center; returns a time after the last move. */
   private fun pinchOut(screen: Screen): Long {
     val t = SystemClock.uptimeMillis()
@@ -335,6 +486,16 @@ class ZoomableTest {
       return it
     }
     return null
+  }
+
+  private fun countHosts(view: View): Int {
+    var hosts = if (view is ComponentHost) 1 else 0
+    if (view is ViewGroup) {
+      for (i in 0 until view.childCount) {
+        hosts += countHosts(view.getChildAt(i))
+      }
+    }
+    return hosts
   }
 
   private fun idle() {
