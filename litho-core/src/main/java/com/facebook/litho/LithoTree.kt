@@ -26,8 +26,6 @@ import com.facebook.litho.state.UiStateReadRecordsProvider
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
-internal typealias LithoRendererLifecycleProvider = LithoTreeLifecycleProvider
-
 /** Represents a pointer to the Tree that a ComponentContext is attached to */
 class LithoTree
 internal constructor(
@@ -37,7 +35,7 @@ internal constructor(
     @field:ThreadConfined(ThreadConfined.ANY) val stateUpdater: StateUpdater,
     @field:ThreadConfined(ThreadConfined.UI) val rootHost: MountedViewReference,
     val errorComponentReceiver: ErrorComponentReceiver,
-    val treeLifecycle: LithoRendererLifecycleProvider,
+    val treeLifecycle: LithoTreeLifecycleProvider,
     internal val uiStateReadRecordsProvider: UiStateReadRecordsProvider,
     val isReadTrackingEnabled: Boolean =
         ComponentsConfiguration.defaultInstance.enableStateReadTracking,
