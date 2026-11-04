@@ -17,17 +17,6 @@
 package com.facebook.litho
 
 /**
- * Defines a single tree prop override. Unlike `Pair<Class<T>, T>` there can be multiple
- * [TreePropValuePair] with the same corresponding class.
- *
- * [TreeProp]'s should be declared separately and then overridden in [TreePropProvider]. If there
- * are no overrides available, then the default value will be used (if any).
- *
- * You can create a Pair with the `to` infix function, e.g. `StringTreeProp to "Hello World!"`.
- */
-typealias TreePropValuePair<T> = Pair<TreeProp<T>, T>
-
-/**
  * A component which provides one or more tree props to the given child hierarchy. A tree prop is a
  * mapping from a type to an instance of that type which is accessible throughout the entire subtree
  * where it's defined.
@@ -62,7 +51,7 @@ inline fun TreePropProvider(
  */
 @Suppress("FunctionName")
 inline fun TreePropProvider(
-    vararg props: TreePropValuePair<*>,
+    vararg props: Pair<TreeProp<*>, *>,
     crossinline component: () -> Component,
 ): KComponent {
   val resolvedComponent = component()
@@ -93,7 +82,7 @@ inline fun NullableTreePropProvider(
  */
 @Suppress("FunctionName")
 inline fun NullableTreePropProvider(
-    vararg props: TreePropValuePair<*>,
+    vararg props: Pair<TreeProp<*>, *>,
     crossinline component: () -> Component?,
 ): KComponent? {
   val resolvedComponent = component() ?: return null
@@ -104,7 +93,7 @@ inline fun NullableTreePropProvider(
 @PublishedApi
 internal class TreePropProviderImpl(
     private val classProps: Array<out Pair<Class<*>, *>>? = null,
-    private val treeProps: Array<out TreePropValuePair<*>>? = null,
+    private val treeProps: Array<out Pair<TreeProp<*>, *>>? = null,
     private val child: Component,
 ) : KComponent() {
   override fun ComponentScope.render(): Component {
