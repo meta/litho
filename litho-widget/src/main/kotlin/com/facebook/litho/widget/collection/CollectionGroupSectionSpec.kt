@@ -86,7 +86,15 @@ object CollectionGroupSectionSpec {
       lastVisibleIndex: Int,
       changesInfo: ChangesInfo,
       globalOffset: Int,
-      @Prop(optional = true) onDataRendered: OnDataRendered?,
+      @Prop(optional = true)
+      onDataRendered:
+          ((
+              isDataChanged: Boolean,
+              isMounted: Boolean,
+              monoTimestampMs: Long,
+              firstVisibleIndex: Int,
+              lastVisibleIndex: Int,
+          ) -> Unit)?,
       @Prop(optional = true) onDataRenderedWithChangesInfo: OnDataRenderedWithChangesInfo?,
   ) {
     onDataRendered?.invoke(

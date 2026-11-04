@@ -18,13 +18,3 @@ package com.facebook.litho.widget.collection
 
 /** Callbacks for [LazyCollection]'s data changes. */
 typealias OnDataBound = () -> Unit
-
-/** Callbacks for [LazyCollection]'s data rendering. */
-typealias OnDataRendered =
-    (
-        isDataChanged: Boolean,
-        isMounted: Boolean,
-        monoTimestampMs: Long,
-        firstVisibleIndex: Int,
-        lastVisibleIndex: Int,
-    ) -> Unit

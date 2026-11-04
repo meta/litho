@@ -90,7 +90,15 @@ inline fun ResourcesScope.LazyList(
     onScrollListener: RecyclerView.OnScrollListener? = null,
     onScrollListeners: List<RecyclerView.OnScrollListener?>? = null,
     lazyCollectionController: LazyCollectionController? = null,
-    noinline onDataRendered: OnDataRendered? = null,
+    noinline onDataRendered:
+        ((
+            isDataChanged: Boolean,
+            isMounted: Boolean,
+            monoTimestampMs: Long,
+            firstVisibleIndex: Int,
+            lastVisibleIndex: Int,
+        ) -> Unit)? =
+        null,
     rangeRatio: Float? = null,
     useBackgroundChangeSets: Boolean = false,
     preAllocationHandler: PreAllocationHandler? =
@@ -230,7 +238,15 @@ inline fun LazyListCompat(
     onScrollListener: RecyclerView.OnScrollListener? = null,
     onScrollListeners: List<RecyclerView.OnScrollListener?>? = null,
     lazyCollectionController: LazyCollectionController? = null,
-    noinline onDataRendered: OnDataRendered? = null,
+    noinline onDataRendered:
+        ((
+            isDataChanged: Boolean,
+            isMounted: Boolean,
+            monoTimestampMs: Long,
+            firstVisibleIndex: Int,
+            lastVisibleIndex: Int,
+        ) -> Unit)? =
+        null,
     rangeRatio: Float? = null,
     useBackgroundChangeSets: Boolean = false,
     preAllocationHandler: PreAllocationHandler? =

@@ -130,7 +130,15 @@ class CollectionRecyclerComponent(
     private val onAfterLayoutListener: OnAfterLayoutListener? = null,
     private val onBeforeLayoutListener: OnBeforeLayoutListener? = null,
     private val onDataBound: OnDataBound? = null,
-    private val onDataRendered: OnDataRendered? = null,
+    private val onDataRendered:
+        ((
+            isDataChanged: Boolean,
+            isMounted: Boolean,
+            monoTimestampMs: Long,
+            firstVisibleIndex: Int,
+            lastVisibleIndex: Int,
+        ) -> Unit)? =
+        null,
     private val onNearEnd: OnNearCallback? = null,
     private val onPullToRefresh: (() -> Unit)? = null,
     private val onScrollListeners: List<RecyclerView.OnScrollListener?>? = null,
@@ -835,7 +843,14 @@ private fun dispatchUpdateCallback(
     lastVisiblePosition: Int,
     isDataChanged: Boolean,
     onDataBound: OnDataBound?,
-    onDataRendered: OnDataRendered?,
+    onDataRendered:
+        ((
+            isDataChanged: Boolean,
+            isMounted: Boolean,
+            monoTimestampMs: Long,
+            firstVisibleIndex: Int,
+            lastVisibleIndex: Int,
+        ) -> Unit)?,
 ) {
   if (isDataChanged) {
     onDataBound?.invoke()
@@ -867,7 +882,14 @@ private class CollectionPrimitiveViewLayoutBehavior(
     private val idComparator: (previousItem: CollectionChild, nextItem: CollectionChild) -> Boolean,
     private val latestCommittedData: LatestCommittedData,
     private val onDataBound: OnDataBound?,
-    private val onDataRendered: OnDataRendered?,
+    private val onDataRendered:
+        ((
+            isDataChanged: Boolean,
+            isMounted: Boolean,
+            monoTimestampMs: Long,
+            firstVisibleIndex: Int,
+            lastVisibleIndex: Int,
+        ) -> Unit)?,
     private val onNearEndCallbackLock: Ref<Boolean>,
     private val preparationManager: CollectionPreparationManager,
     private val stickyHeaderController: NewStickyHeaderController,
@@ -1164,7 +1186,14 @@ private class CollectionPrimitiveViewLayoutBehavior(
         adapter: CollectionPrimitiveViewAdapter,
         layoutInfo: LayoutInfo,
         onDataBound: OnDataBound?,
-        onDataRendered: OnDataRendered?,
+        onDataRendered:
+            ((
+                isDataChanged: Boolean,
+                isMounted: Boolean,
+                monoTimestampMs: Long,
+                firstVisibleIndex: Int,
+                lastVisibleIndex: Int,
+            ) -> Unit)?,
         retryCount: Int,
         orientation: Int,
     ) {

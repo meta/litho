@@ -84,7 +84,15 @@ class LazyCollection(
     private val onScrollListener: RecyclerView.OnScrollListener? = null,
     private val onScrollListeners: List<RecyclerView.OnScrollListener?>? = null,
     private val lazyCollectionController: LazyCollectionController? = null,
-    private val onDataRendered: OnDataRendered? = null,
+    private val onDataRendered:
+        ((
+            isDataChanged: Boolean,
+            isMounted: Boolean,
+            monoTimestampMs: Long,
+            firstVisibleIndex: Int,
+            lastVisibleIndex: Int,
+        ) -> Unit)? =
+        null,
     private val onDataBound: OnDataBound? = null,
     private val alwaysDetectDuplicates: Boolean = false,
     private val isLeftFadingEnabled: Boolean = true,
@@ -184,7 +192,14 @@ class LazyCollection(
           )
         }
 
-    val combinedOnDataRendered: OnDataRendered =
+    val combinedOnDataRendered:
+        (
+            isDataChanged: Boolean,
+            isMounted: Boolean,
+            monoTimestampMs: Long,
+            firstVisibleIndex: Int,
+            lastVisibleIndex: Int,
+        ) -> Unit =
         {
             isDataChanged: Boolean,
             isMounted: Boolean,

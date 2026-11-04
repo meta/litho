@@ -18,7 +18,6 @@ package com.facebook.litho.widget
 
 import com.facebook.litho.ComponentContext
 import com.facebook.litho.widget.collection.OnDataBound
-import com.facebook.litho.widget.collection.OnDataRendered
 
 /**
  * An implementation of [RecyclerBinderUpdateCallback.OperationExecutor] that uses [RecyclerBinder].
@@ -27,7 +26,15 @@ class RecyclerBinderOperationExecutor(
     private val recyclerBinder: RecyclerBinder,
     private val useBackgroundChangeSets: Boolean = false,
     private val onDataBound: OnDataBound? = null,
-    private val onDataRendered: OnDataRendered? = null,
+    private val onDataRendered:
+        ((
+            isDataChanged: Boolean,
+            isMounted: Boolean,
+            monoTimestampMs: Long,
+            firstVisibleIndex: Int,
+            lastVisibleIndex: Int,
+        ) -> Unit)? =
+        null,
 ) : RecyclerBinderUpdateCallback.OperationExecutor {
 
   constructor(recyclerBinder: RecyclerBinder) : this(recyclerBinder, false, null, null)

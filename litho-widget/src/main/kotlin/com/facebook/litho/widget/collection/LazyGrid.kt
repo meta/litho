@@ -76,7 +76,15 @@ inline fun ResourcesScope.LazyGrid(
     onScrollListener: RecyclerView.OnScrollListener? = null,
     onScrollListeners: List<RecyclerView.OnScrollListener?>? = null,
     lazyCollectionController: LazyCollectionController? = null,
-    noinline onDataRendered: OnDataRendered? = null,
+    noinline onDataRendered:
+        ((
+            isDataChanged: Boolean,
+            isMounted: Boolean,
+            monoTimestampMs: Long,
+            firstVisibleIndex: Int,
+            lastVisibleIndex: Int,
+        ) -> Unit)? =
+        null,
     rangeRatio: Float? = null,
     estimatedViewportCount: Int? = null,
     useBackgroundChangeSets: Boolean = false,
@@ -211,7 +219,15 @@ inline fun LazyGridCompat(
     onScrollListener: RecyclerView.OnScrollListener? = null,
     onScrollListeners: List<RecyclerView.OnScrollListener?>? = null,
     lazyCollectionController: LazyCollectionController? = null,
-    noinline onDataRendered: OnDataRendered? = null,
+    noinline onDataRendered:
+        ((
+            isDataChanged: Boolean,
+            isMounted: Boolean,
+            monoTimestampMs: Long,
+            firstVisibleIndex: Int,
+            lastVisibleIndex: Int,
+        ) -> Unit)? =
+        null,
     rangeRatio: Float? = null,
     estimatedViewportCount: Int? = null,
     useBackgroundChangeSets: Boolean = false,
