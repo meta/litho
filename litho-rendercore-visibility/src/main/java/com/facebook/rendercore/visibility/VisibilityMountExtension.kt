@@ -334,12 +334,12 @@ class VisibilityMountExtension<Input : VisibilityExtensionInput> private constru
 
         var hasTransformedRectToProcess = false
         if (transformer != null) {
-          val outRect = extensionState.state.transformerOutputRect.apply { setEmpty() }
-          transformer.getTransformedLocalVisibleRect(
-              extensionState.rootHost,
-              outRect,
-          )
-          transformedLocalVisibleRect = outRect
+          transformedLocalVisibleRect =
+              transformRootHostVisibleRect(
+                  extensionState,
+                  transformer,
+                  extensionState.state.transformerOutputRect,
+              )
           if (extensionState.state.previousTransformedVisibleRect != transformedLocalVisibleRect) {
             //  We can skip processing because the transformed visible rect doesn't change as
             // well.
@@ -376,12 +376,12 @@ class VisibilityMountExtension<Input : VisibilityExtensionInput> private constru
 
       if (extensionState.state.visibilityOutputs.isNotEmpty()) {
         if (transformer != null && transformedLocalVisibleRect == null) {
-          val outRect = extensionState.state.transformerOutputRect.apply { setEmpty() }
-          transformer.getTransformedLocalVisibleRect(
-              extensionState.rootHost,
-              outRect,
-          )
-          transformedLocalVisibleRect = outRect
+          transformedLocalVisibleRect =
+              transformRootHostVisibleRect(
+                  extensionState,
+                  transformer,
+                  extensionState.state.transformerOutputRect,
+              )
         }
 
         val isTracing = RenderCoreSystrace.isTracing()
@@ -768,13 +768,34 @@ class VisibilityMountExtension<Input : VisibilityExtensionInput> private constru
         clearVisibilityItems(extensionState, reason)
       }
       // clearVisibilityItems empties the recorded rect, so record it after: the next pass compares
-      // against it to decide whether it can skip.
+      // against it to decide whether it can skip. Only the tree's outputs and nested trees depend
+      // on that. A tree without outputs computes no transformed rect on a dirty pass, or on one
+      // whose local visible rect changed, so it computes one here only if it hosts nested trees.
       if (
-          transformedLocalVisibleRect != null &&
-              transformer?.shouldRecordTransformedVisibleRectAtEveryPass() == true
+          transformer?.shouldRecordTransformedVisibleRectAtEveryPass() == true &&
+              (state.visibilityOutputs.isNotEmpty() ||
+                  state.renderUnitIdsWhichHostRenderTrees?.isNotEmpty() == true)
       ) {
-        state.previousTransformedVisibleRect.set(transformedLocalVisibleRect)
+        state.previousTransformedVisibleRect.set(
+            transformedLocalVisibleRect
+                ?: transformRootHostVisibleRect(
+                    extensionState,
+                    transformer,
+                    state.transformerOutputRect,
+                ),
+        )
       }
+    }
+
+    /** Runs [transformer] on the root host's visible rect into [outRect], and returns [outRect]. */
+    private fun transformRootHostVisibleRect(
+        extensionState: ExtensionState<VisibilityMountExtensionState>,
+        transformer: VisibilityBoundsTransformer,
+        outRect: Rect,
+    ): Rect {
+      outRect.setEmpty()
+      transformer.getTransformedLocalVisibleRect(extensionState.rootHost, outRect)
+      return outRect
     }
 
     private fun createVisibilityDebugAttributes(
@@ -1032,33 +1053,33 @@ class VisibilityMountExtension<Input : VisibilityExtensionInput> private constru
 
     /**
      * Whether a visibility pass for this tree, given [visibleRect] as its local visible rect, would
-     * end in the extension's own skip: the last pass saw [visibleRect] as both its local and its
-     * transformed rect, and the transformer, run on the root host now, still returns it whole. This
-     * doesn't measure the root host's local visible rect, so the caller must already know it is
-     * [visibleRect]. Only a tree with visibility outputs of its own, under a transformer that
-     * records the transformed rect at every pass, keeps that record current, so any other tree
-     * answers false.
+     * end in the extension's own skip, with the transform leaving the whole rect or none of it: the
+     * last pass saw [visibleRect] as its local rect, the recorded transformed rect is [visibleRect]
+     * or empty, and the transformer, run on the root host now, returns that same rect. This doesn't
+     * measure the root host's local visible rect, so the caller must already know it is
+     * [visibleRect]. Only a transformer that records the transformed rect at every pass keeps that
+     * record current, so a tree under any other transformer answers false. A tree with no outputs
+     * and no nested trees may hold an older record, but nothing it dispatches depends on it.
      */
     @UiThread
     @JvmStatic
-    fun isVisibleRectStillUntransformed(
+    fun isVisibleRectStillWholeOrCovered(
         extensionState: ExtensionState<VisibilityMountExtensionState>,
         visibleRect: Rect,
     ): Boolean {
       val state = extensionState.state
       val transformer = state.visibilityBoundsTransformer ?: return false
-      val wasLastPassUntransformed =
+      val recordedRect = state.previousTransformedVisibleRect
+      val wasLastPassWholeOrCovered =
           transformer.shouldRecordTransformedVisibleRectAtEveryPass() &&
-              state.visibilityOutputs.isNotEmpty() &&
               !visibleRect.isEmpty &&
               state.previousLocalVisibleRect == visibleRect &&
-              state.previousTransformedVisibleRect == visibleRect
-      if (!wasLastPassUntransformed) {
+              (recordedRect == visibleRect || recordedRect.isEmpty)
+      if (!wasLastPassWholeOrCovered) {
         return false
       }
-      val transformedRect = state.skipCheckRect.apply { setEmpty() }
-      transformer.getTransformedLocalVisibleRect(extensionState.rootHost, transformedRect)
-      return transformedRect == visibleRect
+      return transformRootHostVisibleRect(extensionState, transformer, state.skipCheckRect) ==
+          recordedRect
     }
 
     private fun getRootHost(extensionState: ExtensionState<VisibilityMountExtensionState>): Host? {

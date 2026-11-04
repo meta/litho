@@ -76,7 +76,7 @@ import com.facebook.rendercore.visibility.InvisibleEvent
 import com.facebook.rendercore.visibility.UnfocusedVisibleEvent
 import com.facebook.rendercore.visibility.VisibilityChangeReason
 import com.facebook.rendercore.visibility.VisibilityExtensionConfigs
-import com.facebook.rendercore.visibility.VisibilityMountExtension.Companion.isVisibleRectStillUntransformed
+import com.facebook.rendercore.visibility.VisibilityMountExtension.Companion.isVisibleRectStillWholeOrCovered
 import com.facebook.rendercore.visibility.VisibilityMountExtension.VisibilityMountExtensionState
 import com.facebook.rendercore.visibility.VisibilityOutput
 import com.facebook.rendercore.visibility.VisibilityUtils.dispatchOnFocused
@@ -114,10 +114,16 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
 
   /**
    * Whether the pass that set [previousMountBounds] also processed visibility, and the extensions
-   * still hold what it found. [isFullyShownAndMounted] and [isTransformerNoOp] read it: full bounds
-   * alone don't show that `onVisible` was dispatched for them.
+   * still hold what it found. [isFullyShownAndMounted] and [isTransformStillWholeOrCovered] read
+   * it: full bounds alone don't show that `onVisible` was dispatched for them.
    */
   private var isVisibilityProcessedForMountBounds = false
+
+  /**
+   * The bounds of the mounted tree's nested trees, united, in this view's coordinates. Only a view
+   * whose transformer records at every pass keeps them, for [isTransformStillWholeOrCovered].
+   */
+  private val nestedTreeBounds = Rect()
 
   @get:VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
   val mountDelegateTarget: MountDelegateTarget
@@ -595,6 +601,7 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
         layoutState.setShouldProcessVisibilityOutputs(shouldProcessVisibilityEvents)
 
         coordinator.beforeMount(layoutState, visibleRect)
+        updateNestedTreeBounds(layoutState)
 
         mountState.mount(renderTree, dirtyBinders, reason)
         incrementComponentMountCount()
@@ -1384,7 +1391,7 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
             previousRect.bottom <= parentHeight &&
             previousRect.width() == width &&
             previousRect.height() == height &&
-            isTransformerNoOp()
+            isTransformStillWholeOrCovered()
     ) {
       // View is fully visible, and has already been completely mounted.
       return
@@ -1411,20 +1418,43 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
   }
 
   /**
-   * Whether the visibility bounds transformer, if any, would leave this view's visible rect
-   * unchanged where the view is now, so the view can take the same early return as a view without
-   * one. A transformer can change the visible rect without the view moving, so this also needs the
-   * last pass to have processed the whole view untransformed. The extension checks the record flag
-   * and the recorded rects before it runs the transform, so the transform never runs here for a
-   * transformer that doesn't record at every pass.
+   * Whether the visibility bounds transformer, if any, still leaves all of this view visible or
+   * none of it, as the extension recorded, after a last pass that processed the whole view. The
+   * view can then take the same early return as a view without a transformer. Its nested trees are
+   * left whole or covered with it only while they lie inside it: a parent that doesn't clip its
+   * children shows what lies outside. So a view whose layout places a nested tree outside itself
+   * never skips. For a transformer that doesn't record at every pass, the extension answers false
+   * without running the transform.
    */
-  private fun isTransformerNoOp(): Boolean {
+  private fun isTransformStillWholeOrCovered(): Boolean {
     if (configuration?.visibilityBoundsTransformer == null) {
       return true
     }
     val extensionState = lithoHostListenerCoordinator?.visibilityExtensionState ?: return false
     return isVisibilityProcessedForMountBounds &&
-        isVisibleRectStillUntransformed(extensionState, previousMountBounds)
+        previousMountBounds.contains(nestedTreeBounds) &&
+        isVisibleRectStillWholeOrCovered(extensionState, previousMountBounds)
+  }
+
+  /** Unites the bounds of [layoutState]'s nested trees into [nestedTreeBounds]. */
+  private fun updateNestedTreeBounds(layoutState: LayoutState) {
+    if (
+        configuration
+            ?.visibilityBoundsTransformer
+            ?.shouldRecordTransformedVisibleRectAtEveryPass() != true
+    ) {
+      return
+    }
+    nestedTreeBounds.setEmpty()
+    layoutState.renderUnitIdsWhichHostRenderTrees?.forEach { id ->
+      val node = layoutState.getMountableOutputAt(layoutState.getPositionForId(id))
+      nestedTreeBounds.union(
+          node.absoluteX,
+          node.absoluteY,
+          node.absoluteX + node.bounds.width(),
+          node.absoluteY + node.bounds.height(),
+      )
+    }
   }
 
   val visibilityExtensionState: VisibilityMountExtensionState?

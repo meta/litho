@@ -52,20 +52,25 @@ interface VisibilityBoundsTransformer {
    * as visible. Return true to avoid this. The first unchanged pass after a mount then skips too,
    * as it does with no transformer.
    *
-   * A tree with no visibility outputs of its own computes no transformed rect on a pass whose local
-   * visible rect changed, so it records nothing then, even when it hosts nested trees, and those
-   * nested trees can still miss the pass that hides them.
+   * A tree records it if it has visibility outputs of its own or hosts nested trees. Only they read
+   * it, so a tree with neither may keep an older rect, which changes only whether it skips.
    *
    * True also lets a fully visible, mounted host that moves by an offset or translation skip its
-   * pass, as a host with no transformer can. The skip needs true, because only true keeps the
-   * recorded transformed rect current. BaseMountingView skips only when the host's tree has
-   * visibility outputs of its own, the last pass recorded the whole host as both its local and its
-   * transformed rect, and [getTransformedLocalVisibleRect] still returns the whole host. That call
-   * then runs for each such host on every scroll step, so it must not allocate. Like the skip with
-   * no transformer, the skip checks the host only against its parent's bounds. So it can miss the
-   * parent's padding or clip bounds, clipping by an ancestor above the parent, and a scale or
-   * rotation, unless the transform clips the host as [View.getGlobalVisibleRect] does. A skipped
-   * step also skips incremental mount, so nested trees don't get that step.
+   * pass, as a host with no transformer can; only true keeps the recorded rect current.
+   * BaseMountingView skips only when the last pass saw the whole host as its local rect, the
+   * recorded transformed rect is the whole host or empty, and [getTransformedLocalVisibleRect]
+   * still returns that rect. That call then runs for each such host on every scroll step, so it
+   * must not allocate. A skipped step also skips incremental mount and the nested trees' passes. A
+   * host whose layout places a nested tree outside it never skips: a parent that doesn't clip its
+   * children shows that part.
+   *
+   * The skip makes the assumptions of the skip with no transformer. It checks the host only against
+   * its parent's bounds, so it can miss the parent's padding or clip bounds, clipping by an
+   * ancestor above the parent, and a scale or rotation, unless the transform clips the host as
+   * [View.getGlobalVisibleRect] does and leaves it whole. A transform that leaves the host whole
+   * must leave the nested trees inside it whole, and one that covers the host must cover them. The
+   * skip reads only the host's own layout, so a nested tree must keep its own nested trees inside
+   * it, and no translation may move a nested tree out of its host.
    */
   fun shouldRecordTransformedVisibleRectAtEveryPass(): Boolean = false
 }

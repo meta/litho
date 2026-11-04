@@ -29,7 +29,12 @@ import android.widget.ListView
 import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.config.UnmountOnDetach
 import com.facebook.litho.core.height
+import com.facebook.litho.core.margin
 import com.facebook.litho.core.width
+import com.facebook.litho.flexbox.flex
+import com.facebook.litho.flexbox.position
+import com.facebook.litho.flexbox.positionType
+import com.facebook.litho.layout.flexbox.Column
 import com.facebook.litho.testing.testrunner.LithoTestRunner
 import com.facebook.litho.visibility.onInvisible
 import com.facebook.litho.visibility.onVisible
@@ -41,6 +46,7 @@ import com.facebook.rendercore.extensions.VisibleBoundsCallbacks
 import com.facebook.rendercore.px
 import com.facebook.rendercore.visibility.VisibilityBoundsTransformer
 import com.facebook.rendercore.visibility.VisibilityOutput
+import com.facebook.yoga.YogaPositionType
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -115,7 +121,7 @@ class BaseMountingViewSkipFullyMountedTest {
 
   @Test
   fun `skips a moved view that its transformer leaves unchanged`() {
-    val transformer = UnchangedBoundsTransformer(recordsAtEveryPass = true)
+    val transformer = CuttingBoundsTransformer()
     val lithoView = showInRow(skip = false, transformer = transformer)
     val passes = countPasses(lithoView)
 
@@ -125,8 +131,79 @@ class BaseMountingViewSkipFullyMountedTest {
   }
 
   @Test
+  fun `skips a moved view that its transformer covers, with a nested tree inside it`() {
+    val transformer = CuttingBoundsTransformer().apply { cutBottomPx = 0 }
+    val lithoView = showInRow(skip = false, transformer = transformer, root = hostingNestedTree())
+    val passes = countPasses(lithoView)
+
+    lithoView.offsetTopAndBottom(VIEW_SIZE / 2)
+
+    assertThat(passes.count).isEqualTo(0)
+  }
+
+  @Test
+  fun `mounts a moved view whose layout places a nested tree outside it`() {
+    val absolute = Style.positionType(YogaPositionType.ABSOLUTE)
+    val towardStart = -1
+    val towardEnd = 1
+    val placements = mapOf(
+        "margin above" to Style.margin(top = towardStart.px),
+        "margin below" to Style.margin(top = towardEnd.px),
+        "margin before the start" to Style.margin(start = towardStart.px),
+        "margin past the end" to Style.margin(start = towardEnd.px),
+        "absolute above" to absolute.position(top = towardStart.px),
+        "absolute below" to absolute.position(top = towardEnd.px),
+        "absolute before the start" to absolute.position(start = towardStart.px),
+        "absolute past the end" to absolute.position(start = towardEnd.px),
+    )
+    for ((name, placement) in placements) {
+      val transformer = CuttingBoundsTransformer()
+      val lithoView =
+          showInRow(skip = false, transformer = transformer, root = hostingNestedTree(placement))
+      val passes = countPasses(lithoView)
+
+      lithoView.offsetTopAndBottom(VIEW_SIZE / 2)
+
+      assertThat(passes.count).describedAs(name).isEqualTo(1)
+    }
+  }
+
+  @Test
+  fun `mounts a moved view that its transformer leaves partly visible`() {
+    val transformer = CuttingBoundsTransformer().apply { cutBottomPx = VIEW_SIZE / 2 }
+    val lithoView = showInRow(skip = false, transformer = transformer)
+    val passes = countPasses(lithoView)
+
+    lithoView.offsetTopAndBottom(VIEW_SIZE / 2)
+
+    assertThat(passes.count).isEqualTo(1)
+  }
+
+  @Test
+  fun `doesn't record the transformed rect of a view that hosts a nested tree for a transformer that doesn't ask`() {
+    val transformer = CuttingBoundsTransformer(recordsAtEveryPass = false)
+    val lithoView = showInRow(skip = false, transformer = transformer, root = hostingNestedTree())
+    transformer.transforms = 0
+
+    lithoView.offsetTopAndBottom(ROW_HEIGHT - VIEW_SIZE / 2)
+
+    assertThat(transformer.transforms).isEqualTo(0)
+  }
+
+  @Test
+  fun `doesn't record the transformed rect of a view without outputs or nested trees`() {
+    val transformer = CuttingBoundsTransformer()
+    val lithoView = showInRow(skip = false, transformer = transformer, root = blank())
+    transformer.transforms = 0
+
+    lithoView.offsetTopAndBottom(ROW_HEIGHT - VIEW_SIZE / 2)
+
+    assertThat(transformer.transforms).isEqualTo(0)
+  }
+
+  @Test
   fun `mounts a moved view whose transformer doesn't record at every pass`() {
-    val transformer = UnchangedBoundsTransformer(recordsAtEveryPass = false)
+    val transformer = CuttingBoundsTransformer(recordsAtEveryPass = false)
     val lithoView = showInRow(skip = false, transformer = transformer)
     // This unchanged pass records the whole rect, so only recordsAtEveryPass stops the skip.
     lithoView.notifyVisibleBoundsChanged(VisibilityChangeReason.SCROLL)
@@ -157,6 +234,19 @@ class BaseMountingViewSkipFullyMountedTest {
     lithoView.unbind()
     lithoView.rebind()
     lithoView.notifyVisibleBoundsChanged(VisibilityChangeReason.SCROLL)
+
+    assertThat(invisible).isEqualTo(1)
+    assertThat(visible).isEqualTo(2)
+  }
+
+  @Test
+  fun `dispatches visible again after unbind and rebind under a transformer that records at every pass`() {
+    val lithoView = showInRow(skip = false, transformer = CuttingBoundsTransformer())
+    assertThat(visible).isEqualTo(1)
+
+    lithoView.unbind()
+    lithoView.rebind()
+    lithoView.offsetTopAndBottom(VIEW_SIZE / 2)
 
     assertThat(invisible).isEqualTo(1)
     assertThat(visible).isEqualTo(2)
@@ -221,8 +311,9 @@ class BaseMountingViewSkipFullyMountedTest {
       skip: Boolean,
       transformer: VisibilityBoundsTransformer? = null,
       unmountOnDetach: UnmountOnDetach = UnmountOnDetach.Never,
+      root: Component = VisibilityCounting(),
   ): LithoView {
-    val lithoView = createLithoView(skip, transformer, unmountOnDetach)
+    val lithoView = createLithoView(skip, transformer, unmountOnDetach, root)
     val row =
         FrameLayout(activity).apply {
           addView(lithoView, FrameLayout.LayoutParams(VIEW_SIZE, VIEW_SIZE))
@@ -240,6 +331,7 @@ class BaseMountingViewSkipFullyMountedTest {
       skip: Boolean,
       transformer: VisibilityBoundsTransformer?,
       unmountOnDetach: UnmountOnDetach = UnmountOnDetach.Never,
+      root: Component = VisibilityCounting(),
   ): LithoView {
     val config =
         ComponentsConfiguration.defaultInstance.copy(
@@ -249,7 +341,7 @@ class BaseMountingViewSkipFullyMountedTest {
         )
     return LithoView(activity).apply {
       componentTree =
-          ComponentTree.create(ComponentContext(activity), VisibilityCounting())
+          ComponentTree.create(ComponentContext(activity), root)
               .componentsConfiguration(config)
               .build()
     }
@@ -280,12 +372,22 @@ class BaseMountingViewSkipFullyMountedTest {
     }
   }
 
-  /** Leaves every visible rect as it is. */
-  private class UnchangedBoundsTransformer(private val recordsAtEveryPass: Boolean) :
+  /** Cuts every visible rect at [cutBottomPx], in the host's own coordinates, when it is set. */
+  private class CuttingBoundsTransformer(private val recordsAtEveryPass: Boolean = true) :
       VisibilityBoundsTransformer {
+    var cutBottomPx: Int? = null
+    var transforms = 0
+
     override fun getTransformedLocalVisibleRect(host: ViewGroup, outRect: Rect) {
+      transforms++
+      val cutBottomPx = cutBottomPx
       if (!host.getLocalVisibleRect(outRect)) {
         outRect.setEmpty()
+      } else if (cutBottomPx != null) {
+        outRect.bottom = minOf(outRect.bottom, cutBottomPx)
+        if (outRect.isEmpty) {
+          outRect.setEmpty()
+        }
       }
     }
 
@@ -297,6 +399,22 @@ class BaseMountingViewSkipFullyMountedTest {
 
     override fun shouldRecordTransformedVisibleRectAtEveryPass(): Boolean = recordsAtEveryPass
   }
+
+  /** A view with no visibility outputs. */
+  private fun blank(): Component =
+      SolidColor(Color.BLACK, style = Style.width(VIEW_SIZE.px).height(VIEW_SIZE.px))
+
+  /** A view with no visibility outputs that hosts a nested tree, moved by [placement]. */
+  private fun hostingNestedTree(placement: Style = Style): Component =
+      Column(style = Style.width(VIEW_SIZE.px).height(VIEW_SIZE.px)) {
+        child(
+            TestVerticalScrollPrimitiveComponent(
+                child = { blank() },
+                style =
+                    Style.width(VIEW_SIZE.px).height(VIEW_SIZE.px).flex(shrink = 0f) + placement,
+            ),
+        )
+      }
 
   private inner class VisibilityCounting : KComponent() {
     override fun ComponentScope.render(): Component = SolidColor(
