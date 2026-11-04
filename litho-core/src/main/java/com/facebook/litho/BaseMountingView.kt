@@ -467,8 +467,11 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
     previousMountBounds.setEmpty()
   }
 
-  /** Deprecated: Consider subscribing the BaseMountingView to a LithoLifecycleOwner instead. */
-  @Deprecated("")
+  /**
+   * Deprecated: Consider subscribing the ComponentTree to a [LithoVisibilityEventsController]
+   * instead.
+   */
+  @Deprecated("Subscribe the ComponentTree to a LithoVisibilityEventsController instead.")
   fun unmountAllItems() {
     mountState.unmountAllItems()
     lithoHostListenerCoordinator = null
@@ -1114,7 +1117,8 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
   }
 
   /**
-   * Deprecated: Consider subscribing the LithoView to a LithoLifecycleOwner instead.
+   * Deprecated: Consider subscribing the ComponentTree to a [LithoVisibilityEventsController]
+   * instead.
    *
    * Call this to tell the LithoView whether it is visible or not. In general, you shouldn't require
    * this as the system will do this for you. However, when a new activity/fragment is added on top
@@ -1128,19 +1132,19 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
    * @param isVisible if true, this will find the current visible rect and process visibility
    *   outputs using it. If false, any invisible and unfocused events will be called.
    */
-  @Deprecated("")
+  @Deprecated("Subscribe the ComponentTree to a LithoVisibilityEventsController instead.")
   open fun setVisibilityHint(isVisible: Boolean) {
     setVisibilityHintInternal(isVisible, true, VisibilityChangeReason.VISIBILITY_HINT)
   }
 
   /**
-   * Marked as @Deprecated. [.setVisibilityHint] should be used instead, which by default does not
-   * process new mount events while the visibility hint is set to false (skipMountingIfNotVisible
-   * should be set to true). This method should only be used to maintain the contract with the
-   * usages of setVisibilityHint before `skipMountingIfNotVisible` was made to default to true. All
-   * usages should be audited and migrated to [ ][.setVisibilityHint].
+   * Deprecated: Consider subscribing the ComponentTree to a [LithoVisibilityEventsController]
+   * instead.
+   *
+   * This method only maintains the contract with usages of setVisibilityHint from before
+   * `skipMountingIfNotVisible` defaulted to true.
    */
-  @Deprecated("")
+  @Deprecated("Subscribe the ComponentTree to a LithoVisibilityEventsController instead.")
   open fun setVisibilityHint(isVisible: Boolean, skipMountingIfNotVisible: Boolean) {
     if (this.skipMountingIfNotVisible) {
       setVisibilityHint(isVisible)

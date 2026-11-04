@@ -593,8 +593,10 @@ constructor(
   override val isVisibilityProcessingEnabled: Boolean
     get() = (_componentTree?.isVisibilityProcessingEnabled() == true)
 
-  /** Deprecated: Consider subscribing the LithoView to a VisibilityEventsController instead. */
-  @Deprecated("")
+  /**
+   * Deprecated: Consider subscribing the LithoView to a [LithoVisibilityEventsController] instead.
+   */
+  @Deprecated("Subscribe the LithoView to a LithoVisibilityEventsController instead.")
   fun release() {
     ThreadUtils.assertMainThread()
     if (componentTreeHasVisibilityEventsController()) {
