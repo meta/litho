@@ -17,7 +17,7 @@
 package com.facebook.litho.widget
 
 /** An interface for generating traversing order for a range. */
-interface RecyclerRangeTraverser {
+fun interface RecyclerRangeTraverser {
 
   /**
    * Traverse the given range.
