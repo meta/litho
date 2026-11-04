@@ -17,6 +17,7 @@
 package com.facebook.litho.core
 
 import androidx.annotation.AttrRes
+import androidx.annotation.FloatRange
 import androidx.annotation.StyleRes
 import com.facebook.kotlin.compilerplugins.dataclassgenerate.annotation.DataClassGenerate
 import com.facebook.litho.CommonProps
@@ -238,11 +239,11 @@ fun Style.heightAuto(): Style = this + CoreDimenStyleItem(CoreDimenField.HEIGHT_
 fun Style.size(size: Dimen): Style = width(size).height(size)
 
 /** Sets a specific preferred percent width for this component when its parent lays it out. */
-fun Style.widthPercent(widthPercent: Float): Style =
+fun Style.widthPercent(@FloatRange(from = 0.0) widthPercent: Float): Style =
     this + CoreFloatStyleItem(CoreFloatField.WIDTH_PERCENT, widthPercent)
 
 /** Sets a specific preferred percent height for this component when its parent lays it out. */
-fun Style.heightPercent(heightPercent: Float): Style =
+fun Style.heightPercent(@FloatRange(from = 0.0) heightPercent: Float): Style =
     this + CoreFloatStyleItem(CoreFloatField.HEIGHT_PERCENT, heightPercent)
 
 /** Sets a preferred minimum width for this component when its parent lays it out. */
@@ -268,19 +269,19 @@ fun Style.maxHeight(maxHeight: Dimen): Style =
 fun Style.heightIn(min: Dimen, max: Dimen): Style = minHeight(min).maxHeight(max)
 
 /** Sets a specific minimum percent width for this component when its parent lays it out. */
-fun Style.minWidthPercent(minWidthPercent: Float): Style =
+fun Style.minWidthPercent(@FloatRange(from = 0.0) minWidthPercent: Float): Style =
     this + CoreFloatStyleItem(CoreFloatField.MIN_WIDTH_PERCENT, minWidthPercent)
 
 /** Sets a specific maximum percent width for this component when its parent lays it out. */
-fun Style.maxWidthPercent(maxWidthPercent: Float): Style =
+fun Style.maxWidthPercent(@FloatRange(from = 0.0) maxWidthPercent: Float): Style =
     this + CoreFloatStyleItem(CoreFloatField.MAX_WIDTH_PERCENT, maxWidthPercent)
 
 /** Sets a specific minimum percent height for this component when its parent lays it out. */
-fun Style.minHeightPercent(minHeightPercent: Float): Style =
+fun Style.minHeightPercent(@FloatRange(from = 0.0) minHeightPercent: Float): Style =
     this + CoreFloatStyleItem(CoreFloatField.MIN_HEIGHT_PERCENT, minHeightPercent)
 
 /** Sets a specific maximum percent height for this component when its parent lays it out. */
-fun Style.maxHeightPercent(maxHeightPercent: Float): Style =
+fun Style.maxHeightPercent(@FloatRange(from = 0.0) maxHeightPercent: Float): Style =
     this + CoreFloatStyleItem(CoreFloatField.MAX_HEIGHT_PERCENT, maxHeightPercent)
 
 /** Defines padding on the component on a per-edge basis. */
@@ -307,21 +308,21 @@ fun Style.padding(
         right?.let { CoreDimenStyleItem(CoreDimenField.PADDING_RIGHT, it) }
 
 /**
- * Defines padding on the component on a per-edge basis, with a percent value of container's size.
- * See
+ * Defines padding on the component on a per-edge basis as a nonnegative percentage of the
+ * container's width. Values greater than 100 are allowed. Null leaves an edge unspecified. See
  * [https://www.yogalayout.dev/docs/styling/margin-padding-border](https://www.yogalayout.dev/docs/styling/margin-padding-border)
  * for more information.
  */
 fun Style.paddingPercent(
-    all: Float? = null,
-    horizontal: Float? = null,
-    vertical: Float? = null,
-    start: Float? = null,
-    top: Float? = null,
-    end: Float? = null,
-    bottom: Float? = null,
-    left: Float? = null,
-    right: Float? = null,
+    @FloatRange(from = 0.0) all: Float? = null,
+    @FloatRange(from = 0.0) horizontal: Float? = null,
+    @FloatRange(from = 0.0) vertical: Float? = null,
+    @FloatRange(from = 0.0) start: Float? = null,
+    @FloatRange(from = 0.0) top: Float? = null,
+    @FloatRange(from = 0.0) end: Float? = null,
+    @FloatRange(from = 0.0) bottom: Float? = null,
+    @FloatRange(from = 0.0) left: Float? = null,
+    @FloatRange(from = 0.0) right: Float? = null,
 ): Style =
     this +
         all?.let { CoreFloatStyleItem(CoreFloatField.PADDING_ALL_PERCENT, it) } +
@@ -358,8 +359,8 @@ fun Style.margin(
         right?.let { CoreDimenStyleItem(CoreDimenField.MARGIN_RIGHT, it) }
 
 /**
- * Defines margin around the component on a per-edge basis, with a percent value of container's
- * size. See
+ * Defines margin around the component on a per-edge basis as a percentage of the container's width.
+ * Negative values and values greater than 100 are allowed. Null leaves an edge unspecified. See
  * [https://www.yogalayout.dev/docs/styling/margin-padding-border](https://www.yogalayout.dev/docs/styling/margin-padding-border)
  * for more information.
  */

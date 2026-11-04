@@ -1455,7 +1455,7 @@ public abstract class Component implements Cloneable, Equivalence<Component>, At
     }
 
     /**
-     * @param percent a value between 0 and 100.
+     * @param percent a nonnegative percentage. Values greater than 100 are allowed.
      * @see #flexBasisPx
      */
     public T flexBasisPercent(float percent) {
@@ -1651,7 +1651,7 @@ public abstract class Component implements Cloneable, Equivalence<Component>, At
      * parent has unspecified height (e.g. it is a RecyclerView), then setting this will have no
      * effect.
      *
-     * @param percent a value between 0 and 100.
+     * @param percent a nonnegative percentage. Values greater than 100 are allowed.
      * @see #heightPx
      */
     public T heightPercent(float percent) {
@@ -1776,7 +1776,7 @@ public abstract class Component implements Cloneable, Equivalence<Component>, At
     }
 
     /**
-     * @param percent a value between 0 and 100.
+     * @param percent a percentage. Negative values and values greater than 100 are allowed.
      * @see #marginPx
      */
     public T marginPercent(YogaEdge edge, float percent) {
@@ -1824,7 +1824,7 @@ public abstract class Component implements Cloneable, Equivalence<Component>, At
     }
 
     /**
-     * @param percent a value between 0 and 100.
+     * @param percent a nonnegative percentage. Values greater than 100 are allowed.
      * @see #minWidthPx
      */
     public T maxHeightPercent(float percent) {
@@ -1869,7 +1869,7 @@ public abstract class Component implements Cloneable, Equivalence<Component>, At
     }
 
     /**
-     * @param percent a value between 0 and 100.
+     * @param percent a nonnegative percentage. Values greater than 100 are allowed.
      * @see #minWidthPx
      */
     public T maxWidthPercent(float percent) {
@@ -1914,7 +1914,7 @@ public abstract class Component implements Cloneable, Equivalence<Component>, At
     }
 
     /**
-     * @param percent a value between 0 and 100.
+     * @param percent a nonnegative percentage. Values greater than 100 are allowed.
      * @see #minWidthPx
      */
     public T minHeightPercent(float percent) {
@@ -1959,7 +1959,7 @@ public abstract class Component implements Cloneable, Equivalence<Component>, At
     }
 
     /**
-     * @param percent a value between 0 and 100.
+     * @param percent a nonnegative percentage. Values greater than 100 are allowed.
      * @see #minWidthPx
      */
     public T minWidthPercent(float percent) {
@@ -2051,7 +2051,7 @@ public abstract class Component implements Cloneable, Equivalence<Component>, At
     }
 
     /**
-     * @param percent a value between 0 and 100.
+     * @param percent a nonnegative percentage. Values greater than 100 are allowed.
      * @see #paddingPx
      */
     public T paddingPercent(YogaEdge edge, float percent) {
@@ -2107,7 +2107,7 @@ public abstract class Component implements Cloneable, Equivalence<Component>, At
     }
 
     /**
-     * @param percent a value between 0 and 100.
+     * @param percent a percentage. Negative values and values greater than 100 are allowed.
      * @see #positionPx
      */
     public T positionPercent(YogaEdge edge, float percent) {
@@ -2533,7 +2533,7 @@ public abstract class Component implements Cloneable, Equivalence<Component>, At
      * Sets the width of the Component to be a percentage of its parent's width. Note that if the
      * parent has unspecified width (e.g. it is an HScroll), then setting this will have no effect.
      *
-     * @param percent a value between 0 and 100.
+     * @param percent a nonnegative percentage. Values greater than 100 are allowed.
      * @see #widthPx
      */
     public T widthPercent(float percent) {

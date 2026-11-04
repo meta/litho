@@ -19,6 +19,7 @@ package com.facebook.litho.flexbox
 import android.graphics.Path
 import android.graphics.PathDashPathEffect
 import androidx.annotation.ColorInt
+import androidx.annotation.FloatRange
 import com.facebook.kotlin.compilerplugins.dataclassgenerate.annotation.DataClassGenerate
 import com.facebook.litho.Border
 import com.facebook.litho.CommonProps
@@ -188,7 +189,7 @@ internal data class FlexboxObjectStyleItem(
  * omitted, the measured size of the content (or the width/height styles) will be used instead.
  *
  * **flex-basis-percent**: see **flex-basis**. Defines the default size as a percentage of its
- * parent's size. Values should be from 0 to 100.
+ * parent's size. Values must be nonnegative and may be greater than 100.
  * - See https://css-tricks.com/snippets/css/a-guide-to-flexbox/ for more documentation on flexbox
  *   properties.
  * - See https://yogalayout.dev/ for a web-based playground for trying out flexbox layouts.
@@ -199,7 +200,7 @@ fun Style.flex(
     grow: Float? = null,
     shrink: Float? = null,
     basis: Dimen? = null,
-    basisPercent: Float? = null,
+    @FloatRange(from = 0.0) basisPercent: Float? = null,
 ): Style =
     this +
         grow?.let { FloatStyleItem(FlexboxFloatField.FLEX_GROW, it) } +
@@ -264,7 +265,8 @@ fun Style.position(
 
 /**
  * Used in conjunction with [positionType] to define how a component should be positioned in its
- * parent, with a float value between 0 and 100.
+ * parent, with percentages of the containing block's size. Negative values and values greater than
+ * 100 are allowed. Null leaves an edge unspecified.
  */
 fun Style.positionPercent(
     all: Float? = null,

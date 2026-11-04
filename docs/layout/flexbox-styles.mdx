@@ -39,7 +39,7 @@ Flex allows you to define how this component should take up space within its par
 
 - **basis**: Defines the default size of the component before extra space is distributed. If omitted, the measured size of the content (or the width/height styles) will be used instead.
 
-- **basis-percent**: See flex-basis. Defines the default size as a percentage of its parent's size. Values should be from 0 to 100.
+- **basis-percent**: See flex-basis. Defines the default size as a percentage of its parent's size. Values must be nonnegative and may exceed 100.
 
 **Defaults**: `flex-grow = 0, flex-shrink = 1, flex-basis = null, flex-basis-percent = null`
 
@@ -293,7 +293,7 @@ MyComponent(
 
 ## Position Percent
 
-Used in conjunction with `positionType` to define how a component should be positioned in its parent, with a float value between 0 and 100.
+Used in conjunction with `positionType` to define how a component should be positioned in its parent, with percentages of the containing block's size. Negative values and values greater than 100 are allowed. Omitted (`null`) values leave an edge unspecified.
 
 ### All edges
 

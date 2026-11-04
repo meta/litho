@@ -12,6 +12,8 @@ keywords:
 
 Layout Styles expose the basic layout properties that control the sizing, spacing, and positioning of components as Litho `Style` APIs. Use the following APIs to specify the size, and spacing of components.
 
+Percentage sizes, including minimum and maximum sizes, must be nonnegative and can exceed 100%. For example, `150f` specifies 150% of the parent's corresponding dimension.
+
 ## Width
 
 Sets a specific preferred width for this component when its parent lays it out.
@@ -26,7 +28,7 @@ MyComponent(style = Style.width(200.dp))
 
 ### Width Percent
 
-Sets a specific preferred percent width for this component when its parent lays it out. The percentage is a value from **0 to 100** (e.g., `50f` = 50% of parent width).
+Sets a specific preferred percent width for this component when its parent lays it out. The percentage must be **nonnegative** and may exceed **100** (e.g., `50f` = 50% of parent width).
 
 ```kotlin
 import com.facebook.litho.Style
@@ -60,7 +62,7 @@ MyComponent(style = Style.height(100.dp))
 
 ### Height Percent
 
-Sets a specific preferred percent height for this component when its parent lays it out. The percentage is a value from **0 to 100** (e.g., `25f` = 25% of parent height).
+Sets a specific preferred percent height for this component when its parent lays it out. The percentage must be **nonnegative** and may exceed **100** (e.g., `25f` = 25% of parent height).
 
 ```kotlin
 import com.facebook.litho.Style
@@ -275,7 +277,7 @@ MyComponent(
 
 ## Padding Percent
 
-Defines padding on the component on a per-edge basis, with a percent value of container's size.
+Defines padding on the component on a per-edge basis as a nonnegative percentage of the container's width, including for top and bottom padding. Values greater than 100 are allowed. Omitted (`null`) values leave an edge unspecified.
 
 ### All edges
 
@@ -360,7 +362,7 @@ MyComponent(
 
 ## Margin Percent
 
-Defines margin around the component on a per-edge basis, with a percent value of container's size.
+Defines margin around the component on a per-edge basis as a percentage of the container's width, including for top and bottom margins. Negative values and values greater than 100 are allowed. Omitted (`null`) values leave an edge unspecified.
 
 ### All edges
 
