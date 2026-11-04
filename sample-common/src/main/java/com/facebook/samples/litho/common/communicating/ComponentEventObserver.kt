@@ -21,7 +21,7 @@ package com.facebook.samples.litho.common.communicating
  * listeners (e.g., Activities).
  */
 // start_define_observer_interface
-interface ComponentEventObserver {
+fun interface ComponentEventObserver {
   fun onComponentClicked()
 }
 // end_define_observer_interface
