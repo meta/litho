@@ -559,6 +559,7 @@ class TransitionManager(
     return transitionSet.createAnimation(createdAnimations)
   }
 
+  @Suppress("SENSELESS_COMPARISON", "UNCHECKED_CAST")
   private fun createAnimationsForTransitionUnit(transition: TransitionUnit): AnimationBinding? {
     val animationTarget = transition.animationTarget
     val createdAnimations = ArrayList<AnimationBinding>()
@@ -661,6 +662,7 @@ class TransitionManager(
     }
   }
 
+  @Suppress("UNCHECKED_CAST")
   private fun createAnimationsForTransitionUnit(
       transition: TransitionUnit,
       transitionId: TransitionId?,

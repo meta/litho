@@ -152,6 +152,7 @@ abstract class Transition {
       return transitionAnimator.createAnimation(propertyAnimation)
     }
 
+    @Suppress("REDUNDANT_ELSE_IN_WHEN", "UNCHECKED_CAST")
     fun targets(transitionId: TransitionId): Boolean {
       val targetType = animationTarget.componentTarget.componentTargetType
       if (targetType == ComponentTargetType.ALL || targetType == ComponentTargetType.AUTO_LAYOUT) {
@@ -201,6 +202,7 @@ abstract class Transition {
       }
     }
 
+    @Suppress("REDUNDANT_ELSE_IN_WHEN", "UNCHECKED_CAST")
     fun targetsProperty(property: AnimatedProperty?): Boolean {
       when (animationTarget.propertyTarget.propertyTargetType) {
         PropertyTargetType.AUTO_LAYOUT -> {
