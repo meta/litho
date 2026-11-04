@@ -43,6 +43,7 @@ internal class LithoResolveTreeFuture(
         previousResult,
         DESCRIPTION,
         this,
+        discardCallbacks,
     )
   }
 
@@ -93,6 +94,7 @@ internal class LithoLayoutTreeFuture(
         previousLayoutState,
         previousLayoutState?.diffTree,
         this,
+        discardCallbacks,
     )
   }
 

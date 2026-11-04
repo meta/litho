@@ -123,6 +123,17 @@ internal constructor(
   val attachables: List<Attachable>?
     get() = reductionState.attachables
 
+  /** The [useResolveEffect]s of the trees resolved while laying this out. */
+  internal val resolveEffects: List<Attachable>?
+    get() = reductionState.resolveEffects
+
+  /** The keys of the [useOnDiscard] callbacks of the renders whose output is in this layout. */
+  internal val discardKeys: Set<Any>?
+    get() = reductionState.discardKeys
+
+  /** The [useOnDiscard] callbacks of the renders that laid this out; null for a reused layout. */
+  internal var discardCallbacks: DiscardCallbacks? = null
+
   internal val subtreeSnapshots: MutableScatterMap<LithoNode, SubtreeSnapshot>?
     get() = reductionState.subtreeSnapshots
 

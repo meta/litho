@@ -234,6 +234,11 @@ open class ComponentTree protected constructor(builder: Builder) :
   @GuardedBy("layoutStateFutureLock")
   private val layoutTreeFutures: MutableList<LayoutTreeFuture> = ArrayList()
 
+  // The resolve effects of the committed resolve result, and of the trees resolved while laying out
+  // the committed layout.
+  private val committedResolveEffects = CommittedEffects()
+  private val committedLayoutEffects = CommittedEffects()
+
   private var futureExecutionListener: TreeFuture.FutureExecutionListener? = null
 
   @GuardedBy("this") private var _root: Component? = null
@@ -2263,6 +2268,7 @@ open class ComponentTree protected constructor(builder: Builder) :
             initialStateScope,
         ) { result ->
           commitResolveResult(result)
+          committedResolveEffects.drain()
         }
 
     val resolveResult = resolveResultHolder.result
@@ -2301,12 +2307,30 @@ open class ComponentTree protected constructor(builder: Builder) :
     }
   }
 
+  /**
+   * Commits [resolveResult] if it is newer than the committed one, and reports it to the committed
+   * resolve effects under the same lock, so they see results in commit order.
+   */
   @Synchronized
   private fun commitResolveResult(resolveResult: ResolveResult) {
-    if (
-        committedResolveResult == null ||
-            (committedResolveResult?.version ?: Int.MIN_VALUE) < resolveResult.version
-    ) {
+    val outcome =
+        when {
+          committedResolveResult == null ||
+              (committedResolveResult?.version ?: Int.MIN_VALUE) < resolveResult.version ->
+              CommitOutcome.COMMITTED
+          committedResolveResult === resolveResult -> CommitOutcome.ALREADY_COMMITTED
+          else -> CommitOutcome.REJECTED
+        }
+    committedResolveEffects.report(
+        resolveResult.outputs?.resolveEffects,
+        resolveResult.discardCallbacks,
+        resolveResult.outputs?.discardKeys,
+        outcome,
+        resolveResult.version,
+        resolveResultFutures,
+        resolveResultFutureLock,
+    )
+    if (outcome == CommitOutcome.COMMITTED) {
       committedResolveResult = resolveResult
 
       getCommittedTreeStateSync()
@@ -2434,6 +2458,8 @@ open class ComponentTree protected constructor(builder: Builder) :
             treePropContainer,
             resolveResult.component,
         )
+      } else {
+        layoutState.discardCallbacks?.onDiscarded()
       }
     }
   }
@@ -2500,6 +2526,20 @@ open class ComponentTree protected constructor(builder: Builder) :
         logFinishLayout(source, extraAttribution, layoutState, committedNewLayout)
       }
 
+      committedLayoutEffects.report(
+          layoutState.resolveEffects,
+          layoutState.discardCallbacks,
+          layoutState.discardKeys,
+          when {
+            committedNewLayout -> CommitOutcome.COMMITTED
+            layoutState.isCommitted() -> CommitOutcome.ALREADY_COMMITTED
+            else -> CommitOutcome.REJECTED
+          },
+          layoutVersion,
+          layoutTreeFutures,
+          layoutStateFutureLock,
+      )
+
       val stateToCommit = layoutState.treeState
       if (committedNewLayout) {
         getCommittedTreeStateSync()
@@ -2519,6 +2559,8 @@ open class ComponentTree protected constructor(builder: Builder) :
         measureListeners = this.measureListeners?.toList()
       }
     }
+
+    committedLayoutEffects.drain()
 
     if (committedNewLayout) {
       measureListeners?.forEach { measureListener ->
@@ -2615,6 +2657,7 @@ open class ComponentTree protected constructor(builder: Builder) :
 
     val effectsHandler: EffectHandler?
     val shouldCloseLithoSaveableStateRegistry: Boolean
+    val releasedCalculations = ArrayList<DiscardCallbacks>()
     synchronized(this) {
       batchedStateUpdatesStrategy.release()
 
@@ -2644,6 +2687,7 @@ open class ComponentTree protected constructor(builder: Builder) :
       synchronized(resolveResultFutureLock) {
         for (rtf in resolveResultFutures) {
           rtf.release()
+          releasedCalculations.add(rtf.discardCallbacks)
         }
         resolveResultFutures.clear()
       }
@@ -2651,6 +2695,7 @@ open class ComponentTree protected constructor(builder: Builder) :
       synchronized(layoutStateFutureLock) {
         for (ltf in layoutTreeFutures) {
           ltf.release()
+          releasedCalculations.add(ltf.discardCallbacks)
         }
         layoutTreeFutures.clear()
       }
@@ -2716,6 +2761,16 @@ open class ComponentTree protected constructor(builder: Builder) :
       }
     }
     onReleaseListeners = null
+
+    // Calculations still running can never be committed now, and results reported from now on are
+    // discarded.
+    committedResolveEffects.detachAll(release = true, calculations = releasedCalculations)
+    committedLayoutEffects.detachAll(release = true)
+    try {
+      committedResolveEffects.drain()
+    } finally {
+      committedLayoutEffects.drain()
+    }
   }
 
   @Synchronized

@@ -50,6 +50,9 @@ abstract class TreeFuture<T : PotentiallyPartialResult>(
 ) {
   protected val runningThreadId: AtomicInteger = AtomicInteger(-1)
 
+  /** The [useOnDiscard] callbacks of the renders of this calculation. */
+  val discardCallbacks: DiscardCallbacks = DiscardCallbacks()
+
   private val interruptState: AtomicInteger =
       if (isInterruptionEnabled) {
         AtomicInteger(INTERRUPTIBLE)

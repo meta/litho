@@ -34,6 +34,7 @@ constructor(
     val isInLayout: Boolean,
     override val scopesToUpdate: DirtyScopeIndex = DirtyScopeIndex.EMPTY,
     enclosingLayoutContext: LithoLayoutContext? = null,
+    override val discardCallbacks: DiscardCallbacks? = null,
 ) : CalculationContext {
 
   private var _treeState: TreeState? = treeState

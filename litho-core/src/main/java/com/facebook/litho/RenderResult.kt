@@ -28,6 +28,8 @@ internal constructor(
     @JvmField internal val value: T,
     @JvmField internal val transitionData: TransitionData?,
     @JvmField internal val useEffectEntries: List<Attachable>?,
+    @JvmField internal val resolveEffects: List<Attachable>? = null,
+    @JvmField internal val discardKey: Any? = null,
 ) {
   constructor(value: T) : this(value, null, null)
 }

@@ -87,6 +87,7 @@ class LayoutTreeFuture(
           currentLayoutState,
           diffTreeRoot,
           this,
+          discardCallbacks,
       )
 
       // Add post-layout attributes via TraceScope
@@ -165,6 +166,7 @@ class LayoutTreeFuture(
         currentLayoutState: LayoutState?,
         diffTreeRoot: DiffNode?,
         future: TreeFuture<*>?,
+        discardCallbacks: DiscardCallbacks? = null,
     ): LayoutState {
       val c = resolveResult.context
       val node = resolveResult.node
@@ -227,6 +229,7 @@ class LayoutTreeFuture(
             diffTreeRoot,
             future,
             scopesToUpdate,
+            discardCallbacks,
         )
 
         // An animation frame = nothing to re-measure (resolve reconciled to the same node under
@@ -300,6 +303,7 @@ class LayoutTreeFuture(
                     layoutCache,
                     reductionState,
                 )
+            layoutState.discardCallbacks = discardCallbacks
 
             root?.releaseLayoutPhaseData()
           }

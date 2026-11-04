@@ -60,7 +60,13 @@ abstract class KComponent : Component() {
         scopedComponentInfo.runInRecorderScope(resolveContext) {
           val scope = ComponentScope(c)
           val result = scope.withResolveContext(resolveContext) { render() }
-          RenderResult(result, scope.transitionData, scope.useEffectEntries)
+          RenderResult(
+              result,
+              scope.transitionData,
+              scope.useEffectEntries,
+              scope.resolveEffects,
+              scope.discardKey,
+          )
         }
       }
     }
@@ -78,6 +84,8 @@ abstract class KComponent : Component() {
           renderResult.transitionData,
           renderResult.useEffectEntries,
           node,
+          renderResult.resolveEffects,
+          renderResult.discardKey,
       )
     }
 

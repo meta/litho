@@ -121,6 +121,11 @@ class LithoRenderer(
   @GuardedBy("layoutFutureLock")
   private val layoutTreeFutures = arrayListOf<LithoLayoutTreeFuture>()
 
+  // The resolve effects of the committed resolve result, and of the trees resolved while laying out
+  // the committed layout.
+  private val committedResolveEffects = CommittedEffects()
+  private val committedLayoutEffects = CommittedEffects()
+
   private val runnableLock = Any()
   @GuardedBy("runnableLock") private var currentLayoutRunnable: DoLayoutRunnable? = null
   @GuardedBy("runnableLock") private var currentResolveRunnable: DoResolveRunnable? = null
@@ -275,6 +280,13 @@ class LithoRenderer(
       root = EmptyComponent()
       sizeConstraints = null
       errorComponentRef.set(null)
+    }
+    committedResolveEffects.detachAll(release = false)
+    committedLayoutEffects.detachAll(release = false)
+    try {
+      committedResolveEffects.drain()
+    } finally {
+      committedLayoutEffects.drain()
     }
   }
 
@@ -652,6 +664,7 @@ class LithoRenderer(
             initialStateScope,
         ) { result ->
           commitResolveResult(result)
+          committedResolveEffects.drain()
         }
 
     return if (treeFutureResult.result != null) {
@@ -671,14 +684,33 @@ class LithoRenderer(
     }
   }
 
-  /** Commits the given resolve result if it is newer than the committed resolve result. */
+  /**
+   * Commits the given resolve result if it is newer than the committed resolve result, and reports
+   * it to the committed resolve effects under the same lock, so they see results in commit order.
+   */
   @Synchronized
   private fun commitResolveResult(resolveResult: ResolveResult) {
     if (isReleased) {
       return
     }
     val committedResolveResult = currentResolveResult
-    if (committedResolveResult == null || committedResolveResult.version < resolveResult.version) {
+    val outcome =
+        when {
+          committedResolveResult == null ||
+              committedResolveResult.version < resolveResult.version -> CommitOutcome.COMMITTED
+          committedResolveResult === resolveResult -> CommitOutcome.ALREADY_COMMITTED
+          else -> CommitOutcome.REJECTED
+        }
+    committedResolveEffects.report(
+        resolveResult.outputs?.resolveEffects,
+        resolveResult.discardCallbacks,
+        resolveResult.outputs?.discardKeys,
+        outcome,
+        resolveResult.version,
+        resolveTreeFutures,
+        resolveFutureLock,
+    )
+    if (outcome == CommitOutcome.COMMITTED) {
       currentResolveResult = resolveResult
       treeState?.commitResolveState(
           resolveResult.treeState,
@@ -713,7 +745,9 @@ class LithoRenderer(
         ) { layoutState ->
           layoutState.toRenderTree()
 
-          if (commitLayoutState(layoutState)) {
+          val committed = commitLayoutState(layoutState)
+          committedLayoutEffects.drain()
+          if (committed) {
             // Committed before release() and posting after it: a rebind stored now would never
             // be cleared and would keep this layout, and its components, alive.
             scheduleUnlessReleased {
@@ -733,7 +767,8 @@ class LithoRenderer(
 
   /**
    * Commits the given layout state if it is newer than the committed layout state and if the
-   * constraints are still compatible.
+   * constraints are still compatible, and reports it to the committed layout effects under the same
+   * lock.
    */
   @Synchronized
   private fun commitLayoutState(layoutState: LayoutState): Boolean {
@@ -741,11 +776,24 @@ class LithoRenderer(
       return false
     }
     val currentVersion = currentLayoutState?.version ?: com.facebook.rendercore.RenderState.UNSET
-    if (
-        (layoutState.version > currentVersion) &&
-            (layoutState.sizeConstraints == sizeConstraints) &&
-            (layoutState.resolveResult == currentResolveResult)
-    ) {
+    val outcome =
+        when {
+          (layoutState.version > currentVersion) &&
+              (layoutState.sizeConstraints == sizeConstraints) &&
+              (layoutState.resolveResult == currentResolveResult) -> CommitOutcome.COMMITTED
+          currentLayoutState === layoutState -> CommitOutcome.ALREADY_COMMITTED
+          else -> CommitOutcome.REJECTED
+        }
+    committedLayoutEffects.report(
+        layoutState.resolveEffects,
+        layoutState.discardCallbacks,
+        layoutState.discardKeys,
+        outcome,
+        layoutState.version,
+        layoutTreeFutures,
+        layoutFutureLock,
+    )
+    if (outcome == CommitOutcome.COMMITTED) {
       currentLayoutState = layoutState
       treeState?.commitLayoutState(
           layoutState.treeState,

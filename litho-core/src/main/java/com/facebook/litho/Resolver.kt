@@ -339,11 +339,14 @@ object Resolver {
   }
 
   @JvmStatic
+  @JvmOverloads
   @JvmName("applyTransitionsAndUseEffectEntriesToNode")
   internal fun applyTransitionsAndUseEffectEntriesToNode(
       transitionData: TransitionData? = null,
       useEffectEntries: List<Attachable>? = null,
       node: LithoNode,
+      resolveEffects: List<Attachable>? = null,
+      discardKey: Any? = null,
   ) {
     if (transitionData != null) {
       node.addTransitionData(transitionData)
@@ -352,6 +355,14 @@ object Resolver {
       for (attachable in useEffectEntries) {
         node.addAttachable(attachable)
       }
+    }
+    if (resolveEffects != null) {
+      for (effect in resolveEffects) {
+        node.addResolveEffect(effect)
+      }
+    }
+    if (discardKey != null) {
+      node.addDiscardKey(discardKey)
     }
   }
 
@@ -404,15 +415,32 @@ object Resolver {
     val collectedAttachables: MutableList<Attachable> = ArrayList()
     val collectedTransitionData = MutableTransitionData()
     val collectedStateReads = mutableMapOf<StateId, MutableScatterSet<GlobalKey>>()
-    collectOutputs(node, collectedAttachables, collectedTransitionData, collectedStateReads)
+    val collectedResolveEffects: MutableList<Attachable> = ArrayList()
+    val collectedDiscardKeys: MutableSet<Any> = HashSet()
+    collectOutputs(
+        node,
+        collectedAttachables,
+        collectedTransitionData,
+        collectedStateReads,
+        collectedResolveEffects,
+        collectedDiscardKeys,
+    )
     return if (
         collectedAttachables.isEmpty() &&
             collectedTransitionData.isEmpty() &&
-            collectedStateReads.isEmpty()
+            collectedStateReads.isEmpty() &&
+            collectedResolveEffects.isEmpty() &&
+            collectedDiscardKeys.isEmpty()
     ) {
       null
     } else {
-      Outputs(collectedAttachables, collectedTransitionData, collectedStateReads)
+      Outputs(
+          collectedAttachables,
+          collectedTransitionData,
+          collectedStateReads,
+          collectedResolveEffects,
+          collectedDiscardKeys,
+      )
     }
   }
 
@@ -421,6 +449,8 @@ object Resolver {
       collectedAttachables: MutableList<Attachable>,
       collectedTransitionData: MutableTransitionData,
       collectedStateReads: MutableMap<StateId, MutableScatterSet<GlobalKey>>,
+      collectedResolveEffects: MutableList<Attachable>,
+      collectedDiscardKeys: MutableSet<Any>,
   ) {
 
     // TODO(T143986616): optimise traversal for reused nodes
@@ -430,11 +460,16 @@ object Resolver {
           collectedAttachables,
           collectedTransitionData,
           collectedStateReads,
+          collectedResolveEffects,
+          collectedDiscardKeys,
       )
     }
 
     // We'll deduplicate attachables in the EffectHandler.
     node.attachables?.let { attachables -> collectedAttachables.addAll(attachables) }
+    // And resolve effects in CommittedEffects.
+    node.resolveEffects?.let { effects -> collectedResolveEffects.addAll(effects) }
+    node.discardKeys?.let { keys -> collectedDiscardKeys.addAll(keys) }
 
     val c: ComponentContext = node.tailComponentContext
     if (c.areTransitionsEnabled() && node !is DeferredLithoNode) {
@@ -648,6 +683,9 @@ object Resolver {
       @JvmField val attachables: List<Attachable>,
       @JvmField internal val transitionData: TransitionData,
       @JvmField internal val stateReads: Map<StateId, ScatterSet<GlobalKey>>,
+      @JvmField internal val resolveEffects: List<Attachable> = emptyList(),
+      /** The keys of the [useOnDiscard] callbacks of the renders whose output this is. */
+      @JvmField internal val discardKeys: Set<Any> = emptySet(),
   )
 
   fun Component.resolveDeferred(

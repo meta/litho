@@ -63,6 +63,7 @@ class ResolveTreeFuture(
           currentResolveResult,
           extraAttribution,
           this,
+          discardCallbacks,
       )
 
       // Add post-resolve attributes to the trace via TraceScope
@@ -176,6 +177,7 @@ class ResolveTreeFuture(
         currentResolveResult: ResolveResult?,
         extraAttribution: String?,
         future: TreeFuture<*>?,
+        discardCallbacks: DiscardCallbacks? = null,
     ): ResolveResult {
       val updatedStates =
           when (context.isReadTrackingEnabled) {
@@ -217,6 +219,7 @@ class ResolveTreeFuture(
             component = component,
             updatedStates = updatedStates,
             version = version,
+            discardCallbacks = null,
         )
       }
 
@@ -243,6 +246,7 @@ class ResolveTreeFuture(
             currentResolveResult,
             false,
             scopesToUpdate,
+            discardCallbacks = discardCallbacks,
         )
         val previousStateContext = context.calculationStateContext
         val stateProvider = context.stateProvider ?: error("State provider is null in resolve")
@@ -275,6 +279,7 @@ class ResolveTreeFuture(
             contextForResuming = if (rsc.isResolveInterrupted) rsc else null,
             updatedStates = updatedStates,
             isAccessibilityEnabled = rsc.isAccessibilityEnabled,
+            discardCallbacks = discardCallbacks,
         )
       }
     }
@@ -334,6 +339,7 @@ class ResolveTreeFuture(
             contextForResuming = null,
             updatedStates = partialResult.updatedStates,
             isAccessibilityEnabled = partialResult.isAccessibilityEnabled,
+            discardCallbacks = partialResult.discardCallbacks,
         )
       }
     }

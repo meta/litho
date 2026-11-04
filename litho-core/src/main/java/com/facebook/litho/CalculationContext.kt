@@ -33,6 +33,13 @@ interface CalculationContext {
   val isAccessibilityEnabled: Boolean
 
   /**
+   * Where renders register their [useOnDiscard] callbacks, so that whoever owns the calculation
+   * runs them if it discards their output. Null in a transient run ([isTransientRun]), whose
+   * outcome nothing reports.
+   */
+  val discardCallbacks: DiscardCallbacks?
+
+  /**
    * Records a Spec-generated EventHandler. This EventHandlers are an output of the calculation and
    * will be used by [EventHandlersController] to rebind existing EventHandlers.
    */

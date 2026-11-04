@@ -642,6 +642,11 @@ public abstract class Component implements Cloneable, Equivalence<Component>, At
       resultCache.clearCache(this);
 
       final CalculationContext prevContext = calculationContext;
+      // The renders of a measurement whose result isn't kept are discarded when it returns,
+      // including those of measurements and nested trees inside it. A kept result may or may not be
+      // used by the tree, so its renders are transient runs.
+      final @Nullable DiscardCallbacks discardCallbacks =
+          shouldCacheResult ? null : new DiscardCallbacks();
 
       try {
         final @Nullable LithoNode node;
@@ -663,7 +668,8 @@ public abstract class Component implements Cloneable, Equivalence<Component>, At
                   null,
                   true,
                   calculationContext.getScopesToUpdate(),
-                  enclosingLsc);
+                  enclosingLsc,
+                  discardCallbacks);
           c.setRenderStateContext(nestedRsc);
 
           node = Resolver.resolveTree(nestedRsc, c, this);
@@ -685,7 +691,8 @@ public abstract class Component implements Cloneable, Equivalence<Component>, At
                 new LayoutCache(),
                 null,
                 null,
-                calculationContext.getScopesToUpdate());
+                calculationContext.getScopesToUpdate(),
+                discardCallbacks);
 
         LayoutUtils.inheritReflowInputs(nestedLsc, enclosingLsc);
 
@@ -704,6 +711,9 @@ public abstract class Component implements Cloneable, Equivalence<Component>, At
 
       } finally {
         c.setCalculationStateContext(prevContext);
+        if (discardCallbacks != null) {
+          discardCallbacks.onDiscarded();
+        }
       }
 
       // Add the cached result.

@@ -81,6 +81,9 @@ internal constructor(override val context: ComponentContext) : ResourcesScope {
   internal var ownedStateContainer: KStateContainer? = null
   internal var transitionData: MutableTransitionData? = null
   internal var useEffectEntries: MutableList<Attachable>? = null
+  internal var resolveEffects: MutableList<Attachable>? = null
+  // Identifies this render's [useOnDiscard] callbacks; recorded on its node.
+  internal var discardKey: Any? = null
 
   // Hook keys visited this render, consumed by pruneToVisitedIfNeeded. Used only for membership, so
   // a list works and is cheaper than a set for the few hooks per component. Populated via

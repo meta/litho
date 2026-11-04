@@ -71,7 +71,13 @@ abstract class PrimitiveComponent : Component() {
                 ),
             )
           }
-          RenderResult(result, scope.transitionData, scope.useEffectEntries)
+          RenderResult(
+              result,
+              scope.transitionData,
+              scope.useEffectEntries,
+              scope.resolveEffects,
+              scope.discardKey,
+          )
         }
       }
     }
@@ -86,6 +92,8 @@ abstract class PrimitiveComponent : Component() {
         renderResult.transitionData,
         renderResult.useEffectEntries,
         node,
+        renderResult.resolveEffects,
+        renderResult.discardKey,
     )
 
     return ComponentResolveResult(node, commonProps)

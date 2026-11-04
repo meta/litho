@@ -102,6 +102,12 @@ open class LithoLayoutResult(
 
   internal var actualDeferredNodeResult: LithoLayoutResult? = null
 
+  /**
+   * The [useOnDiscard] callbacks of the renders of the tree resolved for
+   * [actualDeferredNodeResult].
+   */
+  internal var nestedDiscardCallbacks: DiscardCallbacks? = null
+
   private var _stateReads: MutableScatterSet<StateId>? = null
   internal val stateReads: ScatterSet<StateId>?
     get() = _stateReads

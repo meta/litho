@@ -250,6 +250,7 @@ class LayoutResultCopyIsolationTest {
         "delegate",
         "actualDeferredNodeResult" -> setValue(source, name, donorResults.next())
         "effects" -> setValue(source, name, ArrayList<Attachable>())
+        "nestedDiscardCallbacks" -> setValue(source, name, DiscardCallbacks())
         "resolvedMargins" -> setValue(source, name, IntEdges(2, 3, 4, 5))
         "childBoxProps" -> setValue(source, name, BoxLayoutProps())
         "failure" -> setValue(source, name, RuntimeException("sentinel failure"))
@@ -478,6 +479,11 @@ class LayoutResultCopyIsolationTest {
         "failure" to Reset(null, NOT_CARRIED),
         "effects" to Shared,
         "actualDeferredNodeResult" to Reset(null, "$NOT_CARRIED: no deferred node caching"),
+        "nestedDiscardCallbacks" to
+            Reset(
+                null,
+                "$NOT_CARRIED: the discard callbacks of a resolution belong to the layout that ran it",
+            ),
         "adjustedBounds" to DeepCopied("adjustedBounds.set in copyCachedFrom"),
         "stateReads" to DeepCopied("addStateReads in copyCachedFrom"),
         "resolvedMargins" to Reset(null, NOT_CARRIED),

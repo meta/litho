@@ -87,6 +87,8 @@ open class LithoNode : Node<LithoLayoutContext>, Cloneable {
   // region private properties
   private var _transitionId: TransitionId? = null
   private var _attachables: MutableList<Attachable>? = null
+  private var _resolveEffects: MutableList<Attachable>? = null
+  private var _discardKeys: MutableList<Any>? = null
   private var _unresolvedComponents: MutableList<Component>? = null
   private var frozen: Boolean = false
   private var nodeInfoWasWritten: Boolean = false
@@ -131,6 +133,14 @@ open class LithoNode : Node<LithoLayoutContext>, Cloneable {
 
   val attachables: List<Attachable>?
     get() = _attachables
+
+  /** The [useResolveEffect]s of the renders whose output is this node. */
+  internal val resolveEffects: List<Attachable>?
+    get() = _resolveEffects
+
+  /** The keys of the [useOnDiscard] callbacks of the renders whose output is this node. */
+  internal val discardKeys: List<Any>?
+    get() = _discardKeys
 
   val debugLayoutEditor: LayoutProps?
     get() {
@@ -662,6 +672,16 @@ open class LithoNode : Node<LithoLayoutContext>, Cloneable {
 
   fun addAttachable(attachable: Attachable) {
     _attachables.getOrCreate { ArrayList<Attachable>(4).also { _attachables = it } }.add(attachable)
+  }
+
+  internal fun addResolveEffect(effect: Attachable) {
+    _resolveEffects
+        .getOrCreate { ArrayList<Attachable>(2).also { _resolveEffects = it } }
+        .add(effect)
+  }
+
+  internal fun addDiscardKey(key: Any) {
+    _discardKeys.getOrCreate { ArrayList<Any>(1).also { _discardKeys = it } }.add(key)
   }
 
   fun alignContent(alignContent: YogaAlign) {

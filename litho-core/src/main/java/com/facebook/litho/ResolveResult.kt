@@ -35,6 +35,8 @@ data class ResolveResult(
     @JvmField val contextForResuming: ResolveContext?,
     @JvmField val updatedStates: Set<StateId>,
     @JvmField val isAccessibilityEnabled: Boolean = false,
+    /** The [useOnDiscard] callbacks of the renders that resolved this; null for a reused result. */
+    @JvmField internal val discardCallbacks: DiscardCallbacks? = null,
 ) : PotentiallyPartialResult {
 
   private val cacheRef: AtomicReference<MeasuredResultCache> = AtomicReference(cache)

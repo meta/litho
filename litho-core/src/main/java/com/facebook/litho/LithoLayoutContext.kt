@@ -49,6 +49,7 @@ constructor(
     currentDiffTree: DiffNode?,
     layoutStateFuture: TreeFuture<*>?,
     override val scopesToUpdate: DirtyScopeIndex = DirtyScopeIndex.EMPTY,
+    override val discardCallbacks: DiscardCallbacks? = null,
 ) : CalculationContext {
 
   private var _treeState: TreeState? = treeState

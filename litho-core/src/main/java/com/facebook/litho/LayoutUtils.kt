@@ -194,6 +194,20 @@ internal object LayoutUtils {
               addAll(outputs.attachables)
               actualLayoutResult.effects?.let { addAll(it) }
             }
+        if (outputs.resolveEffects.isNotEmpty()) {
+          reductionState.resolveEffects
+              .getOrCreate {
+                ArrayList<Attachable>(outputs.resolveEffects.size).also {
+                  reductionState.resolveEffects = it
+                }
+              }
+              .addAll(outputs.resolveEffects)
+        }
+        if (outputs.discardKeys.isNotEmpty()) {
+          reductionState.discardKeys
+              .getOrCreate { HashSet<Any>().also { reductionState.discardKeys = it } }
+              .addAll(outputs.discardKeys)
+        }
 
         reductionState.transitionData
             .getOrCreate { MutableTransitionData().also { reductionState.transitionData = it } }
@@ -392,6 +406,10 @@ internal object LayoutUtils {
     lithoLayoutContext.treeState.applyStateUpdatesEarly(parentContext, component, null, true)
     val prevContext = parentContext.calculationStateContext
 
+    // This resolution is discarded with the layout, or on its own if another resolution of the
+    // holder replaces it first.
+    val discardCallbacks = lithoLayoutContext.discardCallbacks?.child()
+
     return try {
       val nestedRsc = ResolveContext(
           treeId = lithoLayoutContext.treeId,
@@ -405,6 +423,7 @@ internal object LayoutUtils {
           scopesToUpdate = lithoLayoutContext.scopesToUpdate,
           isInLayout = true,
           enclosingLayoutContext = lithoLayoutContext,
+          discardCallbacks = discardCallbacks,
       )
       parentContext.renderStateContext = nestedRsc
 
@@ -424,6 +443,7 @@ internal object LayoutUtils {
       if (newNode == null) {
         // mark as error to prevent from resolving it again.
         holderResult.measureHadExceptions = true
+        discardCallbacks?.onDiscarded()
         return null
       }
 
@@ -457,6 +477,7 @@ internal object LayoutUtils {
           currentDiffTree = lithoLayoutContext.currentDiffTree,
           layoutStateFuture = null,
           scopesToUpdate = lithoLayoutContext.scopesToUpdate,
+          discardCallbacks = discardCallbacks,
       )
       nestedLsc.inheritReflowInputsFrom(lithoLayoutContext)
 
@@ -476,6 +497,13 @@ internal object LayoutUtils {
       CalculationContext.recordEventHandlers(nestedLsc, prevContext)
       lithoLayoutContext.mergeReflowTargetSizesFrom(nestedLsc)
 
+      if (result != null) {
+        // The holder's content becomes this result.
+        holderResult.nestedDiscardCallbacks?.onDiscarded()
+        holderResult.nestedDiscardCallbacks = discardCallbacks
+      } else {
+        discardCallbacks?.onDiscarded()
+      }
       result
     } finally {
       parentContext.calculationStateContext = prevContext
