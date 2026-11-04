@@ -134,7 +134,15 @@ class CollectionRecyclerComponent(
     private val onNearEnd: OnNearCallback? = null,
     private val onPullToRefresh: (() -> Unit)? = null,
     private val onScrollListeners: List<RecyclerView.OnScrollListener?>? = null,
-    private val onViewportChanged: OnViewportChanged? = null,
+    private val onViewportChanged:
+        ((
+            firstVisibleIndex: Int,
+            lastVisibleIndex: Int,
+            totalCount: Int,
+            firstFullyVisibleIndex: Int,
+            lastFullyVisibleIndex: Int,
+        ) -> Unit)? =
+        null,
     private val overScrollMode: Int = View.OVER_SCROLL_ALWAYS,
     private val pullToRefreshEnabled: Boolean = false,
     private val recyclerViewId: Int = View.NO_ID,

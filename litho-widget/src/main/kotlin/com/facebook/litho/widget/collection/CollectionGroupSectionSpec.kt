@@ -50,7 +50,15 @@ object CollectionGroupSectionSpec {
       totalCount: Int,
       firstFullyVisibleIndex: Int,
       lastFullyVisibleIndex: Int,
-      @Prop(optional = true) onViewportChanged: OnViewportChanged?,
+      @Prop(optional = true)
+      onViewportChanged:
+          ((
+              firstVisibleIndex: Int,
+              lastVisibleIndex: Int,
+              totalCount: Int,
+              firstFullyVisibleIndex: Int,
+              lastFullyVisibleIndex: Int,
+          ) -> Unit)?,
   ) {
     onViewportChanged?.invoke(
         firstVisibleIndex,

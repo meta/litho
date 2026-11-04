@@ -60,7 +60,15 @@ inline fun ResourcesScope.LazyGrid(
     sectionTreeTag: String? = null,
     startupLogger: LithoStartupLogger? = null,
     style: Style = Style,
-    noinline onViewportChanged: OnViewportChanged? = null,
+    noinline onViewportChanged:
+        ((
+            firstVisibleIndex: Int,
+            lastVisibleIndex: Int,
+            totalCount: Int,
+            firstFullyVisibleIndex: Int,
+            lastFullyVisibleIndex: Int,
+        ) -> Unit)? =
+        null,
     noinline onDataBound: OnDataBound? = null,
     handle: Handle? = null,
     noinline onPullToRefresh: (() -> Unit)? = null,
@@ -187,7 +195,15 @@ inline fun LazyGridCompat(
     sectionTreeTag: String? = null,
     startupLogger: LithoStartupLogger? = null,
     style: Style = Style,
-    noinline onViewportChanged: OnViewportChanged? = null,
+    noinline onViewportChanged:
+        ((
+            firstVisibleIndex: Int,
+            lastVisibleIndex: Int,
+            totalCount: Int,
+            firstFullyVisibleIndex: Int,
+            lastFullyVisibleIndex: Int,
+        ) -> Unit)? =
+        null,
     noinline onDataBound: OnDataBound? = null,
     handle: Handle? = null,
     noinline onPullToRefresh: (() -> Unit)? = null,

@@ -69,7 +69,15 @@ class LazyCollection(
     private val sectionTreeTag: String? = null,
     private val startupLogger: LithoStartupLogger? = null,
     private val style: Style = Style,
-    private val onViewportChanged: OnViewportChanged? = null,
+    private val onViewportChanged:
+        ((
+            firstVisibleIndex: Int,
+            lastVisibleIndex: Int,
+            totalCount: Int,
+            firstFullyVisibleIndex: Int,
+            lastFullyVisibleIndex: Int,
+        ) -> Unit)? =
+        null,
     handle: Handle? = null,
     private val onPullToRefresh: (() -> Unit)? = null,
     private val onNearEnd: OnNearCallback? = null,
@@ -136,7 +144,14 @@ class LazyCollection(
       }
     }
 
-    val combinedOnViewportChanged: OnViewportChanged =
+    val combinedOnViewportChanged:
+        ((
+            firstVisibleIndex: Int,
+            lastVisibleIndex: Int,
+            totalCount: Int,
+            firstFullyVisibleIndex: Int,
+            lastFullyVisibleIndex: Int,
+        ) -> Unit) =
         {
             firstVisibleIndex,
             lastVisibleIndex,
