@@ -17,7 +17,6 @@
 package com.facebook.litho.testing.viewtree
 
 import android.graphics.Bitmap
-import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.view.View
 import androidx.core.graphics.drawable.toBitmap
@@ -47,8 +46,8 @@ object BitmapComparisonUtils {
       bitmap2 = drawable2.toBitmap(width, height)
       return bitmap1.sameAs(bitmap2)
     } finally {
-      bitmap1?.recycleUnlessOwnedBy(drawable1)
-      bitmap2?.recycleUnlessOwnedBy(drawable2)
+      bitmap1?.recycle()
+      bitmap2?.recycle()
     }
   }
 
@@ -73,17 +72,7 @@ object BitmapComparisonUtils {
       return viewBitmap.sameAs(drawableBitmap)
     } finally {
       viewBitmap?.recycle()
-      drawableBitmap?.recycleUnlessOwnedBy(drawable)
-    }
-  }
-
-  /**
-   * [toBitmap] returns a [BitmapDrawable]'s own bitmap when the requested size matches it. That
-   * bitmap is shared with every drawable loaded from the same resource, so it must not be recycled.
-   */
-  private fun Bitmap.recycleUnlessOwnedBy(drawable: Drawable) {
-    if (this !== (drawable as? BitmapDrawable)?.bitmap) {
-      recycle()
+      drawableBitmap?.recycle()
     }
   }
 }
