@@ -55,7 +55,7 @@ class LithoRenderer(
     TreeStateProvider,
     StateUpdater,
     StateUpdateRequester,
-    RootHostProvider,
+    MountedViewReference,
     ErrorComponentReceiver {
 
   // todo Rename this class to LithoTreeContext
@@ -944,7 +944,7 @@ class LithoRenderer(
 
   // endregion
 
-  // region RootHostProvider
+  // region MountedViewReference
   override val mountedView: View?
     get() = rootHost
 

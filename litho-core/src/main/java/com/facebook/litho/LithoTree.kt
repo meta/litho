@@ -26,8 +26,6 @@ import com.facebook.litho.state.UiStateReadRecordsProvider
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
-internal typealias RootHostProvider = MountedViewReference
-
 internal typealias LithoRendererLifecycleProvider = LithoTreeLifecycleProvider
 
 /** Represents a pointer to the Tree that a ComponentContext is attached to */
@@ -37,7 +35,7 @@ internal constructor(
     /** The source of this tree's committed state, which saveable-state registries save from. */
     internal val treeStateProvider: TreeStateProvider,
     @field:ThreadConfined(ThreadConfined.ANY) val stateUpdater: StateUpdater,
-    @field:ThreadConfined(ThreadConfined.UI) val rootHost: RootHostProvider,
+    @field:ThreadConfined(ThreadConfined.UI) val rootHost: MountedViewReference,
     val errorComponentReceiver: ErrorComponentReceiver,
     val treeLifecycle: LithoRendererLifecycleProvider,
     internal val uiStateReadRecordsProvider: UiStateReadRecordsProvider,
