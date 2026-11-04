@@ -98,7 +98,7 @@ class CallbackBridgeComponent : KComponent() {
  * callback).
  */
 class FakeEventSource {
-  interface Listener {
+  fun interface Listener {
     fun onEvent(event: String)
   }
 
