@@ -38,6 +38,7 @@ public class DraweeDrawable<DH extends DraweeHierarchy> extends ForwardingDrawab
 
   private final DraweeHolder<DH> mDraweeHolder;
 
+  @SuppressWarnings("this-escape")
   public DraweeDrawable(Context context, DH draweeHierarchy) {
     super(null);
 

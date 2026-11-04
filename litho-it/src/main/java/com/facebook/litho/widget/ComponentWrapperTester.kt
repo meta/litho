@@ -37,6 +37,7 @@ class ComponentWrapperTester(
 ) : KComponent() {
 
   override fun ComponentScope.render(): Component {
+    @Suppress("UNUSED_VARIABLE")
     val state = useState {
       lifecycleTracker.addStep(LifecycleStep.ON_CREATE_INITIAL_STATE)
       0

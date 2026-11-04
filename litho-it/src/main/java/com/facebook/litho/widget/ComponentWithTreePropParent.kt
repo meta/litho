@@ -28,7 +28,7 @@ class ComponentWithTreePropParent(private val propA: SimpleTreeProp) : KComponen
 
   override fun ComponentScope.render(): Component {
 
-    val isCheckedState = useState<Boolean> { false }
+    @Suppress("UNUSED_VARIABLE") val isCheckedState = useState<Boolean> { false }
 
     return TreePropProvider(legacyTreePropOf<SimpleTreeProp>() to propA) {
       MountSpecWithTreeProp(viewWidth = 100, viewHeight = 100)

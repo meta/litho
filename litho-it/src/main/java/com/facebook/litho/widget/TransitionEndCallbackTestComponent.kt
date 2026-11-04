@@ -47,6 +47,7 @@ class TransitionEndCallbackTestComponent(
     private val testPropForRenderData: String = DEFAULT_TEST_PROP,
 ) : KComponent() {
 
+  @Suppress("OPT_IN_USAGE")
   override fun ComponentScope.render(): Component? {
     caller.set(context)
 

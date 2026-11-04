@@ -67,6 +67,7 @@ class EventHandlerBindingComponent(
       onCleanup { stateUpdater.counterState = null }
     }
 
+    @Suppress("UNUSED_ANONYMOUS_PARAMETER")
     val clickListener = useCallback { event: ClickEvent ->
       onRowClick(onButtonClickListener, counterState.value)
     }
