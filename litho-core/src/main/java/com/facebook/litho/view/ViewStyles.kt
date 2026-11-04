@@ -1613,7 +1613,7 @@ fun Style.blur(
  *
  * Custom shapes can be created by implementing this interface.
  */
-interface Shape {
+fun interface Shape {
   /** Returns a [ViewOutlineProvider] that defines the clipping region for this shape. */
   fun getOutlineProvider(context: ComponentContext): ViewOutlineProvider
 
