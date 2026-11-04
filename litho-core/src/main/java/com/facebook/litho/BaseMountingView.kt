@@ -706,7 +706,7 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
    *   VisibleEvent.class, InvisibleEvent.class, FocusedVisibleEvent.class,
    *   UnfocusedVisibleEvent.class, FullImpressionVisibleEvent.class.
    */
-  @Deprecated("")
+  @Deprecated("Experimental: only valid when incremental mount is disabled. Avoid new usages.")
   fun dispatchVisibilityEvent(visibilityEventType: Class<*>?) {
     check(!isIncrementalMountEnabled) {
       ("dispatchVisibilityEvent - " +

@@ -3233,7 +3233,9 @@ open class ComponentTree protected constructor(builder: Builder) :
      * the [ComponentsConfiguration] object, allowing for more centralized and flexible
      * configuration.
      */
-    @Deprecated("")
+    @Deprecated(
+        "Set ComponentsConfiguration.incrementalMountEnabled and pass it via componentsConfiguration() instead.",
+    )
     fun incrementalMount(isEnabled: Boolean): Builder {
       incrementalMountEnabled = isEnabled
       return this
