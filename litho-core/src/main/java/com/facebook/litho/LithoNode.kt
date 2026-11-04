@@ -1177,7 +1177,7 @@ open class LithoNode : Node<LithoLayoutContext>, Cloneable {
       }
     }
 
-    internal inline fun LithoNode.applyBorderWidth(block: YogaEdgeFloatFunction) {
+    internal inline fun LithoNode.applyBorderWidth(block: (YogaEdge, Float) -> Unit) {
       if (privateFlags and PFLAG_BORDER_IS_SET != 0L) {
         for (i in borderEdgeWidths.indices) {
           block(Border.edgeFromIndex(i), borderEdgeWidths[i].toFloat())
@@ -1187,7 +1187,7 @@ open class LithoNode : Node<LithoLayoutContext>, Cloneable {
 
     internal inline fun LithoNode.applyDeferredPadding(
         paddingPx: (YogaEdge, Int) -> Unit,
-        paddingPercent: YogaEdgeFloatFunction,
+        paddingPercent: (YogaEdge, Float) -> Unit,
     ) {
       paddingsFromDeferredNode?.let { edges ->
         for (i in 0 until Edges.EDGES_LENGTH) {
