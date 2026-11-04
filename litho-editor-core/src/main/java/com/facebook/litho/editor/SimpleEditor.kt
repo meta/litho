@@ -252,7 +252,7 @@ object SimpleEditor {
   private const val PRIMITIVE_TYPE_PICK = 3
 
   // Types
-  interface PropertyReader<T> {
+  fun interface PropertyReader<T> {
     fun readProperties(value: T): Map<String, SimpleEditorValue>
   }
 
