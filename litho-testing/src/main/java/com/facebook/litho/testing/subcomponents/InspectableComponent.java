@@ -99,6 +99,7 @@ public class InspectableComponent {
   /**
    * @return The class of the underlying Component.
    */
+  @SuppressWarnings("rawtypes")
   public Class getComponentClass() {
     return mComponent.getComponent().getClass();
   }
@@ -280,6 +281,7 @@ public class InspectableComponent {
   }
 
   @Nullable
+  @SuppressWarnings("rawtypes")
   public EventHandler getClickHandler() {
     final DebugLayoutNode layout = mComponent.getLayoutNode();
     return layout == null ? null : layout.getClickHandler();

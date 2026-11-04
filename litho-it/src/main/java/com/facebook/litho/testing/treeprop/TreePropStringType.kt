@@ -18,6 +18,7 @@ package com.facebook.litho.testing.treeprop
 
 class TreePropStringType(val value: String) {
 
+  @Suppress("PARAMETER_NAME_CHANGED_ON_OVERRIDE")
   override fun equals(obj: Any?): Boolean {
     if (this === obj) {
       return true
