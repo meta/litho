@@ -232,9 +232,15 @@ open class SectionsRecyclerView(context: Context, recyclerView: RecyclerView) :
     super.bringChildToFront(child)
   }
 
-  override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+  override fun dispatchKeyEvent(event: KeyEvent?): Boolean {
+    if (event == null) {
+      return false
+    }
     if (consumeKeyboardRefreshPress(event)) {
       return true
+    }
+    if (event.action == KeyEvent.ACTION_UP && event.keyCode == KeyEvent.KEYCODE_REFRESH) {
+      return focusedChild?.dispatchKeyEvent(event) ?: false
     }
     if (super.dispatchKeyEvent(event)) {
       return true

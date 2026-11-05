@@ -109,6 +109,37 @@ class KeyboardPullToRefreshTest {
   }
 
   @Test
+  fun `null key events do not refresh any backend`() {
+    for (backend in Backend.entries) {
+      var refreshes = 0
+      val view = render(backend) { refreshes++ }
+      val list = view.list()
+      focus(list)
+
+      assertThat(list.dispatchKeyEvent(null)).describedAs("$backend").isFalse()
+      assertThat(refreshes).describedAs("$backend").isZero()
+      assertThat(list.isRefreshing).describedAs("$backend").isFalse()
+
+      press(list)
+      assertThat(refreshes).describedAs("$backend").isEqualTo(1)
+      list.isRefreshing = false
+      view.release()
+    }
+  }
+
+  @Test
+  fun `an unowned refresh key release without a focused child is unhandled`() {
+    val list = SectionsRecyclerView(activity, RecyclerView(activity))
+    var refreshes = 0
+    list.onKeyboardRefresh = { refreshes++ }
+
+    assertThat(list.dispatchKeyEvent(key(KeyEvent.ACTION_UP, code = KeyEvent.KEYCODE_REFRESH)))
+        .isFalse()
+    assertThat(refreshes).isZero()
+    assertThat(list.isRefreshing).isFalse()
+  }
+
+  @Test
   fun `every backend retains six held device shortcuts until release`() {
     for (backend in Backend.entries) {
       var refreshes = 0
