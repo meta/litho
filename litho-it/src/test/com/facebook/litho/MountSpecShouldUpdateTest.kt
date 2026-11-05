@@ -31,6 +31,7 @@ import com.facebook.litho.testing.TestDrawableComponent
 import com.facebook.litho.testing.TestLithoView
 import com.facebook.litho.testing.exactly
 import com.facebook.litho.testing.testrunner.LithoTestRunner
+import com.facebook.litho.widget.SizeDependentMountSpecWithShouldUpdate
 import com.facebook.litho.widget.TextAlignment
 import com.facebook.litho.widget.TextComponent
 import com.facebook.litho.widget.TextDrawable
@@ -311,8 +312,106 @@ class MountSpecShouldUpdateTest {
     }
   }
 
+  /**
+   * A sibling inserted before a size-dependent spec with its own @ShouldUpdate leaves layout no
+   * diff base for it. Its @ShouldUpdate sees the same object, so it stays mounted.
+   */
+  @Test
+  fun sizeDependentSpecWithShouldUpdate_staysMounted_whenItHasNoDiffBase() {
+    val operations = mutableListOf<LifecycleStep>()
+    val objectForShouldUpdate = Any()
+    val testLithoView =
+        lithoTestRule.render(widthSpec = exactly(100), heightSpec = exactly(100)) {
+          sizeDependentWithShouldUpdate(objectForShouldUpdate, operations, siblingBefore = false)
+        }
+    assertThat(operations).containsExactly(LifecycleStep.ON_MOUNT)
+    operations.clear()
+
+    testLithoView.setRoot(
+        sizeDependentWithShouldUpdate(objectForShouldUpdate, operations, siblingBefore = true),
+    )
+    findRenderUnitWithState(checkNotNull(testLithoView.committedLayoutState), STATE_UNKNOWN)
+
+    assertThat(operations).isEmpty()
+  }
+
+  /**
+   * Pass 1 (mounted) → Pass 2 (no diff base, never mounted) → Pass 3 (STATE_UPDATED against Pass
+   * 2). The versions differ, so the spec's @ShouldUpdate decides, and it sees the same object.
+   */
+  @Test
+  fun sizeDependentSpecWithShouldUpdate_skipsUpdate_whenDiffedLayoutWasNotMounted() {
+    val operations = mutableListOf<LifecycleStep>()
+    val objectForShouldUpdate = Any()
+    val testLithoView =
+        lithoTestRule.render(widthSpec = exactly(100), heightSpec = exactly(100)) {
+          sizeDependentWithShouldUpdate(objectForShouldUpdate, operations, siblingBefore = false)
+        }
+    val pass1State = testLithoView.componentTree.mainThreadLayoutState!!
+    val (pass1Unit, pass1Data) = findRenderUnitWithState(pass1State, STATE_UNKNOWN)
+
+    testLithoView.setRoot(
+        sizeDependentWithShouldUpdate(objectForShouldUpdate, operations, siblingBefore = true),
+    )
+    testLithoView.setRoot(
+        sizeDependentWithShouldUpdate(objectForShouldUpdate, operations, siblingBefore = true),
+    )
+    val pass3State = testLithoView.componentTree.mainThreadLayoutState!!
+    val (pass3Unit, pass3Data) = findRenderUnitWithState(pass3State, STATE_UPDATED)
+
+    assertThat(pass3Unit.contentVersion).isNotEqualTo(pass1Unit.contentVersion)
+    val result =
+        MountSpecLithoRenderUnit.shouldUpdateMountItem(pass1Unit, pass3Unit, pass1Data, pass3Data)
+    assertThat(result).isFalse()
+  }
+
+  /**
+   * Pass 1 (mounted) → Pass 2 (new object, never mounted) → Pass 3 (STATE_UPDATED against Pass 2).
+   * The spec's @ShouldUpdate sees the new object, so it updates.
+   */
+  @Test
+  fun sizeDependentSpecWithShouldUpdate_updates_whenDiffedLayoutWasNotMountedAndPropsChanged() {
+    val operations = mutableListOf<LifecycleStep>()
+    val testLithoView =
+        lithoTestRule.render(widthSpec = exactly(100), heightSpec = exactly(100)) {
+          sizeDependentWithShouldUpdate(Any(), operations, siblingBefore = false)
+        }
+    val pass1State = testLithoView.componentTree.mainThreadLayoutState!!
+    val (pass1Unit, pass1Data) = findRenderUnitWithState(pass1State, STATE_UNKNOWN)
+
+    val newObjectForShouldUpdate = Any()
+    testLithoView.setRoot(
+        sizeDependentWithShouldUpdate(newObjectForShouldUpdate, operations, siblingBefore = false),
+    )
+    testLithoView.setRoot(
+        sizeDependentWithShouldUpdate(newObjectForShouldUpdate, operations, siblingBefore = false),
+    )
+    val pass3State = testLithoView.componentTree.mainThreadLayoutState!!
+    val (pass3Unit, pass3Data) = findRenderUnitWithState(pass3State, STATE_UPDATED)
+
+    val result =
+        MountSpecLithoRenderUnit.shouldUpdateMountItem(pass1Unit, pass3Unit, pass1Data, pass3Data)
+    assertThat(result).isTrue()
+  }
+
   private fun drawable(color: Int): Component =
       TestDrawableComponent.create(lithoTestRule.context, true, false, false).color(color).build()
+
+  private fun sizeDependentWithShouldUpdate(
+      objectForShouldUpdate: Any,
+      operations: MutableList<LifecycleStep>,
+      siblingBefore: Boolean,
+  ): Component =
+      Column.create(lithoTestRule.context)
+          .child(if (siblingBefore) Row.create(lithoTestRule.context).heightPx(10) else null)
+          .child(
+              SizeDependentMountSpecWithShouldUpdate.create(lithoTestRule.context)
+                  .objectForShouldUpdate(objectForShouldUpdate)
+                  .operationsOutput(operations)
+                  .widthPx(50)
+                  .heightPx(50),
+          )
+          .build()
 
   private fun text(rtl: Boolean): Component =
       Column.create(lithoTestRule.context)

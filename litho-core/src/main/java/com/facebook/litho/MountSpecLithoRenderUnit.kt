@@ -320,8 +320,13 @@ private constructor(
           return false
         }
         // A size-dependent spec mounts from inter-stage props, which can't be proven equal: layout
-        // rebuilds them, and they hold objects, such as a text Layout, that compare by identity.
-        if (updateState == STATE_DIRTY || isMountSizeDependent) {
+        // rebuilds them, and they hold objects, such as a text Layout, that compare by identity. A
+        // spec with its own @ShouldUpdate still decides: it can skip a remount on purpose, to keep
+        // a video playing for example.
+        if (
+            updateState == STATE_DIRTY ||
+                (isMountSizeDependent && !nextComponent.implementsShouldUpdate())
+        ) {
           return true
         }
       } else {
