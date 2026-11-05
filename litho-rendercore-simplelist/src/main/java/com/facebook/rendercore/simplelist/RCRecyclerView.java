@@ -18,6 +18,7 @@ package com.facebook.rendercore.simplelist;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.graphics.Rect;
 import android.util.AttributeSet;
 import android.view.FocusFinder;
 import android.view.KeyEvent;
@@ -142,6 +143,16 @@ public class RCRecyclerView extends RecyclerView implements NestedScrollingParen
   public boolean onTouchEvent(final MotionEvent e) {
     // If scrolling is disabled, do not consume touch.
     return mIsScrollEnabled && super.onTouchEvent(e);
+  }
+
+  /**
+   * If scrolling is disabled, do not scroll to reveal a child rectangle (e.g. when a screen reader
+   * moves accessibility focus onto a descendant). Ancestors still get the request.
+   */
+  @Override
+  public boolean requestChildRectangleOnScreen(
+      final View child, final Rect rect, final boolean immediate) {
+    return mIsScrollEnabled && super.requestChildRectangleOnScreen(child, rect, immediate);
   }
 
   /**
