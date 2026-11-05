@@ -176,59 +176,66 @@ internal class ImageLayoutBehavior(
     private val useIntrinsicSize: Boolean,
 ) : LayoutBehavior {
   override fun LayoutScope.layout(sizeConstraints: SizeConstraints): PrimitiveLayoutResult {
-    val exactSize = IntSize.exact(sizeConstraints)
-    // return 0 size when drawable is null or its intrinsic size is <=0 but size constraints are not
-    // exact, but when exact size constraints exist we want to respect them
-    if (
-        drawable == null ||
-            (exactSize == IntSize.Invalid &&
-                (drawable.intrinsicWidth <= 0 || drawable.intrinsicHeight <= 0))
-    ) {
-      return PrimitiveLayoutResult(
-          size = IntSize(0, 0),
-          layoutData = PrimitiveImageLayoutData(0, 0, null),
-      )
-    }
-
-    val intrinsicWidth = drawable.intrinsicWidth
-    val intrinsicHeight = drawable.intrinsicHeight
-
-    val computedSize =
-        if (exactSize != IntSize.Invalid) {
-          exactSize
-        } else if (!sizeConstraints.hasBoundedWidth && !sizeConstraints.hasBoundedHeight) {
-          IntSize(intrinsicWidth, intrinsicHeight)
-        } else {
-          val aspectRatio = intrinsicWidth.toFloat() / intrinsicHeight.toFloat()
-          if (useIntrinsicSize) {
-            IntSize.withAspectRatio(sizeConstraints, aspectRatio, intrinsicWidth, intrinsicHeight)
-          } else {
-            IntSize.withAspectRatio(sizeConstraints, aspectRatio)
-          }
-        }
-
-    val size = IntSize(max(0, computedSize.width), max(0, computedSize.height))
-
-    val matrix =
-        if (scaleType == ScaleType.FIT_XY || intrinsicWidth <= 0 || intrinsicHeight <= 0) {
-          null
-        } else {
-          DrawableMatrix.create(drawable, scaleType, size.width, size.height)
-        }
-
-    val useLayoutSize = ScaleType.FIT_XY == scaleType || intrinsicWidth <= 0 || intrinsicHeight <= 0
-
+    val result = calculateImageLayout(drawable, scaleType, useIntrinsicSize, sizeConstraints)
     return PrimitiveLayoutResult(
-        size = size,
-        layoutData =
-            PrimitiveImageLayoutData(
-                if (useLayoutSize) size.width else intrinsicWidth,
-                if (useLayoutSize) size.height else intrinsicHeight,
-                matrix,
-            ),
+        width = result.width,
+        height = result.height,
+        layoutData = result.layoutData,
     )
   }
 }
+
+/** Image geometry shared by component and direct View mounting. */
+fun calculateImageLayout(
+    drawable: Drawable?,
+    scaleType: ScaleType,
+    useIntrinsicSize: Boolean,
+    sizeConstraints: SizeConstraints,
+): ImageLayoutResult {
+  val exactSize = IntSize.exact(sizeConstraints)
+  // Invalid intrinsic dimensions have no natural size, even if one axis is exact.
+  if (
+      drawable == null ||
+          (exactSize == IntSize.Invalid &&
+              (drawable.intrinsicWidth <= 0 || drawable.intrinsicHeight <= 0))
+  ) {
+    return ImageLayoutResult(0, 0, PrimitiveImageLayoutData(0, 0, null))
+  }
+
+  val intrinsicWidth = drawable.intrinsicWidth
+  val intrinsicHeight = drawable.intrinsicHeight
+  val computedSize =
+      if (exactSize != IntSize.Invalid) {
+        exactSize
+      } else if (!sizeConstraints.hasBoundedWidth && !sizeConstraints.hasBoundedHeight) {
+        IntSize(intrinsicWidth, intrinsicHeight)
+      } else {
+        val aspectRatio = intrinsicWidth.toFloat() / intrinsicHeight.toFloat()
+        if (useIntrinsicSize) {
+          IntSize.withAspectRatio(sizeConstraints, aspectRatio, intrinsicWidth, intrinsicHeight)
+        } else {
+          IntSize.withAspectRatio(sizeConstraints, aspectRatio)
+        }
+      }
+
+  val size = IntSize(max(0, computedSize.width), max(0, computedSize.height))
+  val useLayoutSize = scaleType == ScaleType.FIT_XY || intrinsicWidth <= 0 || intrinsicHeight <= 0
+  val matrix =
+      if (useLayoutSize) null
+      else DrawableMatrix.create(drawable, scaleType, size.width, size.height)
+
+  return ImageLayoutResult(
+      size.width,
+      size.height,
+      PrimitiveImageLayoutData(
+          if (useLayoutSize) size.width else intrinsicWidth,
+          if (useLayoutSize) size.height else intrinsicHeight,
+          matrix,
+      ),
+  )
+}
+
+class ImageLayoutResult(val width: Int, val height: Int, val layoutData: PrimitiveImageLayoutData)
 
 /**
  * The layout data required by the [Image] Primitive to mount, and bind the drawable in the host.
