@@ -23,7 +23,7 @@ import android.graphics.drawable.Drawable
 import android.view.View
 import android.widget.TextView
 import com.facebook.rendercore.extensions.RenderCoreExtension
-import com.facebook.rendercore.geometry.Position
+import com.facebook.rendercore.geometry.Point
 import com.facebook.rendercore.renderunits.HostRenderUnit
 import com.facebook.rendercore.testing.DrawableWrapperUnit
 import com.facebook.rendercore.testing.LayoutResultWrappingNode
@@ -471,7 +471,7 @@ class ViewHierarchyTest {
 
     val position = root.getRelativePositionOf(target = target)
 
-    assertThat(position).isEqualTo(Position(200f, 200f))
+    assertThat(position).isEqualTo(Point(200f, 200f))
   }
 
   @Test
@@ -488,7 +488,7 @@ class ViewHierarchyTest {
 
     val position = target.getRelativePositionOf(target = target)
 
-    assertThat(position).isEqualTo(Position.Zero)
+    assertThat(position).isEqualTo(Point.Zero)
   }
 
   @Test

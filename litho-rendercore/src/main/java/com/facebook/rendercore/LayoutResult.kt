@@ -17,7 +17,7 @@
 package com.facebook.rendercore
 
 import androidx.annotation.Px
-import com.facebook.rendercore.geometry.Position
+import com.facebook.rendercore.geometry.Point
 
 /**
  * Represents the result of a Layout pass. A LayoutResult has a reference to its originating Node
@@ -59,11 +59,11 @@ interface LayoutResult {
   @get:Px val paddingLeft: Int
 }
 
-fun LayoutResult.getRelativePositionOf(target: LayoutResult): Position {
+fun LayoutResult.getRelativePositionOf(target: LayoutResult): Point {
   val calculator = LayoutResultPositionCalculator()
   calculator.calculate(root = this, target = target)
 
-  return Position(calculator.x.toFloat(), calculator.y.toFloat())
+  return Point(calculator.x.toFloat(), calculator.y.toFloat())
 }
 
 internal class LayoutResultPositionCalculator constructor() {

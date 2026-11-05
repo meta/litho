@@ -149,6 +149,6 @@ operator fun Float.times(size: Size): Size = size * this
 /** Convert a [Size] to a [Rect]. */
 fun Size.toRect(): Rect = Rect(0, 0, this.width.toInt(), this.height.toInt())
 
-/** Returns the [Position] of the center of the rect from the point of [0, 0] with this [Size]. */
-val Size.center: Position
-  get() = Position(unpackFloat1(packedValue) / 2f, unpackFloat2(packedValue) / 2f)
+/** Returns the [Point] of the center of the rect from the point of [0, 0] with this [Size]. */
+val Size.center: Point
+  get() = Point(unpackFloat1(packedValue) / 2f, unpackFloat2(packedValue) / 2f)

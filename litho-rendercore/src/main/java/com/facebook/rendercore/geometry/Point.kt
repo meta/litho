@@ -25,7 +25,7 @@ fun Point(x: Float, y: Float): Point {
 }
 
 @SuppressLint("HexColorValueUsage")
-fun Position(x: Float, y: Float): Position {
+fun Position(x: Float, y: Float): Point {
   return Point(pack2Floats(x, y))
 }
 
@@ -61,5 +61,3 @@ value class Point internal constructor(@PublishedApi internal val packedValue: L
     val Zero: Point = Point(0.0f, 0.0f)
   }
 }
-
-typealias Position = Point
