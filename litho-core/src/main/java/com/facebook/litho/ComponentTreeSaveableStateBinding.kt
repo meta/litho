@@ -108,9 +108,10 @@ internal class ComponentTreeSaveableStateBinding(
    * outside this tree's render, sometimes inside another tree's render or mount, as for a takeover,
    * where tracked reads would count as cross-tree reads that return stale values or crash.
    */
-  internal fun snapshotValues(): Bundle = StateReadRecorder.untracked {
-    registry.snapshotForOwner()
-  }
+  internal fun snapshotValues(): Bundle =
+      StateReadRecorder.untracked(preserveTreeContext = false) {
+        registry.snapshotForOwner()
+      }
 
   /**
    * Takes restored values that arrived after this tree's first render, and returns whether it did.

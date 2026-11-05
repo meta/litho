@@ -36,6 +36,8 @@ internal class StateReadRecorder private constructor() {
   internal var currentId: Int = NO_ID
   internal var currentDescription: String? = null
 
+  private var recordingEnabled: Boolean = true
+
   /**
    * Executes [scope] in the context of the current recorder to enable tracking of all state reads
    * during that execution which are then returned as a set of [StateId]s.
@@ -52,28 +54,42 @@ internal class StateReadRecorder private constructor() {
       scope: () -> Unit,
   ): ScatterSet<StateId> {
     contract { callsInPlace(scope, InvocationKind.EXACTLY_ONCE) }
-    return if (treeId == currentId) {
+    return if (treeId == currentId && recordingEnabled) {
       // Re-entrant call. Simply run the scope and return an empty set.
       // The full read set will be delivered to the parent recorder at the end.
       scope()
       emptyScatterSet()
     } else {
-      val previousReadSet = readSet
-      val previousTreeId = currentId
-      val previousDescription = currentDescription
-      val result: ScatterSet<StateId>
-      try {
-        readSet = null
-        currentId = treeId
-        currentDescription = description
+      withContext(treeId, description, recordingEnabled = true) {
         scope()
-        result = readSet ?: emptyScatterSet()
-      } finally {
-        currentId = previousTreeId
-        readSet = previousReadSet
-        currentDescription = previousDescription
+        readSet ?: emptyScatterSet()
       }
-      result
+    }
+  }
+
+  @OptIn(ExperimentalContracts::class)
+  private inline fun <T> withContext(
+      treeId: Int,
+      description: String?,
+      recordingEnabled: Boolean,
+      scope: () -> T,
+  ): T {
+    contract { callsInPlace(scope, InvocationKind.EXACTLY_ONCE) }
+    val previousReadSet = readSet
+    val previousTreeId = currentId
+    val previousDescription = currentDescription
+    val previousRecordingEnabled = this.recordingEnabled
+    readSet = null
+    currentId = treeId
+    currentDescription = description
+    this.recordingEnabled = recordingEnabled
+    try {
+      return scope()
+    } finally {
+      readSet = previousReadSet
+      currentId = previousTreeId
+      currentDescription = previousDescription
+      this.recordingEnabled = previousRecordingEnabled
     }
   }
 
@@ -115,7 +131,7 @@ internal class StateReadRecorder private constructor() {
       }
       return false
     }
-    if (currentId != NO_ID) {
+    if (currentId != NO_ID && recordingEnabled) {
       (readSet ?: mutableScatterSetOf<StateId>().also { readSet = it }).add(state)
     }
     return true
@@ -143,25 +159,23 @@ internal class StateReadRecorder private constructor() {
     }
 
     /**
-     * Runs [scope] with no recording in progress, so a read in it goes to whatever records it
-     * itself, if anything, rather than to the enclosing recording. A `Layout` measures each child
-     * this way, so the child's reads land on the child's layout, as a flexbox child's do.
+     * Omits reads in [scope] from the enclosing recorder. Recording scopes started inside [scope]
+     * still collect their own reads.
+     *
+     * Set [preserveTreeContext] to true to retain the enclosing tree context and its cross-tree
+     * read policy, or false for independent framework work such as child layout or saveable-state
+     * snapshots.
      */
-    inline fun <T> untracked(scope: () -> T): T {
+    @OptIn(ExperimentalContracts::class)
+    inline fun <T> untracked(preserveTreeContext: Boolean, scope: () -> T): T {
+      contract { callsInPlace(scope, InvocationKind.EXACTLY_ONCE) }
       val recorder = current
-      val previousReadSet = recorder.readSet
-      val previousTreeId = recorder.currentId
-      val previousDescription = recorder.currentDescription
-      recorder.readSet = null
-      recorder.currentId = NO_ID
-      recorder.currentDescription = null
-      try {
-        return scope()
-      } finally {
-        recorder.readSet = previousReadSet
-        recorder.currentId = previousTreeId
-        recorder.currentDescription = previousDescription
-      }
+      return recorder.withContext(
+          treeId = if (preserveTreeContext) recorder.currentId else NO_ID,
+          description = if (preserveTreeContext) recorder.currentDescription else null,
+          recordingEnabled = false,
+          scope = scope,
+      )
     }
   }
 }

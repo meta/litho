@@ -20,6 +20,11 @@ import com.facebook.litho.HookGlobalKey
 import com.facebook.litho.RenderScope
 import com.facebook.litho.StringGlobalKey
 import com.facebook.litho.config.ComponentsConfiguration
+import com.facebook.litho.debug.LithoDebugEvent
+import com.facebook.rendercore.debug.DebugEvent
+import com.facebook.rendercore.debug.DebugEventAttribute
+import com.facebook.rendercore.debug.DebugEventBus
+import com.facebook.rendercore.debug.DebugEventSubscriber
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.assertj.core.api.Assertions.catchThrowable
@@ -83,6 +88,148 @@ class StateReadRecorderTest {
   }
 
   @Test
+  fun untrackedOmitsReadsAndAllowsIndependentRecording() {
+    for (preserveTreeContext in listOf(true, false)) {
+      val before = newState(1)
+      val sampled = newState(2)
+      val inner = newState(3)
+      val after = newState(4)
+      val reads =
+          StateReadRecorder.record(TREE_ID) {
+            StateReadRecorder.read(before)
+            val innerReads =
+                StateReadRecorder.untracked(preserveTreeContext = preserveTreeContext) {
+                  assertThat(StateReadRecorder.read(sampled)).isTrue()
+                  val result = StateReadRecorder.record(TREE_ID) { StateReadRecorder.read(inner) }
+                  StateReadRecorder.read(sampled)
+                  result
+                }
+            assertThat(innerReads.asSet()).containsOnly(inner)
+            StateReadRecorder.read(after)
+          }
+      assertThat(reads.asSet())
+          .describedAs("preserveTreeContext=$preserveTreeContext")
+          .containsOnly(before, after)
+    }
+  }
+
+  @Test
+  fun restoresContextAfterNestedUntrackedThrows() {
+    for (preserveTreeContext in listOf(true, false)) {
+      val before = newState(1)
+      val sampled = newState(2)
+      val after = newState(3)
+      val failure = IllegalStateException("read failed")
+      val reads =
+          StateReadRecorder.record(TREE_ID) {
+            StateReadRecorder.read(before)
+            StateReadRecorder.untracked(preserveTreeContext = preserveTreeContext) {
+              val throwable = catchThrowable {
+                StateReadRecorder.untracked(preserveTreeContext = !preserveTreeContext) {
+                  StateReadRecorder.record(TREE_ID + 1) { throw failure }
+                }
+              }
+              assertThat(throwable).isSameAs(failure)
+              assertThat(StateReadRecorder.read(sampled)).isTrue()
+            }
+            val throwable = catchThrowable {
+              StateReadRecorder.untracked(preserveTreeContext = preserveTreeContext) {
+                throw failure
+              }
+            }
+            assertThat(throwable).isSameAs(failure)
+            StateReadRecorder.read(after)
+          }
+      assertThat(reads.asSet())
+          .describedAs("preserveTreeContext=$preserveTreeContext")
+          .containsOnly(before, after)
+    }
+  }
+
+  @Test
+  fun untrackedCanPreserveCrossTreePolicy() {
+    val currentConfig = ComponentsConfiguration.defaultInstance
+    try {
+      for (policy in ComponentsConfiguration.LogicViolationPolicy.entries) {
+        ComponentsConfiguration.defaultInstance =
+            currentConfig.copy(crossTreeStateReadPolicy = policy)
+        val before = newState(1)
+        val crossTree = newState(2, treeId = TREE_ID + 1)
+        val after = newState(3)
+        val reads =
+            StateReadRecorder.record(TREE_ID) {
+              StateReadRecorder.read(before)
+              if (policy == ComponentsConfiguration.LogicViolationPolicy.CRASH) {
+                assertThatThrownBy {
+                      StateReadRecorder.untracked(preserveTreeContext = true) {
+                        StateReadRecorder.read(crossTree)
+                      }
+                    }
+                    .isInstanceOf(IllegalStateException::class.java)
+                    .hasMessageContaining("Reader tree: $TREE_ID")
+              } else {
+                assertThat(
+                    StateReadRecorder.untracked(preserveTreeContext = true) {
+                      StateReadRecorder.read(crossTree)
+                    },
+                )
+                    .isFalse()
+              }
+              StateReadRecorder.read(after)
+            }
+        assertThat(reads.asSet()).describedAs("policy=$policy").containsOnly(before, after)
+      }
+    } finally {
+      ComponentsConfiguration.defaultInstance = currentConfig
+    }
+  }
+
+  @Test
+  fun explicitlyClearingTreeContextAllowsIndependentWorkAndRestoresIt() {
+    val currentConfig = ComponentsConfiguration.defaultInstance
+    ComponentsConfiguration.defaultInstance =
+        currentConfig.copy(
+            crossTreeStateReadPolicy = ComponentsConfiguration.LogicViolationPolicy.CRASH,
+        )
+    try {
+      val before = newState(1)
+      val sampled = newState(2)
+      val otherTree = newState(3, treeId = TREE_ID + 1)
+      val after = newState(4)
+      val reads =
+          StateReadRecorder.record(TREE_ID) {
+            StateReadRecorder.read(before)
+            StateReadRecorder.untracked(preserveTreeContext = false) {
+              assertThat(StateReadRecorder.read(otherTree)).isTrue()
+              StateReadRecorder.untracked(preserveTreeContext = true) {
+                assertThat(StateReadRecorder.read(otherTree)).isTrue()
+              }
+              val innerReads =
+                  StateReadRecorder.record(TREE_ID + 1) { StateReadRecorder.read(otherTree) }
+              assertThat(innerReads.asSet()).containsOnly(otherTree)
+              assertThat(StateReadRecorder.read(sampled)).isTrue()
+            }
+            StateReadRecorder.untracked(preserveTreeContext = true) {
+              assertThatThrownBy { StateReadRecorder.read(otherTree) }
+                  .isInstanceOf(IllegalStateException::class.java)
+              StateReadRecorder.untracked(preserveTreeContext = false) {
+                assertThat(StateReadRecorder.read(otherTree)).isTrue()
+              }
+              assertThatThrownBy { StateReadRecorder.read(otherTree) }
+                  .isInstanceOf(IllegalStateException::class.java)
+              StateReadRecorder.read(sampled)
+            }
+            assertThatThrownBy { StateReadRecorder.read(otherTree) }
+                .isInstanceOf(IllegalStateException::class.java)
+            StateReadRecorder.read(after)
+          }
+      assertThat(reads.asSet()).containsOnly(before, after)
+    } finally {
+      ComponentsConfiguration.defaultInstance = currentConfig
+    }
+  }
+
+  @Test
   fun throwsWhenReadStateFromDifferentTree() {
     val currentConfig = ComponentsConfiguration.defaultInstance
     ComponentsConfiguration.defaultInstance =
@@ -100,10 +247,23 @@ class StateReadRecorderTest {
   @Test
   fun doesNotRecordCrossTreeReadUnderLogPolicy() {
     val currentConfig = ComponentsConfiguration.defaultInstance
+    val descriptions = mutableListOf<Any?>()
+    val subscriber =
+        object : DebugEventSubscriber(LithoDebugEvent.DebugInfo) {
+          override fun onEvent(event: DebugEvent) {
+            if (
+                event.attributes[DebugEventAttribute.Name] ==
+                    "StateReadTracking:ReadFromDifferentTree"
+            ) {
+              descriptions += event.attributes["reader.description"]
+            }
+          }
+        }
     ComponentsConfiguration.defaultInstance =
         currentConfig.copy(
             crossTreeStateReadPolicy = ComponentsConfiguration.LogicViolationPolicy.LOG,
         )
+    DebugEventBus.subscribe(subscriber)
     try {
       val sameTreeState = newState(1, treeId = TREE_ID)
       val crossTreeState = newState(2, treeId = TREE_ID + 1)
@@ -114,12 +274,17 @@ class StateReadRecorderTest {
           StateReadRecorder.record(TREE_ID, description = "layout:MyComponent") {
             sameTreeReadResult = StateReadRecorder.read(sameTreeState)
             crossTreeReadResult = StateReadRecorder.read(crossTreeState)
+            StateReadRecorder.untracked(preserveTreeContext = true) {
+              assertThat(StateReadRecorder.read(crossTreeState)).isFalse()
+            }
           }
 
       assertThat(sameTreeReadResult).isTrue()
       assertThat(crossTreeReadResult).isFalse()
       assertThat(reads.asSet()).containsOnly(sameTreeState)
+      assertThat(descriptions).containsExactly("layout:MyComponent", "layout:MyComponent")
     } finally {
+      DebugEventBus.unsubscribe(subscriber)
       ComponentsConfiguration.defaultInstance = currentConfig
     }
   }

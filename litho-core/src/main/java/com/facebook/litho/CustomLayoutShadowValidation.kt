@@ -167,7 +167,7 @@ internal object CustomLayoutShadowValidation {
     try {
       componentContext.setLithoLayoutContext(cold)
       return LithoStats.suppressed {
-        StateReadRecorder.untracked {
+        StateReadRecorder.untracked(preserveTreeContext = false) {
           val builder = node.newLayoutBuilder(coldContext, previousDiffNode = null)
           val box = resolveBoxConstraints(constraints, builder.boxProps, node.layoutDirection.isRTL)
           builder.measure(box)

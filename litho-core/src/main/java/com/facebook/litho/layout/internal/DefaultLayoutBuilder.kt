@@ -366,13 +366,14 @@ internal class DefaultLayoutBuilder(
     // Untracked: the first box asked for makes the child's tree, which records its own reads, and
     // the child's measure records its own.
     var measuredBox: BoxConstraints? = null
-    val size = StateReadRecorder.untracked {
-      val boxConstraints = boxConstraintsUnder(index, constraints)
-      measuredBox = boxConstraints
-      trace({ "layout.measureChild:${child.headComponent.simpleName}" }) {
-        builder.measure(boxConstraints)
-      }
-    }
+    val size =
+        StateReadRecorder.untracked(preserveTreeContext = false) {
+          val boxConstraints = boxConstraintsUnder(index, constraints)
+          measuredBox = boxConstraints
+          trace({ "layout.measureChild:${child.headComponent.simpleName}" }) {
+            builder.measure(boxConstraints)
+          }
+        }
     val box = checkNotNull(measuredBox)
     val margins = box.margins
     return Placeable(
@@ -391,7 +392,7 @@ internal class DefaultLayoutBuilder(
     val builder = checkNotNull(childBuilders[index])
     val box = placeable.box
     val constraints = placeable.constraints
-    val result = StateReadRecorder.untracked { builder.build(box) }
+    val result = StateReadRecorder.untracked(preserveTreeContext = false) { builder.build(box) }
     builder.unbuiltReads?.let(::addReads)
     // A `Layout` child's own children were checked as it built them.
     if (builder !is DefaultLayoutBuilder) {

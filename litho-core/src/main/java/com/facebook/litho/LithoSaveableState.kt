@@ -201,7 +201,10 @@ private fun <T> ComponentScope.initSaveableState(
     resolveContext.treeState.recordSaveableClaim(entrySlot, lithoTree)
   }
   if (scope != null && storageKey != null) {
-    scope.requireSavableValue(storageKey, StateReadRecorder.untracked { saver.save(value) })
+    scope.requireSavableValue(
+        storageKey,
+        StateReadRecorder.untracked(preserveTreeContext = false) { saver.save(value) },
+    )
   }
   return value
 }

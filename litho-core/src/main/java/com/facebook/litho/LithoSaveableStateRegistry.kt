@@ -357,7 +357,10 @@ private constructor(
         saved.associate { entry ->
           // Saves run outside the render of the tree that holds the value, sometimes inside another
           // tree's render, where a tracked read would count as a cross-tree read.
-          val value = StateReadRecorder.untracked { entry.slot.save(entry.value) }
+          val value =
+              StateReadRecorder.untracked(preserveTreeContext = false) {
+                entry.slot.save(entry.value)
+              }
           valueBundle(entry.key, value) // Throws, naming the key, if the value can't be saved.
           entry.key to value
         }
@@ -746,7 +749,9 @@ private constructor(
      * where a tracked read would count as a cross-tree read that returns a stale value or crashes.
      */
     fun savedValues(): Map<String, Any?> =
-        synchronized(this) { StateReadRecorder.untracked { child.savedValues() } }
+        synchronized(this) {
+          StateReadRecorder.untracked(preserveTreeContext = false) { child.savedValues() }
+        }
   }
 
   // endregion
