@@ -23,6 +23,8 @@ import com.facebook.kotlin.compilerplugins.dataclassgenerate.annotation.DataClas
 import com.facebook.primitive.canvas.CanvasState
 import com.facebook.primitive.canvas.addArc
 import com.facebook.primitive.utils.types.FillRule
+import com.facebook.rendercore.ErrorReporter
+import com.facebook.rendercore.LogLevel
 import com.facebook.rendercore.geometry.Point
 import com.facebook.rendercore.geometry.Size
 
@@ -77,6 +79,8 @@ data class CanvasPath(
     for (i in children.indices) {
       val child = children[i]
       if (child is CanvasPathAdd) {
+        count += child.countCachedPaths()
+      } else if (child is CanvasPathAddUnion) {
         count += child.countCachedPaths()
       }
     }
@@ -275,4 +279,49 @@ data class CanvasPathAdd(
   }
 
   internal fun countCachedPaths(): Int = src.cachedPathCount()
+}
+
+/**
+ * A definition for a child path which replaces the current path with its union with a copy of src,
+ * transformed by transformModel. Unlike [CanvasPathAdd], which appends src's contours to be filled
+ * with the current path's fill type, each operand keeps its own fill type, so the result covers
+ * exactly the area either path fills. A union that the path ops cannot compute (for example, with
+ * non-finite coordinates) appends src instead, filled with the current path's fill type, and the
+ * first such fallback is reported through [ErrorReporter].
+ *
+ * @property src The path to unite with the current path
+ * @property transformModel The transform that will be applied to the src before the union
+ */
+@SuppressLint("NotInvokedPrivateMethod")
+@DataClassGenerate
+data class CanvasPathAddUnion(
+    private val src: CanvasPathModel,
+    private val transformModel: CanvasTransformModel,
+) : CanvasPathChildModel {
+  override fun applyTo(androidPath: Path, state: CanvasState) {
+    val operand = Path(state.getOrCreatePath(src))
+    state.getMatrix(transformModel) { matrix -> operand.transform(matrix) }
+    if (!androidPath.op(operand, Path.Op.UNION)) {
+      reportUnionFallback()
+      androidPath.addPath(operand)
+    }
+  }
+
+  internal fun countCachedPaths(): Int = src.cachedPathCount()
+
+  private companion object {
+    @Volatile private var unionFallbackReported = false
+
+    fun reportUnionFallback() {
+      if (unionFallbackReported) {
+        return
+      }
+      unionFallbackReported = true
+      ErrorReporter.report(
+          LogLevel.ERROR,
+          "com.facebook.primitive.canvas.model.CanvasPathAddUnion",
+          "Path union failed; appending the path instead, filled with the current path's fill type",
+      )
+    }
+  }
 }

@@ -24,6 +24,7 @@ import com.facebook.primitive.canvas.model.CanvasModel
 import com.facebook.primitive.canvas.model.CanvasNodeModel
 import com.facebook.primitive.canvas.model.CanvasPath
 import com.facebook.primitive.canvas.model.CanvasPathAdd
+import com.facebook.primitive.canvas.model.CanvasPathAddUnion
 import com.facebook.primitive.canvas.model.CanvasPathChildModel
 import com.facebook.primitive.canvas.model.CanvasPathCircle
 import com.facebook.primitive.canvas.model.CanvasPathModel
@@ -110,6 +111,17 @@ class CanvasPathCacheTest {
     fillModel(state, paths).draw(canvas)
 
     assertThat(state.pathCacheMaxSize).isEqualTo(16)
+  }
+
+  @Test
+  fun `path union sources count towards the cache size`() {
+    val sources = squares(count = 3)
+    val union = CanvasPath(
+        fillRule = FillRule.NonZero,
+        children = sources.map { CanvasPathAddUnion(it, CanvasTransform.IDENTITY) },
+    )
+
+    assertThat(countCachedPaths(fills(listOf(union)))).isEqualTo(4)
   }
 
   @Test
