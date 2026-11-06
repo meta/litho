@@ -31,7 +31,7 @@ interface GapWorkerCallbacks<State> {
   fun premountNext(extensionState: ExtensionState<State>)
 }
 
-interface InformsMountCallback {
+fun interface InformsMountCallback {
 
   fun canPreventMount(): Boolean
 }
@@ -97,7 +97,7 @@ interface OnItemCallbacks<State> {
   )
 }
 
-interface VisibleBoundsCallbacks<State> {
+fun interface VisibleBoundsCallbacks<State> {
 
   /** Called when the visible bounds of the Host change. */
   fun onVisibleBoundsChanged(
