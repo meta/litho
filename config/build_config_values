@@ -1,2 +1,0 @@
-boolean USE_INCREMENTAL_MOUNT_HELPER = true
-boolean IS_INTERNAL_BUILD = {{IS_DEBUG}}
