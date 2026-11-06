@@ -22,6 +22,7 @@ import com.facebook.litho.TreeFuture.FutureExecutionListener
 import com.facebook.litho.TreeFuture.FutureExecutionType
 import com.facebook.litho.animation.height
 import com.facebook.litho.annotations.ExperimentalLithoApi
+import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.core.width
 import com.facebook.litho.layout.flexbox.Column as FlexColumn
 import com.facebook.litho.layout.flexbox.Row
@@ -37,6 +38,7 @@ import com.facebook.litho.widget.MountSpecPureRenderLifecycleTester
 import com.facebook.litho.widget.RenderAndLayoutCountingTester
 import com.facebook.litho.widget.Text
 import com.facebook.rendercore.Dimen
+import com.facebook.rendercore.RunnableHandler
 import com.facebook.rendercore.px
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
@@ -46,6 +48,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.LooperMode
+import org.robolectric.shadows.ShadowLooper
 
 /**
  * Tests that check multiple scenarios where resolve and layout are handled separately via split
@@ -205,6 +208,38 @@ class SplitFuturesTest {
     // No measure should have happened yet.
     assertThat(counter.measureCount).isEqualTo(0)
     assertThat(lithoStatsRule.layoutCount).isEqualTo(0)
+  }
+
+  /**
+   * The first root is set before the tree has a size, and the layout thread takes that resolve but
+   * runs it late: after the first measure has resolved and laid out the root itself, and after the
+   * first mount has queued a state update.
+   */
+  @Test
+  fun lateResolveRequestedBeforeSize_updateFromFirstMount_isLaidOut() {
+    val layoutThread = QueuedLayoutThread()
+    val componentTree =
+        ComponentTree.create(lithoTestRule.context)
+            .componentsConfiguration(
+                ComponentsConfiguration.create().dropResolveRequestedBeforeSize(true).build(),
+            )
+            .layoutThreadHandler(layoutThread)
+            .build()
+    val testLithoView =
+        lithoTestRule.createTestLithoView(componentTree = componentTree).attachToWindow()
+    // Holds the batched state update until idle(), so it can't render the update first.
+    ShadowLooper.pauseMainLooper()
+
+    componentTree.setRootAsync(UpdatesStateOnMount())
+    val lateResolve = layoutThread.takeNext()
+    testLithoView.setSizeSpecs(exactly(100), exactly(100)).measure().layout()
+    ThreadTestingUtils.runOnBackgroundThread { lateResolve.run() }.acquire()
+    assertThat(lithoStatsRule.resolveCount).isEqualTo(1)
+    lithoTestRule.idle()
+    ThreadTestingUtils.runOnBackgroundThread { layoutThread.runAll() }.acquire()
+    lithoTestRule.idle()
+
+    assertThat(testLithoView.findViewWithTagOrNull(UPDATED_TAG)).isNotNull
   }
 
   /**
@@ -1223,7 +1258,46 @@ class SplitFuturesTest {
     }
   }
 
+  private class UpdatesStateOnMount : KComponent() {
+    override fun ComponentScope.render(): Component {
+      val isUpdated = useState { false }
+      useEffect(Unit) {
+        isUpdated.update(true)
+        null
+      }
+      return Row(style = Style.viewTag(if (isUpdated.value) UPDATED_TAG else NOT_UPDATED_TAG))
+    }
+  }
+
+  /** A layout thread that runs its queue only when told to. */
+  private class QueuedLayoutThread : RunnableHandler {
+    private val queue = ArrayDeque<Runnable>()
+
+    override fun isTracing(): Boolean = false
+
+    override fun post(runnable: Runnable, tag: String) {
+      queue.addLast(runnable)
+    }
+
+    override fun postAtFront(runnable: Runnable, tag: String) {
+      queue.addFirst(runnable)
+    }
+
+    override fun remove(runnable: Runnable) {
+      queue.remove(runnable)
+    }
+
+    /** Takes the next task as the thread does just before running it, so it can't be removed. */
+    fun takeNext(): Runnable = queue.removeFirst()
+
+    fun runAll() {
+      while (queue.isNotEmpty()) queue.removeFirst().run()
+    }
+  }
+
   companion object {
     private const val READER_TAG = "layout_phase_height_reader"
+    private const val UPDATED_TAG = "updated_on_mount"
+    private const val NOT_UPDATED_TAG = "not_updated_on_mount"
   }
 }

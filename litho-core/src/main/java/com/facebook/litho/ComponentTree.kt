@@ -2205,13 +2205,18 @@ open class ComponentTree protected constructor(builder: Builder) :
       widthSpec: Int,
       heightSpec: Int,
   ) {
+    val isRequestedBeforeSize =
+        widthSpec == SIZE_UNINITIALIZED &&
+            heightSpec == SIZE_UNINITIALIZED &&
+            context.lithoConfiguration.componentsConfig.dropResolveRequestedBeforeSize
     val localResolveVersion: Int
     val treeState: TreeState
     val resolveContext: ComponentContext
     val currentResult: ResolveResult?
 
     synchronized(this) {
-      if (root == null) {
+      // The render that gave the tree its size renders this root or a newer one.
+      if (root == null || (isRequestedBeforeSize && hasSize())) {
         return
       }
 
@@ -2306,6 +2311,10 @@ open class ComponentTree protected constructor(builder: Builder) :
       )
     }
   }
+
+  @GuardedBy("this")
+  private fun hasSize(): Boolean =
+      widthSpec != SIZE_UNINITIALIZED || heightSpec != SIZE_UNINITIALIZED
 
   /**
    * Commits [resolveResult] if it is newer than the committed one, and reports it to the committed

@@ -235,6 +235,11 @@ internal constructor(
      * never mounted otherwise grows without bound.
      */
     @JvmField val boundDataRenderedCallbacksBeforeMount: Boolean = false,
+    /**
+     * When true, a resolve requested before the tree had a size doesn't start once the tree has
+     * one: the render that gave the tree its size renders the same root or a newer one.
+     */
+    @JvmField val dropResolveRequestedBeforeSize: Boolean = false,
 ) {
 
   companion object {
@@ -725,6 +730,10 @@ internal constructor(
 
     fun boundDataRenderedCallbacksBeforeMount(enabled: Boolean): Builder = apply {
       config = config.copy(boundDataRenderedCallbacksBeforeMount = enabled)
+    }
+
+    fun dropResolveRequestedBeforeSize(enabled: Boolean): Builder = apply {
+      config = config.copy(dropResolveRequestedBeforeSize = enabled)
     }
 
     fun build(): ComponentsConfiguration = config
