@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="290" viewBox="0 0 720 290" role="img">
+  <title>A child that does not fit starts at its start edge</title>
+  <defs><pattern id="hatch-dark" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#a8abb0" stroke-width="1.5"/></pattern><marker id="tick-dark" viewBox="0 0 2 10" refX="1" refY="5" markerWidth="2" markerHeight="10" orient="auto"><line x1="1" y1="0" x2="1" y2="10" stroke="#a8abb0" stroke-width="2"/></marker><marker id="down-dark" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#66d9e8"/></marker><marker id="up-dark" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 10 5 L 0 10" fill="none" stroke="#fbbf24" stroke-width="2"/></marker></defs>
+  <text x="40" y="26" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#e3e3e3">Left to right: width(81), exactly 100 wide</text>
+  <rect x="40" y="40" width="160" height="36" fill="#2a2d33" stroke="#e3e3e3" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <rect x="40" y="44" width="129.6" height="28" fill="#1e3a6e" stroke="#8fb3ff" stroke-width="1.5"/>
+  <line x1="40" y1="36" x2="40" y2="80" stroke="#ff8fb8" stroke-width="3"/><path d="M 40 36 l 7 4 l -7 4 z" fill="#ff8fb8"/>
+  <text x="214" y="63" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#e3e3e3">x = 0, 19 short of the end</text>
+  <text x="40" y="112" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#e3e3e3">Left to right: width(150), at most 100 wide</text>
+  <rect x="40" y="126" width="160" height="36" fill="none" stroke="#e3e3e3" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <rect x="40" y="130" width="240" height="28" fill="#1e3a6e" stroke="#8fb3ff" stroke-width="1.5"/>
+  <line x1="40" y1="122" x2="40" y2="166" stroke="#ff8fb8" stroke-width="3"/><path d="M 40 122 l 7 4 l -7 4 z" fill="#ff8fb8"/>
+  <text x="294" y="149" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#e3e3e3">x = 0, 50 past the end</text>
+  <text x="40" y="198" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#e3e3e3">Right to left: width(120), exactly 300 wide</text>
+  <rect x="40" y="212" width="300" height="36" fill="#2a2d33" stroke="#e3e3e3" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <rect x="220" y="216" width="120" height="28" fill="#1e3a6e" stroke="#8fb3ff" stroke-width="1.5"/>
+  <line x1="340" y1="208" x2="340" y2="252" stroke="#ff8fb8" stroke-width="3"/><path d="M 340 208 l -7 4 l 7 4 z" fill="#ff8fb8"/>
+  <line x1="40" y1="264" x2="220" y2="264" stroke="#a8abb0" stroke-width="1" marker-start="url(#tick-dark)" marker-end="url(#tick-dark)"/>
+  <text x="228" y="268" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#e3e3e3">x = 180, from the left</text>
+  <text x="354" y="235" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#e3e3e3">at the start edge, 180 short of the end</text>
+</svg>

@@ -1,0 +1,338 @@
+---
+id: custom-layout
+title: Custom Layout
+keywords:
+    - Layout
+    - custom layout
+    - layout function
+    - measure
+    - Placeable
+    - placeRelative
+    - measuredWidth
+    - RenderWithConstraints
+    - OnCreateLayoutWithSizeSpec
+api_category: layout
+related_docs: [custom-layout-rules, flexbox-yoga, layout-intro]
+api_names: [Layout, LayoutFunction, Measurable, Placeable, MeasureScope, PlacementScope, SizeConstraints, LayoutProps]
+---
+
+import useBaseUrl from '@docusaurus/useBaseUrl';
+import ThemedImage from '@theme/ThemedImage';
+
+A `Layout` is a container that positions its children itself. Its **layout function** measures the children, gives the container a size, and places each child. Use it for arrangements flexbox can't express, or that depend on how big the children turn out to be: action buttons that lose their labels when they don't fit, a row of avatars that ends in "+3", or a badge positioned from its anchor's measured size.
+
+The children stay in the parent's Litho tree. They aren't a nested tree, so their state and incremental mount work as they do for any other child.
+
+:::note
+`Layout` and its layout-function API are marked `@ExperimentalLithoApi`. Opt in with `@OptIn(ExperimentalLithoApi::class)` on the declaration or the file that uses them, as each sample below does on its component. `Layout` is in `com.facebook.litho`, the layout-function types (`Measurable`, `Placeable`, `LayoutProps`) are in `com.facebook.litho.layout`, and `SizeConstraints` is in `com.facebook.rendercore`.
+:::
+
+This page shows how to write a `Layout`. How a `Layout` sizes its children, and how a root `Layout` is sized, is specified in [Custom Layout: Sizing Rules](custom-layout-rules.mdx), with a worked example and a test for each rule.
+
+## When to use a Layout
+
+| You need | Use |
+|---|---|
+| Children in a row or a column, with flexible sizes, spacing and alignment | `Row` and `Column` ([Flexbox](flexbox-yoga.mdx)) |
+| Children stacked on top of each other | `StackLayout`, or [absolute positioning](yoga-playground.mdx#absolutely-positioned-items) |
+| Different content depending only on the space available | [`RenderWithConstraints`](../custom-layout.md#kotlin-integration), or a `Layout` |
+| Positions or choices that depend on the children's measured sizes, or an arrangement flexbox can't express | A `Layout` |
+
+Prefer flexbox when it can express the layout: it's declarative, well understood, and it's what the rest of the tree uses. Coming from `RenderWithConstraints` or `@OnCreateLayoutWithSizeSpec`? See [Migrating to Layout](../custom-layout.md#migrating-to-layout).
+
+## How a Layout works
+
+> **Rooms go down. Sizes come up. You place.**
+> A child's own style beats the room; your parent has the last word on your size.
+
+A layout function receives the children, as `Measurable`s, and `constraints`: the space the container may occupy. It does three things:
+
+1. **It measures the children it needs.** `child.measure(room)` lays the child out against `room`, a `SizeConstraints` the function chooses, and returns a `Placeable`. The child's own style is resolved against that room and can override it: an own `width`, `minWidth` or `maxWidth` wins over the room, so the child may come out larger or smaller than the room ([rules C1 to C12](custom-layout-rules.mdx#c-a-layouts-child)).
+2. **It declares the container's size** by calling `layout(width, height) { … }`, exactly once. This **declared size** is a request: the parent may give the container another one ([P5](custom-layout-rules.mdx#p-measuring-and-placing)).
+3. **It places children** inside the block passed to `layout`, which runs once the container's final size is known. A child that isn't placed occupies no space and isn't mounted.
+
+Positions are relative to the container's **content box**, its own box less its padding and border. The padding and border also narrow the `constraints` the function receives ([P1](custom-layout-rules.mdx#p-measuring-and-placing)).
+
+<figure>
+  <ThemedImage
+    alt="A Layout with width(300) and padding(all = 10): its layout function receives exactly 280, the content box; it measures a child, gets back a Placeable 30 by 25, declares its size, and places the child at (0, 0), which is (10, 10) from its edge."
+    sources={{light: useBaseUrl('/images/custom-layout-anatomy.svg'), dark: useBaseUrl('/images/custom-layout-anatomy-dark.svg')}}
+  />
+  <figcaption>Constraints come down as rooms, measured sizes come up, and the layout function places.</figcaption>
+</figure>
+
+### The API at a glance
+
+| In the layout function | What it is |
+|---|---|
+| `child.measure(room)` | Lays the child out against `room` and returns its `Placeable` |
+| `placeable.width`, `placeable.height` | The space the child occupies: what it took, kept within the room |
+| `placeable.measuredWidth`, `placeable.measuredHeight` | What the child took, margins included |
+| `layout(width, height) { … }` | Declares the container's size; the block places the children |
+| `placeable.placeRelative(start, top)`, `placeable.place(x, y)` | Positions a child from the start edge, or from the left |
+| `constraints.copy(minWidth = 0, minHeight = 0)` | A room with the minimum dropped, so a child keeps its own size |
+| `constraints.hasExactWidth`, `constraints.hasBoundedWidth` | Whether the width is exact, or has a maximum at all |
+| `SizeConstraints.Infinity` | The maximum of an unbounded axis: a marker, not a size |
+| `child.layoutProps(default)` | A value the child sets for this layout ([Per-child values](#per-child-values)) |
+| `layoutDirection`, `16.dp.toPixels()` | The layout direction, and a dimension in pixels |
+
+### A Placeable's width and measuredWidth
+
+- **`measuredWidth`** is what the child took, margins included. Since a child's own size wins over the room, it may be larger or smaller than the room.
+- **`width`** is `measuredWidth` kept within the room. It's the space the child occupies, and what to add up when you lay children out side by side.
+
+`measuredHeight` and `height` are the same for the other axis. When the two differ, the child is drawn from the **start edge** of the `width` it occupies, the left edge left to right and the right edge right to left, and overflows or falls short of the other edge. It isn't centred ([P3](custom-layout-rules.mdx#p-measuring-and-placing)).
+
+<figure>
+  <ThemedImage
+    alt="Top: width(100).margin(all = 7) at most 300 wide; the box sits at x = 7 and measuredWidth is 114, margins included. Bottom: width(150) at most 100 wide; width is 100, kept within the room, and measuredWidth is 150."
+    sources={{light: useBaseUrl('/images/custom-layout-placeable.svg'), dark: useBaseUrl('/images/custom-layout-placeable-dark.svg')}}
+  />
+  <figcaption><code>measuredWidth</code> is what the child took, margins included; <code>width</code> is that kept within the room.</figcaption>
+</figure>
+
+### place and placeRelative
+
+- **`placeRelative(start, top)`** positions a child from the content box's top start corner, so it mirrors in a right-to-left layout. Use it for anything that should follow the reading direction.
+- **`place(x, y)`** positions a child from the content box's top-left corner, in both directions. Use it for positions that are physical, not directional.
+
+<figure>
+  <ThemedImage
+    alt="A container 1000 wide and a child 100 wide. Left to right, either call puts the child at x = 30. Right to left, placeRelative(start = 30) puts it at x = 870 and place(x = 30) at x = 30. When the declared width differs from the final one, the declared box starts at the right edge."
+    sources={{light: useBaseUrl('/images/custom-layout-place-relative.svg'), dark: useBaseUrl('/images/custom-layout-place-relative-dark.svg')}}
+  />
+  <figcaption><code>placeRelative</code> mirrors; <code>place</code> counts from the left of the declared box, which starts at the start edge.</figcaption>
+</figure>
+
+## Writing a Layout, step by step
+
+Each step below is a complete sample from the Litho sample app, and adds one new idea to the ones before it. You can try them in the sample app, in both directions and at several widths, under **Kotlin API Demos > Custom Layout**.
+
+### 1. Choose a child by whether it fits
+
+`ActionBarLayout` shows action buttons with their labels when they fit, and the same buttons as icons when they don't. It's the first thing to reach for when the choice depends on a child's measured size.
+
+<figure>
+  <div className="custom-layout-panels">
+    <img src={useBaseUrl('/images/custom-layout-action-bar-wide.png')} width="312" alt="Like, Comment and Share buttons, each with an icon and a label, 296 dp wide." />
+    <img src={useBaseUrl('/images/custom-layout-action-bar-narrow.png')} width="196" alt="The same three buttons as icons only, 180 dp wide, where the labelled buttons don't fit." />
+  </div>
+  <figcaption>The sample 296 dp wide, then 180 dp wide.</figcaption>
+</figure>
+
+<figure>
+  <ThemedImage
+    alt="Labelled buttons 120 wide and icon-only buttons 50 wide. In a width of 120, the labelled buttons fit and are shown. In a width of 119, the labelled buttons don't fit, so the icon-only buttons are shown."
+    sources={{light: useBaseUrl('/images/custom-layout-action-bar.svg'), dark: useBaseUrl('/images/custom-layout-action-bar-dark.svg')}}
+  />
+  <figcaption>The labelled buttons are measured under an unbounded width, and shown only if their <code>measuredWidth</code> fits.</figcaption>
+</figure>
+
+```kotlin file=sample/src/main/java/com/facebook/samples/litho/documentation/customlayout/ActionBarLayout.kt start=start_example end=end_example
+```
+
+Things to notice:
+
+- The `Layout` constructors for one, two and three children pass each child to the function as its own parameter; a list of children passes a `List<Measurable>`.
+- The labelled buttons are measured with `maxWidth = SizeConstraints.Infinity`, an unbounded room, so they report their full width instead of shrinking, and that width is compared with `constraints.maxWidth`.
+- Each room drops the minimum, `copy(minWidth = 0, minHeight = 0)`, so a child keeps its own size even when the constraints are exact (see [Common mistakes](#common-mistakes)).
+- Both variants are declared up front and resolved in `render`, because a `Layout` can't add children while it measures. The icon-only buttons are measured only when the labelled ones don't fit, and the variant that isn't placed is never mounted.
+- It declares `constraints.maxWidth` only when the width is bounded; under an unbounded width, it declares the chosen buttons' own width.
+
+This is what `RenderWithConstraints` and `@OnCreateLayoutWithSizeSpec` are often used for.
+
+### 2. A row of children
+
+`FacepileLayout` shows a row of overlapping avatars, as many as fit, then a "+N" label for the rest.
+
+<figure>
+  <div className="custom-layout-panels">
+    <img src={useBaseUrl('/images/custom-layout-facepile-wide.png')} width="312" alt="Eight overlapping avatars, AL to HR, then a +4 label for the four that don't fit, 296 dp wide." />
+    <img src={useBaseUrl('/images/custom-layout-facepile-narrow.png')} width="196" alt="Four overlapping avatars, AL to DN, then a +8 label, 180 dp wide." />
+    <img src={useBaseUrl('/images/custom-layout-facepile-narrow-rtl.png')} width="196" alt="The same row right to left: AL at the right edge, the avatars overlapping towards the left, and +8 at the left end." />
+  </div>
+  <figcaption>296 dp wide, 180 dp wide, and 180 dp wide right to left.</figcaption>
+</figure>
+
+```kotlin file=sample/src/main/java/com/facebook/samples/litho/documentation/customlayout/FacepileLayout.kt start=start_example end=end_example
+```
+
+Things to notice:
+
+- It takes a list of children. It works out how many avatars fit from their size before it measures anything, then measures only the avatars it shows, and the label, each in an exact room of the avatar's size.
+- Children are drawn in the order they're placed, so each avatar, placed after the one before it, is drawn over it ([P6](custom-layout-rules.mdx#p-measuring-and-placing)).
+- `placeRelative` makes the row start at the right and overlap leftwards in a right-to-left layout, with no extra code.
+- The label for each possible count is declared as a child up front and resolved in `render`, so this suits short lists. The label takes the last avatar's place when some don't fit; only the label shown is measured and placed, so only it is mounted.
+- `avatarSize.toPixels()` converts a `Dimen` to pixels inside the function.
+
+### 3. Read a value each child sets
+
+`AlignedColumnLayout` stacks its children and places each one across the width by the `ColumnAlignment` it sets with `Style.columnAlignment(alignment)`: at the start edge, centred, or at the end edge. A child that sets none is at the start edge.
+
+<figure>
+  <div className="custom-layout-panels">
+    <img src={useBaseUrl('/images/custom-layout-aligned-column-ltr.png')} width="312" alt="A chat thread: the day, Today, centred; incoming messages at the start edge, on the left; the outgoing message at the end edge, on the right." />
+    <img src={useBaseUrl('/images/custom-layout-aligned-column-rtl.png')} width="312" alt="The same thread right to left: incoming messages at the start edge, now on the right, the outgoing message on the left, and Today still centred." />
+  </div>
+  <figcaption>A chat thread 296 dp wide, left to right, then right to left.</figcaption>
+</figure>
+
+```kotlin file=sample/src/main/java/com/facebook/samples/litho/documentation/customlayout/AlignedColumnLayout.kt start=start_example end=end_example
+```
+
+Things to notice:
+
+- `ColumnAlignment` is the per-child value, a `LayoutProps`, and `Style.columnAlignment` is its setter, named for this layout. Other containers ignore it ([Per-child values](#per-child-values)).
+- The function reads each child's value with `child.layoutProps(ColumnAlignment.START)`, which returns the default when the child sets none.
+- It aligns to the end by `measuredWidth`, `layoutWidth - placeable.measuredWidth`, so a child wider than the layout keeps its end at the end edge. By `width`, which is kept within the room, it would start at the start edge and overflow the end ([P3](custom-layout-rules.mdx#p-measuring-and-placing)).
+- It fills an exact width, which reaches the function as `constraints.minWidth`, and is otherwise as wide as its widest child, up to the maximum width.
+
+### 4. Wrap onto lines
+
+`FlowRowLayout` places items side by side, `itemSpacing` apart, and starts a new line, `lineSpacing` below, when the next item doesn't fit. Use it for tags. Each time its function runs, it measures each item once, with the minimum dropped and an unbounded height, then works out every position before it declares its size.
+
+<figure>
+  <div className="custom-layout-panels">
+    <img src={useBaseUrl('/images/custom-layout-flow-row-narrow.png')} width="196" alt="Eight topic chips, Kotlin to Animation, two to a line on four lines, 180 dp wide." />
+    <img src={useBaseUrl('/images/custom-layout-flow-row-wide.png')} width="312" alt="The same eight chips on three lines, four, three and one, 296 dp wide." />
+  </div>
+  <figcaption>180 dp wide, then 296 dp wide.</figcaption>
+</figure>
+
+```kotlin file=sample/src/main/java/com/facebook/samples/litho/documentation/customlayout/FlowRowLayout.kt start=start_example end=end_example
+```
+
+An item wider than the whole width gets a line of its own and extends past the end edge. When the width is unbounded, every item is on one line. The spacings it reads are captured by the layout function, so changing them lays the container out again ([What the layout function may capture](#what-the-layout-function-may-capture)).
+
+### 5. Share the width equally
+
+`EqualSplitLayout` gives each child an equal share of the width, by measuring each one in an exact room of that share. Pixels that don't divide evenly go one each to the first children. When the width is unbounded, every share is as wide as the widest child, and each child keeps its own width from the start of its share.
+
+<figure>
+  <div className="custom-layout-panels">
+    <img src={useBaseUrl('/images/custom-layout-equal-split-narrow.png')} width="196" alt="A tab bar with All selected and Chats and Calls beside it, three tabs of equal width, 180 dp wide." />
+    <img src={useBaseUrl('/images/custom-layout-equal-split-wide.png')} width="312" alt="The same tab bar 296 dp wide, the three tabs still of equal width." />
+  </div>
+  <figcaption>180 dp wide, then 296 dp wide: the tabs stay equal.</figcaption>
+</figure>
+
+```kotlin file=sample/src/main/java/com/facebook/samples/litho/documentation/customlayout/EqualSplitLayout.kt start=start_example end=end_example
+```
+
+An exact room makes a child fill it, unless the child's own `width`, its `maxWidth`, or a `minWidth` above the share says otherwise ([C3, C4 and C6](custom-layout-rules.mdx#c-a-layouts-child)).
+
+### 6. Position one child from another's size
+
+`BadgeOverlayLayout` centres a badge on the top-end corner of its content, so the badge overhangs the content by half its size. It positions the badge from the content's `measuredWidth`, so the badge stays on the corner the content is drawn with, even when the content is larger than its room.
+
+<figure>
+  <div className="custom-layout-panels">
+    <img src={useBaseUrl('/images/custom-layout-badge-overlay.png')} width="312" alt="Alex Lee's avatar with a red badge showing 3 centred on its top-end corner, beside the name and the message See you at eight!" />
+  </div>
+  <figcaption>296 dp wide.</figcaption>
+</figure>
+
+```kotlin file=sample/src/main/java/com/facebook/samples/litho/documentation/customlayout/BadgeOverlayLayout.kt start=start_example end=end_example
+```
+
+The content's room leaves space for the overhang, and an unbounded axis stays unbounded: the function checks `hasBoundedWidth` and `hasBoundedHeight` before subtracting from the maximum. The badge is placed last, so it's drawn over the content.
+
+Which of a child's own style props a `Layout` honours, and how, is shown by [`ChildBoxPropsLayout`](https://github.com/facebook/litho/blob/master/sample/src/main/java/com/facebook/samples/litho/documentation/customlayout/ChildBoxPropsLayout.kt) and specified in the [sizing rules](custom-layout-rules.mdx#c-a-layouts-child).
+
+## What the layout function may capture
+
+A `Layout` counts as unchanged, and isn't laid out again for that reason, only when its layout function and its `deps` are unchanged. The Litho compiler plugin fills in `deps` from what a lambda written at the call site captures, so such a lambda needs nothing more: capture the values it reads, such as a spacing or a list of items, and a change to any of them lays the container out again.
+
+<details>
+<summary>Passing <code>deps</code> yourself, and functions that aren't lambdas</summary>
+
+- Passing `deps` by hand replaces what the plugin infers. With `deps`, the container is unchanged when the function has the same class and the deps are equivalent, so `deps = emptyArray()` on a lambda that captures values keeps the old layout on screen.
+- A layout function that isn't a lambda written at the call site, such as an `object` or a class, is compared with `equals`. Make a reusable function an `object`, or a `data class` of the values it reads.
+- Without the compiler plugin, a lambda that captures values is a new instance on every render, so the container is never unchanged.
+
+</details>
+
+Settings for the arrangement, such as spacing or alignment, go in the lambda or in the props of the component that returns the `Layout`. The `Layout`'s own `style` is what it tells its parent, not its layout function.
+
+## Per-child values
+
+A layout that needs a value per child, such as an alignment or a column, reads it with `LayoutProps`, as [`AlignedColumnLayout`](#3-read-a-value-each-child-sets) does. Declare a final class for the value, such as the enum `ColumnAlignment : LayoutProps`, and a setter named for your layout, such as `fun Style.columnAlignment(alignment: ColumnAlignment) = layoutProps(alignment)`. In the layout function, read it with `child.layoutProps(ColumnAlignment.START)`, which returns the default when the child sets none, or with `child[ColumnAlignment::class]`, which returns null.
+
+- Values of one class replace each other whole, and never merge: an outer component's value replaces the one the component it wraps set.
+- A value set in a `Layout`'s own `style` is read by that `Layout`'s parent, not by the `Layout`.
+- `com.facebook.litho.layout.LayoutProps` is unrelated to `com.facebook.litho.LayoutProps`, the Yoga props a component sets on its own node.
+
+## How often the layout function runs
+
+The layout function runs when the parent measures the container, and again when the constraints it's measured under change. It runs once more when the parent then gives the container a different size from the one it declared, as a stretching `Column` does ([P5](custom-layout-rules.mdx#p-measuring-and-placing) shows it). It may run on a background thread. So keep it free of side effects, and read state in `render`, capturing the value.
+
+The children are measured only when the function asks. Measuring a child again under the same constraints in the same run returns the same `Placeable` without measuring it again, and a child that's measured but never placed is never mounted ([P6](custom-layout-rules.mdx#p-measuring-and-placing)).
+
+## Coming from Compose
+
+<details>
+<summary>How a <code>Layout</code> differs from Compose's custom <code>Layout</code></summary>
+
+A `Layout` works like Compose's [custom `Layout`](https://developer.android.com/develop/ui/compose/layouts/custom), with these differences:
+
+| In Compose | In a Litho `Layout` |
+|---|---|
+| `Constraints`, `hasFixedWidth`, `Constraints.Infinity`, `16.dp.roundToPx()` | `SizeConstraints`, `hasExactWidth`, `SizeConstraints.Infinity`, `16.dp.toPixels()` |
+| Size modifiers such as `Modifier.width` yield to the constraints; [`requiredSize`](https://developer.android.com/reference/kotlin/androidx/compose/foundation/layout/package-summary#(androidx.compose.ui.Modifier).requiredSize(androidx.compose.ui.unit.Dp)) and its relatives override them | A child's own `width`, `minWidth` and `maxWidth` win over the room ([C3 to C6](custom-layout-rules.mdx#c-a-layouts-child)) |
+| A child whose size falls outside its constraints is centred on the space it occupies | It's drawn from its start edge ([P3](custom-layout-rules.mdx#p-measuring-and-placing)); end alignment uses `measuredWidth` |
+| Measuring a child twice in one pass throws; [intrinsics](https://developer.android.com/develop/ui/compose/layouts/intrinsic-measurements) answer size questions | Measure a child as often as you need; the same room returns the same `Placeable`. Children have no intrinsic queries |
+| `layout(width, height)` is the size, coerced into the constraints | A request: a parent may give another size and run the function again ([P5](custom-layout-rules.mdx#p-measuring-and-placing)) |
+| [`Modifier.layoutId`](https://developer.android.com/reference/kotlin/androidx/compose/ui/layout/package-summary#(androidx.compose.ui.Modifier).layoutId(kotlin.Any)) or parent data | [`LayoutProps`](#per-child-values) |
+
+`place`, `placeRelative`, and drawing in placement order work as in Compose.
+
+</details>
+
+## Common mistakes
+
+**Aligning to the end by `width`.** A child larger than its room has a `width` equal to the room, so `containerWidth - placeable.width` starts it at the start edge and it overflows the end. Use `containerWidth - placeable.measuredWidth`, as [`AlignedColumnLayout`](#3-read-a-value-each-child-sets) does.
+
+**Passing your own constraints to a child.** When the container's `constraints` are exact, so is their minimum, and a child measured under them is forced up to the full size, unless its own `width` or `maxWidth` says otherwise. Measure children under a room with a minimum of 0, such as `constraints.copy(minWidth = 0, minHeight = 0)`, unless you want them to fill it.
+
+**Doing arithmetic on an unbounded maximum.** `SizeConstraints.Infinity` is a marker, not a size. Check `hasBoundedWidth` before you subtract from `maxWidth`, or declare it as a size.
+
+**Using `place` for positions that should mirror.** `place(x, y)` doesn't mirror in a right-to-left layout; `placeRelative(start, top)` does.
+
+**Measuring while placing.** Measuring a child inside the placement block doesn't compile, and forcing it through an outer receiver fails with an error that names the mistake. Measure everything in the function, and only choose among the results while placing.
+
+**Calling `layout` twice, never calling it, or placing a child twice.** Each fails with an error that names the mistake, since a size or a position would otherwise be silently lost.
+
+**Declaring a size the parent always overrides.** A parent that gives the container a different size from the one it declared runs the layout function a second time, at the final size. That's correct, but it costs a run. When the container fills a bounded width, declare `constraints.maxWidth`; when the width is unbounded, declare the content's width.
+
+**Placing an earlier measurement.** You may measure a child several times, under different constraints. Placing the latest measurement is cheapest; placing an earlier one is correct, but may lay that child out again.
+
+**Expecting flexbox props on children to work.** `flex(grow = …)` and other flexbox item props on a `Layout`'s child have no effect.
+
+**Children from data without keys.** Give each child a stable `key`, as for any list of children (see [Keys and Identity](../state-and-side-effects/keys-and-identity.md)).
+
+## FAQ
+
+**Why is my child larger than the room I gave it, or not centred?** See [Find the rule by question](custom-layout-rules.mdx#find-the-rule-by-question): a child's own size wins over the room, and a child that doesn't fit is drawn from its start edge.
+
+**What do my `Layout`'s own padding and border do?** They're outside the space the function lays out in. The function's `constraints` exclude them, and positions start inside them ([P1](custom-layout-rules.mdx#p-measuring-and-placing)).
+
+**How is a root `Layout` sized?** It fills an exact axis, wraps its content on any other, and keeps its own `width` and `height`. See [rules R1 to R8](custom-layout-rules.mdx#r-a-root-layout).
+
+**Can a `Layout` read a child's line metrics?** No. A `Layout` can't read a child's line metrics, such as its last line's width or its baseline, so a chat bubble that tucks its timestamp beside the last line of its text isn't expressible yet.
+
+**Where are intrinsics?** A child has no intrinsic queries. Measure it under an unbounded or at-most room instead, as `ActionBarLayout` does; you may measure a child more than once. Litho doesn't call a `LayoutFunction`'s intrinsic overrides yet.
+
+**Can it lay out on a background thread?** Yes, like any Litho component.
+
+**How do I test one?** `Measurable` and `Placeable` are created only by Litho, so a layout function isn't tested on its own. Render a tree that holds it, with `LithoTestRule`, and check the layout result or the mounted views, as the samples' tests do.
+
+## Author checklist
+
+- [ ] Flexbox can't express this layout, or it depends on the children's measured sizes.
+- [ ] Each child is measured under a room with a minimum of 0, unless it should fill the room.
+- [ ] `layout(width, height)` is called exactly once, and never declares `SizeConstraints.Infinity`.
+- [ ] Positions add up `width`; end alignment uses `measuredWidth`.
+- [ ] Directional positions use `placeRelative`, and the layout is checked right to left and under an unbounded width.
+- [ ] Every candidate is declared as a child, and the ones not chosen are left unplaced.
+- [ ] The layout function captures the values it reads, and has no side effects.
+- [ ] Children from data have stable keys.

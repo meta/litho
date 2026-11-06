@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="470" viewBox="0 0 720 470" role="img">
+  <title>A child's own style against its room</title>
+  <defs><pattern id="hatch-light" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#5f6368" stroke-width="1.5"/></pattern><marker id="tick-light" viewBox="0 0 2 10" refX="1" refY="5" markerWidth="2" markerHeight="10" orient="auto"><line x1="1" y1="0" x2="1" y2="10" stroke="#5f6368" stroke-width="2"/></marker><marker id="down-light" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#0b7285"/></marker><marker id="up-light" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 10 5 L 0 10" fill="none" stroke="#b45309" stroke-width="2"/></marker></defs>
+  <text x="20" y="40" text-anchor="start" font-size="12" font-family="SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" fill="#1c1e21">C3 · minWidth(200)</text>
+  <text x="20" y="56" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#5f6368">exactly 300 wide</text>
+  <rect x="20" y="68" width="150" height="30" fill="#eef1f5" stroke="#1c1e21" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <rect x="20" y="72" width="150" height="22" fill="#d6e4ff" stroke="#3b6fd6" stroke-width="1.5"/>
+  <line x1="20" y1="64" x2="20" y2="102" stroke="#c2255c" stroke-width="3"/><path d="M 20 64 l 7 4 l -7 4 z" fill="#c2255c"/>
+  <text x="20" y="116" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#1c1e21">→ 300: fills the exact room</text>
+  <text x="370" y="40" text-anchor="start" font-size="12" font-family="SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" fill="#1c1e21">C3 · minWidth(400)</text>
+  <text x="370" y="56" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#5f6368">at most 300 wide</text>
+  <rect x="370" y="68" width="150" height="30" fill="none" stroke="#1c1e21" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <rect x="370" y="72" width="200" height="22" fill="#d6e4ff" stroke="#3b6fd6" stroke-width="1.5"/>
+  <line x1="370" y1="64" x2="370" y2="102" stroke="#c2255c" stroke-width="3"/><path d="M 370 64 l 7 4 l -7 4 z" fill="#c2255c"/>
+  <text x="370" y="116" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#1c1e21">→ 400: past the room</text>
+  <text x="20" y="148" text-anchor="start" font-size="12" font-family="SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" fill="#1c1e21">C4 · maxWidth(80)</text>
+  <text x="20" y="164" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#5f6368">exactly 300 wide</text>
+  <rect x="20" y="176" width="150" height="30" fill="#eef1f5" stroke="#1c1e21" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <rect x="20" y="180" width="40" height="22" fill="#d6e4ff" stroke="#3b6fd6" stroke-width="1.5"/>
+  <line x1="20" y1="172" x2="20" y2="210" stroke="#c2255c" stroke-width="3"/><path d="M 20 172 l 7 4 l -7 4 z" fill="#c2255c"/>
+  <text x="20" y="224" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#1c1e21">→ 80: the max wins</text>
+  <text x="370" y="148" text-anchor="start" font-size="12" font-family="SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" fill="#1c1e21">C6 · width(80)</text>
+  <text x="370" y="164" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#5f6368">exactly 300 wide</text>
+  <rect x="370" y="176" width="150" height="30" fill="#eef1f5" stroke="#1c1e21" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <rect x="370" y="180" width="40" height="22" fill="#d6e4ff" stroke="#3b6fd6" stroke-width="1.5"/>
+  <line x1="370" y1="172" x2="370" y2="210" stroke="#c2255c" stroke-width="3"/><path d="M 370 172 l 7 4 l -7 4 z" fill="#c2255c"/>
+  <text x="370" y="224" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#1c1e21">→ 80: its own width</text>
+  <text x="20" y="256" text-anchor="start" font-size="12" font-family="SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" fill="#1c1e21">C6 · width(80).minWidth(120)</text>
+  <text x="20" y="272" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#5f6368">exactly 300 wide</text>
+  <rect x="20" y="284" width="150" height="30" fill="#eef1f5" stroke="#1c1e21" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <rect x="20" y="288" width="60" height="22" fill="#d6e4ff" stroke="#3b6fd6" stroke-width="1.5"/>
+  <line x1="20" y1="280" x2="20" y2="318" stroke="#c2255c" stroke-width="3"/><path d="M 20 280 l 7 4 l -7 4 z" fill="#c2255c"/>
+  <text x="20" y="332" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#1c1e21">→ 120: within its own min</text>
+  <text x="370" y="256" text-anchor="start" font-size="12" font-family="SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" fill="#1c1e21">C7 · widthPercent(50)</text>
+  <text x="370" y="272" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#5f6368">exactly 300 wide</text>
+  <rect x="370" y="284" width="150" height="30" fill="#eef1f5" stroke="#1c1e21" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <rect x="370" y="288" width="75" height="22" fill="#d6e4ff" stroke="#3b6fd6" stroke-width="1.5"/>
+  <line x1="370" y1="280" x2="370" y2="318" stroke="#c2255c" stroke-width="3"/><path d="M 370 280 l 7 4 l -7 4 z" fill="#c2255c"/>
+  <text x="370" y="332" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#1c1e21">→ 150: of the room</text>
+  <text x="20" y="364" text-anchor="start" font-size="12" font-family="SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" fill="#1c1e21">C7 · widthPercent(150)</text>
+  <text x="20" y="380" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#5f6368">at most 300 wide</text>
+  <rect x="20" y="392" width="150" height="30" fill="none" stroke="#1c1e21" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <rect x="20" y="396" width="225" height="22" fill="#d6e4ff" stroke="#3b6fd6" stroke-width="1.5"/>
+  <line x1="20" y1="388" x2="20" y2="426" stroke="#c2255c" stroke-width="3"/><path d="M 20 388 l 7 4 l -7 4 z" fill="#c2255c"/>
+  <text x="20" y="440" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#1c1e21">→ measuredWidth 450, width 300</text>
+  <text x="370" y="364" text-anchor="start" font-size="12" font-family="SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" fill="#1c1e21">C9 · padding(all = 8)</text>
+  <text x="370" y="380" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#5f6368">exactly 10 wide</text>
+  <rect x="370" y="392" width="40" height="30" fill="#eef1f5" stroke="#1c1e21" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <rect x="370" y="396" width="64" height="22" fill="#d6e4ff" stroke="#3b6fd6" stroke-width="1.5"/>
+  <line x1="370" y1="388" x2="370" y2="426" stroke="#c2255c" stroke-width="3"/><path d="M 370 388 l 7 4 l -7 4 z" fill="#c2255c"/>
+  <text x="370" y="440" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#1c1e21">→ 16: its padding (drawn ×4)</text>
+</svg>

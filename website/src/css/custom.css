@@ -107,3 +107,19 @@ div[class^='announcementBarContent'] a:hover {
   color: var(--ifm-link-color);
   text-decoration: underline;
 }
+
+/* Screenshot panels for a custom Layout sample, side by side; they wrap on narrow screens. */
+.custom-layout-panels {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.custom-layout-panels img {
+  max-width: 100%;
+  height: auto;
+  background: white;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 8px;
+}

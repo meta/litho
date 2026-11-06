@@ -68,6 +68,9 @@ module.exports = {
           ],
         },
         {
+          'Custom Layout': ['layout/custom-layout', 'layout/custom-layout-rules'],
+        },
+        {
           'View Behavior & Interaction': [
             'layout/view-styles',
             'accessibility/accessibility',

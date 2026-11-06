@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="250" viewBox="0 0 720 250" role="img">
+  <title>A Layout measures, declares its size, and places</title>
+  <defs><pattern id="hatch-light" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#5f6368" stroke-width="1.5"/></pattern><marker id="tick-light" viewBox="0 0 2 10" refX="1" refY="5" markerWidth="2" markerHeight="10" orient="auto"><line x1="1" y1="0" x2="1" y2="10" stroke="#5f6368" stroke-width="2"/></marker><marker id="down-light" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#0b7285"/></marker><marker id="up-light" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 10 5 L 0 10" fill="none" stroke="#b45309" stroke-width="2"/></marker></defs>
+  <line x1="80" y1="14" x2="80" y2="64" stroke="#0b7285" stroke-width="2" marker-end="url(#down-light)"/>
+  <text x="88" y="43" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#0b7285">constraints from the parent</text>
+  <rect x="40" y="70" width="450" height="120" fill="none" stroke="#1c1e21" stroke-width="1.5"/>
+  <rect x="40" y="70" width="450" height="15" fill="url(#hatch-light)" stroke="none"/>
+  <rect x="40" y="175" width="450" height="15" fill="url(#hatch-light)" stroke="none"/>
+  <rect x="40" y="85" width="15" height="90" fill="url(#hatch-light)" stroke="none"/>
+  <rect x="475" y="85" width="15" height="90" fill="url(#hatch-light)" stroke="none"/>
+  <rect x="55" y="85" width="420" height="90" fill="#eef1f5" stroke="#1c1e21" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="61" y="167" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#5f6368">exactly 280 wide: the content box</text>
+  <rect x="55" y="85" width="45" height="37.5" fill="#d6e4ff" stroke="#3b6fd6" stroke-width="1.5"/>
+  <circle cx="55" cy="85" r="3.5" fill="#c2255c"/>
+  <line x1="40" y1="208" x2="490" y2="208" stroke="#5f6368" stroke-width="1" marker-start="url(#tick-light)" marker-end="url(#tick-light)"/>
+  <text x="498" y="212" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#1c1e21">width(300), padding 10</text>
+  <text x="518" y="76" text-anchor="start" font-size="12" font-family="SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" fill="#0b7285">1. measure(room)</text>
+  <text x="518" y="94" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#5f6368">   the room goes down</text>
+  <text x="518" y="118" text-anchor="start" font-size="12" font-family="SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" fill="#b45309">2. Placeable 30 × 25</text>
+  <text x="518" y="136" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#5f6368">   the size comes up</text>
+  <text x="518" y="160" text-anchor="start" font-size="12" font-family="SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" fill="#1c1e21">3. layout(w, h) { place }</text>
+  <text x="518" y="178" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#5f6368">   (0, 0) is (10, 10)</text>
+</svg>

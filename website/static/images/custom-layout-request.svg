@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="330" viewBox="0 0 720 330" role="img">
+  <title>The declared size is a request</title>
+  <defs><pattern id="hatch-light" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#5f6368" stroke-width="1.5"/></pattern><marker id="tick-light" viewBox="0 0 2 10" refX="1" refY="5" markerWidth="2" markerHeight="10" orient="auto"><line x1="1" y1="0" x2="1" y2="10" stroke="#5f6368" stroke-width="2"/></marker><marker id="down-light" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="#0b7285"/></marker><marker id="up-light" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 10 5 L 0 10" fill="none" stroke="#b45309" stroke-width="2"/></marker></defs>
+  <text x="20" y="20" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#1c1e21">The declared size (dotted) and the size the parent gives (filled), under a Yoga parent</text>
+  <text x="40" y="52" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#1c1e21">A stretching Column 1000 wide: declared 100 → 1000, and the function runs again</text>
+  <rect x="40" y="62" width="600" height="36" fill="#eef1f5" stroke="#1c1e21" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <rect x="40" y="68" width="600" height="24" fill="#d6e4ff" stroke="#3b6fd6" stroke-width="1.5"/>
+  <rect x="40" y="66" width="60" height="28" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-dasharray="2 3"/>
+  <text x="40" y="124" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#1c1e21">A Column 300 wide that doesn't stretch it: declared 400 → 400, past the room</text>
+  <rect x="40" y="134" width="180" height="36" fill="none" stroke="#1c1e21" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <rect x="40" y="140" width="240" height="24" fill="#d6e4ff" stroke="#3b6fd6" stroke-width="1.5"/>
+  <rect x="40" y="138" width="240" height="28" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-dasharray="2 3"/>
+  <text x="40" y="196" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#1c1e21">The same, with maxWidth(350) on the Layout: declared 400 → 350, its own max</text>
+  <rect x="40" y="206" width="180" height="36" fill="none" stroke="#1c1e21" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <rect x="40" y="212" width="210" height="24" fill="#d6e4ff" stroke="#3b6fd6" stroke-width="1.5"/>
+  <rect x="40" y="210" width="240" height="28" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-dasharray="2 3"/>
+  <text x="40" y="268" text-anchor="start" font-size="12" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" fill="#1c1e21">A stretching Column 300 wide: declared 400 → 300, the exact room</text>
+  <rect x="40" y="278" width="180" height="36" fill="#eef1f5" stroke="#1c1e21" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <rect x="40" y="284" width="180" height="24" fill="#d6e4ff" stroke="#3b6fd6" stroke-width="1.5"/>
+  <rect x="40" y="282" width="240" height="28" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-dasharray="2 3"/>
+</svg>

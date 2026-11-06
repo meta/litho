@@ -4,6 +4,10 @@ title: Manual Measurement
 ---
 import useBaseUrl from '@docusaurus/useBaseUrl';
 
+:::tip
+To measure children and position them yourself, or to choose a child by whether it fits, use a [`Layout`](layout/custom-layout.mdx). See [Migrating to Layout](#migrating-to-layout) below.
+:::
+
 Litho relies on [Yoga](https://yogalayout.dev/docs/), a powerful layout engine that can create very complex UIs for layout calculations.  However, there are few exceptions where Yoga is not sufficient and you may need to implement your own measuring and layout logic.
 
 Litho provides a manual component measurement API for determining component sizes during layout creation, which enables Developers to implement dynamic logic based on component sizes.
@@ -73,3 +77,22 @@ Below, there is an example that uses `SizeConstraints` provided by `RenderWithCo
 :::note
 In Kotlin the `SizeSpec` has been replaced with `SizeConstraints`. It's an object that provides the minimum and maximum width and height available for a Component. SizeConstraints are provided by parent Component to a child component. A child Component should define its size within those constraints.
 :::
+
+## Migrating to Layout
+
+`RenderWithConstraints` and `@OnCreateLayoutWithSizeSpec` choose content from the constraints a component is measured under. A [`Layout`](layout/custom-layout.mdx) does that too, and can also choose from its children's measured sizes.
+
+| Before | With a `Layout` |
+|---|---|
+| `RenderWithConstraints { constraints -> … }`, or `widthSpec` and `heightSpec` in `@OnCreateLayoutWithSizeSpec` | The layout function's `constraints` |
+| `SizeSpec.EXACTLY`, `AT_MOST`, `UNSPECIFIED` | `SizeConstraints` whose axis is exact (`hasExactWidth`), at most (`hasBoundedWidth && !hasExactWidth`), or unbounded (`!hasBoundedWidth`) |
+| `component.measure(…)` on a candidate | `candidate.measure(room)`, where the candidate is one of the `Layout`'s children |
+| Returning the chosen component | Placing the chosen child, and leaving the others unplaced |
+
+The guide's [`ActionBarLayout`](layout/custom-layout.mdx#1-choose-a-child-by-whether-it-fits) step is a complete example. Things that change:
+
+- Every candidate is a child of the `Layout`, declared up front, and rendered each time. One that's measured and not placed costs its render and its measurement, but is never mounted.
+- The children are part of the parent's tree, not a nested one. A child that renders nothing keeps its slot, as an empty child that measures 0 x 0.
+- The `Layout`'s own padding and border narrow the constraints its function receives.
+- Positions are yours to set: a `RenderWithConstraints` returns one component, which its parent positions, while a `Layout` places each child it keeps.
+- Hooks stay in `render`: the layout function only measures and places.

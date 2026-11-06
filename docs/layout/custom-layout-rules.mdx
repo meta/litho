@@ -1,0 +1,320 @@
+---
+id: custom-layout-rules
+title: 'Custom Layout: Sizing Rules'
+keywords:
+    - Layout
+    - custom layout
+    - layout function
+    - Placeable
+    - measuredWidth
+    - placeRelative
+    - SizeConstraints
+    - min width
+    - max width
+    - aspect ratio
+api_category: layout
+related_docs: [custom-layout, flexbox-yoga, core-styles]
+api_names: [Layout, Placeable, Measurable, MeasureScope, PlacementScope, SizeConstraints]
+---
+
+import useBaseUrl from '@docusaurus/useBaseUrl';
+import ThemedImage from '@theme/ThemedImage';
+
+This page specifies how a [`Layout`](custom-layout.mdx) sizes and places its children, and how a root `Layout` is sized. Each rule has a worked example, and each example is checked by a test, named after the rule, in [`CustomLayoutGuideConformanceTest`](https://github.com/facebook/litho/blob/master/litho-it/src/test/com/facebook/litho/customlayout/CustomLayoutGuideConformanceTest.kt). If a rule and Litho ever disagree, the test fails.
+
+The rules follow a Yoga `Column`: a `Layout`'s child gets the box a `Column` gives the same child, and a root `Layout` the box a `Column` root gets. `CustomLayoutBoxConstraintsTest` and `CustomLayoutRootTest` compare the two across many styles in both directions. The differences kept on purpose are listed in [Where a Layout differs from Yoga](#where-a-layout-differs-from-yoga), each with its reason; flexbox item props are the other exception ([C10](#c-a-layouts-child)).
+
+All sizes are in pixels. Unless an example says otherwise, a child's content is 30 x 25 and a root's is 30 x 20.
+
+> **Rooms go down. Sizes come up. You place.**
+> A child's own style beats the room; your parent has the last word on your size.
+
+## The core model in five rules
+
+Most questions are answered by these five rules. The numbered rules below give every detail and case.
+
+1. **The layout function works in the content box**: the `Layout`'s own box less its padding and border ([P1](#p-measuring-and-placing)).
+2. **A child's own style beats the room.** Its own `width`, `minWidth` or `maxWidth` wins over the room you measure it under; `measuredWidth` is what it took, and `width` is that kept within the room ([P2](#p-measuring-and-placing), [C3 to C7](#c-a-layouts-child), [C12](#c-a-layouts-child)).
+3. **A child that doesn't fit is drawn from its start edge**, not centred ([P3](#p-measuring-and-placing)).
+4. **The declared size is a request**: the parent may give the `Layout` another size ([P5, P7](#p-measuring-and-placing)).
+5. **Only placed children appear**, drawn in the order they're placed, and the same room returns the same `Placeable` ([P6](#p-measuring-and-placing)).
+
+## Find the rule by question
+
+| Question | Rules |
+|---|---|
+| Why is my child this wide? | [C2 to C4, C6, C7, C9, C12](#c-a-layouts-child) |
+| Why isn't my child centred, or where I placed it? | [P3, P4](#p-measuring-and-placing) |
+| Why does a percentage do nothing? | [C1](#c-a-layouts-child), [D2, D6](#where-a-layout-differs-from-yoga) |
+| Why does `aspectRatio` do nothing? | [C8](#c-a-layouts-child), [D4, D5](#where-a-layout-differs-from-yoga) |
+| Why does `flex` do nothing? | [C10](#c-a-layouts-child) |
+| Why isn't my `Layout` the size it declared? | [P5, P7](#p-measuring-and-placing), [C12](#c-a-layouts-child) |
+| Why is my `Row` child squeezed? | [L1](#known-limitation) |
+| How is a root `Layout` sized? | [R1 to R8](#r-a-root-layout) |
+
+## Terms
+
+| Term | Meaning |
+|---|---|
+| **Room** | The `SizeConstraints` a layout function passes to `measure` for a child. On each axis it's **exact** (`min == max`), **at most** (`min` 0 and a bounded `max`), **unbounded** (no `max`), or any other range from a `min` to a `max`. |
+| **Own style** | The size props the child sets on itself: `width`, `height`, `minWidth`, `maxWidth`, `minHeight`, `maxHeight`, their percentage forms, `aspectRatio`, `margin`, `padding` and `border`. |
+| **Box** | The child's border box: its content plus its padding and border. |
+| **`measuredWidth`** | What the child took: its box plus its margins. It may fall outside the room. |
+| **`width`** | `measuredWidth` kept within the room. It's the space the child occupies in its parent's arithmetic. |
+| **Fixed axis** | An axis the room makes exact, or that the child's own width or height decides. |
+| **Content box** | A `Layout`'s own box less its padding and border: the space its layout function works in. |
+| **Declared size** | The size a layout function passes to `layout(width, height)`. |
+| **Built, mounted** | A placed child is built into the layout result and mounted on screen. A child that's measured but not placed is neither. Every declared child is still resolved, in `render`. |
+
+`measuredHeight` and `height` are the same for the other axis.
+
+<figure>
+  <ThemedImage
+    alt="Top: width(100).margin(all = 7) at most 300 wide; the box sits at x = 7 and measuredWidth is 114, margins included. Bottom: width(150) at most 100 wide; width is 100, kept within the room, and measuredWidth is 150."
+    sources={{light: useBaseUrl('/images/custom-layout-placeable.svg'), dark: useBaseUrl('/images/custom-layout-placeable-dark.svg')}}
+  />
+  <figcaption><code>measuredWidth</code> is what the child took, margins included; <code>width</code> is that kept within the room.</figcaption>
+</figure>
+
+## P. Measuring and placing
+
+**P1. The layout function works in the content box.** The constraints it receives are the `Layout`'s own box less its padding and border. A minimum reaches it only on an exact axis; on any other axis its minimum is 0. `place` measures positions from the content box's top-left corner, and `placeRelative` from its top start corner.
+
+> A `Layout` with `width(300)` and `padding(all = 10)` receives an exact width of 280. A child placed at (0, 0) lands at (10, 10) from the `Layout`'s edge.
+
+**P2. `measure` returns a `Placeable`, whose `width` is kept within the room and whose `measuredWidth` is not.**
+
+> A child with `width(150)`, measured at most 100 wide, has a `width` of 100 and a `measuredWidth` of 150.
+
+**P3. When `measuredWidth` differs from `width`, the child is drawn from the start edge of the `width` it occupies.** It isn't centred. It overflows, or falls short of, the end edge: the right one left to right, the left one right to left.
+
+> A child with `width(81)` in an exact room 100 wide sits at x = 0, 19 short of the end. A child with `width(150)` at most 100 wide sits at x = 0, 50 past the end. Right to left, a child with `width(120)` in an exact room 300 wide sits at x = 180.
+
+<figure>
+  <ThemedImage
+    alt="Left to right, width(81) in an exact room 100 wide sits at x = 0, 19 short of the end; width(150) at most 100 wide sits at x = 0, 50 past the end. Right to left, width(120) in an exact room 300 wide sits at x = 180, at the right edge."
+    sources={{light: useBaseUrl('/images/custom-layout-start-edge.svg'), dark: useBaseUrl('/images/custom-layout-start-edge-dark.svg')}}
+  />
+  <figcaption>A child that doesn't fit is drawn from its start edge, not centred.</figcaption>
+</figure>
+
+To align a child to the end, place it by `measuredWidth`, not `width` (see [Common mistakes](custom-layout.mdx#common-mistakes)).
+
+**P4. `placeRelative` mirrors in a right-to-left layout; `place` doesn't.** `placeRelative(start, top)` puts the child `start` from the container's start edge: right to left, that's `containerWidth - start - placeable.width` from the left, against the width the container ends up with. `place(x, y)` counts `x` from the left of the declared box. That box starts at the content box's start edge, as any box that doesn't fit does ([P3](#p-measuring-and-placing)), so it's the content box's left edge whenever the declared and final widths match. When they don't, in a right-to-left layout it's aligned to the right edge.
+
+> - In a container 1000 wide, a 100-wide child at `placeRelative(start = 30)` sits at x = 30 left to right and x = 870 right to left.
+> - At `place(x = 30)` it sits at x = 30 in both directions.
+> - A right-to-left container that declares 100 and is stretched to 1000 puts the child at `place(0, 0)` or `placeRelative(0, 0)` at x = 900.
+> - One that declares 1200 and is kept to 1000 by an exact room puts it at x = -200 with `place(0, 0)`, and at x = 900 with `placeRelative(0, 0)`.
+
+<figure>
+  <ThemedImage
+    alt="A container 1000 wide and a child 100 wide. Left to right, either call puts the child at x = 30. Right to left, placeRelative(start = 30) puts it at x = 870 and place(x = 30) at x = 30. A right-to-left container declaring 100 and stretched to 1000 puts the child at x = 900 with either call; one declaring 1200 and kept to 1000 puts it at x = -200 with place(0, 0) and x = 900 with placeRelative(0, 0)."
+    sources={{light: useBaseUrl('/images/custom-layout-place-relative.svg'), dark: useBaseUrl('/images/custom-layout-place-relative-dark.svg')}}
+  />
+  <figcaption><code>placeRelative</code> mirrors; <code>place</code> counts from the left of the declared box, which starts at the start edge.</figcaption>
+</figure>
+
+**P5. The declared size is a request.** The parent may give the container another size; a stretching `Column` does. The placement block runs once the final size is known.
+
+> A `Layout` that declares 100 x 100 inside a `Column` 1000 wide that stretches its children is 1000 wide.
+
+**P6. Measuring again under the same constraints returns the same `Placeable`, only placed children are built and mounted, and paint order is placement order.** A child that is measured but not placed occupies no space. Overlapping children are drawn in the order they were placed, the last on top.
+
+> A child measured twice at most 300 wide returns the same `Placeable` both times. Of two children measured, the one never placed doesn't appear in the result. Two children placed second-first are drawn second-first.
+
+**P7. Under a Yoga parent, a `Layout`'s declared size can pass an at-most room**, within its own max, as a `Column` that wraps its content grows past it. An exact axis stays the room's. Under a `Layout` parent, [C12](#c-a-layouts-child) applies instead.
+
+> A `Layout` whose function declares 400 wide, in a `Column` 300 wide that doesn't stretch it, is 400 wide; with `maxWidth(350)`, it's 350. In a `Column` 300 wide that stretches it, it's 300.
+
+<figure>
+  <ThemedImage
+    alt="Under a Yoga parent: declared 100 in a stretching Column 1000 wide becomes 1000 and the function runs again; declared 400 in a Column 300 wide that doesn't stretch it stays 400; with maxWidth(350) it's 350; declared 400 in a stretching Column 300 wide becomes 300."
+    sources={{light: useBaseUrl('/images/custom-layout-request.svg'), dark: useBaseUrl('/images/custom-layout-request-dark.svg')}}
+  />
+  <figcaption>The declared size is a request: the parent has the last word.</figcaption>
+</figure>
+
+## C. A Layout's child
+
+The rules apply per axis, within the room the child is measured under.
+
+**C1. A percentage is of the room.** A percentage `width`, `height`, min or max is of the room's maximum on its own axis, and has no effect on an unbounded axis. A percentage `margin` or `padding` is of the room's width on both axes, as in CSS, and is 0 when the width is unbounded.
+
+> In a room at most 200 wide, `marginPercent(top = 10)` is a top margin of 20. When the room is unbounded, `widthPercent(50)` and `minWidthPercent(50)` each keep the child's content width, 30, and `marginPercent(left = 10)` is 0.
+
+**C2. Margins come out of the room.** Both of the room's bounds drop by them, so a negative margin raises both. `measuredWidth` includes the margins.
+
+> A child with `width(100).margin(all = 7)` at most 300 wide has a `measuredWidth` of 114 and sits at x = 7. In an exact room 300 wide, `margin(horizontal = 10)` makes the child 280 wide, and `margin(horizontal = -10)` makes it 320.
+
+**C3. An own min raises the room's minimum and never lowers it.** In an exact room the child still fills the room, as a `Column` child that's stretched does. A min above the room's maximum wins over it.
+
+> `minWidth(200)` in an exact room 300 wide is 300. `minWidth(400)` at most 300 wide is 400.
+
+**C4. An own max lowers the room's maximum and never raises it.** It wins over an exact room.
+
+> `maxWidth(80)` in an exact room 300 wide is 80, at the start edge.
+
+**C5. An own min above an own max wins**, as in CSS ([CSS 2 §10.4](https://www.w3.org/TR/CSS2/visudet.html#min-max-widths)).
+
+> `minWidth(90).maxWidth(50)` is 90.
+
+**C6. An own width or height fixes the axis, within the child's own min and max, whatever the room.**
+
+> `width(80)` in an exact room 300 wide is 80. `width(80).minWidth(120)` is 120.
+
+**C7. A percentage size fixes the axis too, and may exceed the room.** It's of the room's maximum ([C1](#c-a-layouts-child)).
+
+> `widthPercent(50)` in an exact room 300 wide is 150. `widthPercent(150)` at most 300 wide has a `measuredWidth` of 450 and a `width` of 300.
+
+**C8. An aspect ratio derives the other axis only when exactly one axis is fixed**, by an exact room or the child's own width or height. The derived axis is kept within its own min and max. With both axes fixed, or neither, the ratio has no effect; both cases differ from Yoga ([D4 and D5](#where-a-layout-differs-from-yoga)). A ratio that isn't a finite number above 0 counts as none.
+
+> - In an exact room 200 wide, `aspectRatio(2f)` is 200 x 100; with `maxHeight(60)` too, it's 200 x 60.
+> - `width(120).aspectRatio(3f)` is 120 x 40.
+> - In an exact room 300 wide, `height(40).aspectRatio(2f)` is 300 x 40: both axes are fixed.
+> - At most 300 wide, `aspectRatio(2f)` alone keeps its content's 30 x 25: neither axis is fixed.
+> - In an exact room 200 wide, a ratio of `Float.NaN`, infinity, 0 or -2 keeps the content's height, 25.
+
+**C9. Padding and border set the smallest the box can be.**
+
+> `padding(all = 8)` in an exact room 10 x 10 is 16 wide, at the start edge.
+
+<figure>
+  <ThemedImage
+    alt="Eight cases of a child's own style against its room: minWidth(200) in an exact 300 is 300; minWidth(400) at most 300 is 400; maxWidth(80) in an exact 300 is 80; width(80) is 80; width(80).minWidth(120) is 120; widthPercent(50) of an exact 300 is 150; widthPercent(150) at most 300 has measuredWidth 450 and width 300; padding(all = 8) in an exact 10 is 16."
+    sources={{light: useBaseUrl('/images/custom-layout-own-style.svg'), dark: useBaseUrl('/images/custom-layout-own-style-dark.svg')}}
+  />
+  <figcaption>A child's own style against its room: rules C3, C4, C6, C7 and C9.</figcaption>
+</figure>
+
+**C10. Flexbox item props on a child have no effect.** A `Layout` doesn't run flexbox among its children; its layout function decides their sizes.
+
+> A child with `width(100)` and `flex(grow = 1f)`, measured at most 1000 wide, is 100 wide. A child with `flex(basis = 200.px)` keeps its content width, 30.
+
+**C11. A negative size or own max has no effect, and a negative own min acts as 0.** The axis is as if the prop weren't set, as a negative length is invalid in CSS ([CSS Sizing §3](https://www.w3.org/TR/css-sizing-3/#sizing-properties)).
+
+> At most 300 wide, `width(-10)`, `widthPercent(-50)` and `minWidth(-10)` each keep the content width, 30. In an exact room 300 wide, `maxWidth(-10)` is 300.
+
+**C12. A child's content stays within its room.** Only the child's own size, min, max, padding or border can take its box past the room ([C3](#c-a-layouts-child), [C6](#c-a-layouts-child), [C9](#c-a-layouts-child)); content larger than the room is kept to it.
+
+> A `Layout` child whose function declares 400 wide, measured at most 300 wide, has a `width` and a `measuredWidth` of 300.
+
+## R. A root Layout
+
+A root `Layout` is one laid out on its own, with no parent laying it out: the root of a tree, or the content of a component that renders its content at layout time, such as `RenderWithConstraints`. Its holder, the view or the node that holds it, gives it room from 0 up to the holder's constraints on each axis, and a default for any size the root doesn't set itself.
+
+A root follows the child rules, except that it isn't measured by a parent's function: it fills an exact axis and wraps otherwise (R1), its margins come out of an exact axis too (R2), its own width, height and min can pass its room (R3, R4), and its position insets aren't read (R7).
+
+<details>
+<summary>R1 to R8, with examples</summary>
+
+**R1. A root fills an exact axis and wraps its content on an at-most or unbounded axis.** So it may be smaller than its room.
+
+> With `padding(all = 4)`, at most 200 x 100, a root is 38 x 28. Exactly 200 wide and at most 300 high, with no padding, it's 200 x 20.
+
+**R2. Margins come out of the room, on every axis, an exact axis included.** The holder places the root at its margins.
+
+> Exactly 300 x 300, `margin(start = 6)` makes the root 294 wide, at x = 6. `margin(vertical = 5)` makes it 290 high.
+
+**R3. An own width or height stays even when it's larger than the room**, within the root's own min and max, and the root overflows its holder. A percentage size is of the holder's maximum, and has no effect on an unbounded axis.
+
+> Exactly 200 wide, `width(300)` is 300 and `widthPercent(50)` is 100. With an unbounded height, `heightPercent(50)` keeps the content's height, 20.
+
+**R4. An own max applies within the room; an own min is kept even past it**, as an own width or height is ([R3](#r-a-root-layout)), and as for a child ([C3](#c-a-layouts-child)). The max bounds the box alone, with the margins outside it ([CSS `box-sizing: border-box`](https://www.w3.org/TR/css-sizing-3/#box-sizing)). An own min above an own max wins.
+
+> Exactly 200 wide, `maxWidth(190).margin(start = 20)` is 180: the room less the margin, within the max. `minWidth(150).maxWidth(100)` is 150. Exactly or at most 200 wide, `minWidth(300)` is 300.
+
+**R5. An aspect ratio derives the other axis only when exactly one axis is fixed**, by an own width or height or an exact constraint. The derived axis is kept within its own min and max, but not within the room. With both axes fixed, or neither, the ratio has no effect.
+
+> Exactly 200 wide and at most 300 high, `aspectRatio(0.5f)` is 200 x 400; with `maxHeight(250)` too, it's 200 x 250. At most 300 x 300, `width(120).aspectRatio(3f)` is 120 x 40, and `width(120).height(30).aspectRatio(3f)` is 120 x 30. At most 200 x 300, `aspectRatio(2f)` alone keeps its content's 30 x 20.
+
+**R6. Padding and border set the smallest the box can be, even past the room.**
+
+> Exactly 200 wide, `padding(horizontal = 120)` is 240.
+
+**R7. Position insets aren't read.** The holder places the root at its margins.
+
+> Exactly 200 wide, `position(left = 10)` leaves the root at x = 0.
+
+**R8. A negative size or own max has no effect, and a negative own min acts as 0**, as for a child.
+
+> At most 300 x 300, `height(-10)` and `minHeight(-10)` each keep the content's height, 20. Exactly 200 wide, `maxWidth(-10)` is 200.
+
+</details>
+
+## Where a Layout differs from Yoga
+
+Each row is a case where a `Layout`'s child or root deliberately gets a different box from the same style under Yoga. Each one follows CSS, or exists because Yoga's answer depends on something a `Layout` doesn't look at: the child's kind, the parent's alignment, the root's direction, or whether the root's size is exact. The Yoga numbers are those of Litho's `Column` and `Row`, which Yoga lays out, and the test for each row checks both. Where a row gives CSS numbers, they were measured in a browser with the equivalent CSS, and aren't part of the tests.
+
+<details>
+<summary>D1 to D13</summary>
+
+| | Case | `Layout` | Yoga | Why |
+|---|---|---|---|---|
+| D1 | A child with `minWidth(80).maxWidth(50)`, at most 300 wide | 80, for any child | A `Column` child of a `Column` 300 wide that doesn't stretch it: 50. A `Row` child, a leaf, or a stretched child: 80 | CSS: the min wins. Yoga clamps to the max before the min, so its answer depends on the size it clamps |
+| D2 | A child with `heightPercent(50)`, unbounded in height, inside a `Column` 500 high | Its content's height, 25 | 250: 50% of the `Column` | CSS: a percentage of an auto height is auto ([CSS 2 §10.5](https://www.w3.org/TR/CSS2/visudet.html#the-height-property)) |
+| D3 | A child with `maxWidth(-10)`, in an exact room 300 wide | 300 | A child a `Column` 300 wide stretches: 0 | CSS: a negative max is invalid |
+| D4 | A child with `height(40).aspectRatio(2f)`, in an exact room 300 wide | 300 x 40 | A child a `Column` 300 wide stretches: 80 x 40 | CSS: `align-self: stretch` wins over the ratio, 300 x 40 |
+| D5 | A child with `aspectRatio(2f)`, at most 300 wide | 30 x 25 | A child of a `Column` 300 wide that doesn't stretch it: 50 x 25. A child of a `Row` 300 wide that doesn't stretch it: 30 x 15 | CSS block layout and a CSS row: 30 x 25. A CSS column: 50 x 25 |
+| D6 | A child with `widthPercent(50)`, at most 300 wide | 150: 50% of the room's maximum | A child of a `Column` that wraps its content: its content's width, 30; the percentage has no width to be of | CSS resolves it against the container's final width instead |
+| D7 | A root with `minWidth(80).maxWidth(50)`, or `minHeight(200).maxHeight(50)`, at most 300 x 300 | 80 wide; 200 high | A `Column` root: 50 wide, 200 high. A `Row` root: 80 wide, 50 high | CSS: the min wins. Yoga keeps the max on the root's cross axis |
+| D8 | A root with `margin(start = 6)`, exactly 300 wide | 294 | 300; the margin only moves it | Matches a stretched `Column` child, 294, and CSS |
+| D9 | A root with `width(120).aspectRatio(3f)`, at most 300 x 300 | 120 x 40 | 120 x 20: the height wraps the content | Yoga applies a ratio to a child, not a root: as a `Column`'s child it's 120 x 40 |
+| D10 | A root with `maxWidth(190).margin(start = 20)` exactly 200 wide, or `maxWidth(150).margin(start = 20)` at most 200 wide, content 300 wide | 180; 150 | 190: the margin doesn't come out of an exact width. 130: the margin comes out of the max | CSS `border-box`: the max bounds the box alone |
+| D11 | A root with `position(left = 10)`, exactly 200 wide | x = 0 | x = 10 | A root's holder places it at its margins |
+| D12 | A root with `height(-10)`, at most 300 x 300 | 20, its content's height | 300, its room | CSS: a negative size is invalid, so the height is auto |
+| D13 | A root with `minWidth(300)`, at most 200 wide | 300 | A `Column` root: 200, its room. A `Row` root: 300 | CSS: the min wins. Yoga's answer depends on the root's direction |
+
+</details>
+
+### Known limitation
+
+**L1. A child that's a `Row` or a `Column`, whose content is wider than its room, is laid out within the room.** As the child of a `Column` that doesn't stretch it, it would keep its content's size and overflow. Laying it out again at its content's size would cost a second layout of the subtree, so it's kept as it is for now.
+
+> A `Row` of 48 and 50, neither of which shrinks, measured at most 80 wide, is 80 wide under a `Layout`. As the child of a `Column` 80 wide that doesn't stretch it, it's 98.
+
+## Appendix: rule to test
+
+<details>
+<summary>Which test checks each rule</summary>
+
+Every rule is tested in [`CustomLayoutGuideConformanceTest`](https://github.com/facebook/litho/blob/master/litho-it/src/test/com/facebook/litho/customlayout/CustomLayoutGuideConformanceTest.kt), by a test named after it:
+
+| Rule | Test |
+|---|---|
+| P1 | `P1 the function lays out in the content box, and a minimum reaches it only exactly` |
+| P2 | `P2 a placeable's width is kept within its constraints, its measured width is not` |
+| P3 | `P3 a child that doesn't fit starts at its start edge, in both directions` |
+| P4 | `P4 placeRelative mirrors under RTL against the width the container ends up with`, `P4 placeRelative mirrors a start offset under RTL, and place does not`, `P4 under RTL, a declared width the parent narrows starts at the start edge too` |
+| P5 | `P5 the size a function declares is a request its parent may override` |
+| P6 | `P6 the same constraints give the same placeable, and only placed children mount`, `P6 children are painted in the order they're placed` |
+| P7 | `P7 under a Yoga parent, a Layout's declared size can pass an at-most room, within its own max`; also `CustomLayoutApiTest`: `an at-most axis keeps content past the allowance, as a wrapping Column does` |
+| C1 | `C1 a percentage margin is of the room's width, on both axes`, `C1 a percentage has no effect on an unbounded axis, and a percentage margin is 0` |
+| C2 | `C2 margins come out of the room, and the measured width includes them`, `C2 the margins come out of an exact room` |
+| C3 to C7 | `C3 …` to `C7 …`, one test each |
+| C8 | `C8 an aspect ratio derives the other axis when exactly one is fixed`, `C8 an aspect ratio has no effect when both axes or neither are fixed`, `C8 a derived axis is kept within its own min and max`, `C8 a ratio that isn't a finite number above 0 counts as none` |
+| C9 to C12 | `C9 …` to `C12 …`, one test each |
+| R1 to R8 | `R1 …` to `R8 …`, one test each |
+| D1 to D13 | `D1 …` to `D13 …`, one test each, asserting both the `Layout` and the Yoga number |
+| L1 | `L1 a Yoga subtree wider than its room is laid out within it, where a Column child keeps its content's width` |
+
+The [guide](custom-layout.mdx)'s other claims are tested here too:
+
+| Claim | Test |
+|---|---|
+| End alignment uses `measuredWidth` | `CustomLayoutGuideConformanceTest`: `G1 …` |
+| Measuring while placing, placing twice, and calling `layout` twice or never fail with an error that names the mistake | `CustomLayoutGuideConformanceTest`: `G2 …`. That measuring in the placement block doesn't compile is checked by the compiler: the scopes are marked with a `@DslMarker` |
+| Constraints with a minimum force a child up to it | `CustomLayoutGuideConformanceTest`: `G3 …` |
+| The function runs once when the parent keeps its size, and again when it overrides it | `CustomLayoutGuideConformanceTest`: `G4 …`; `CustomLayoutApiTest`: `a layout function runs once when its size is not overridden`, `a size Yoga overrides is measured again` |
+| Placing an earlier measurement is correct | `CustomLayoutApiTest`: `returning to earlier constraints lays the child out at the ones it is placed with` |
+| `layoutDirection` in both scopes; laying out on a background thread | `CustomLayoutApiTest`: `a layout function reads its direction and converts dp in every scope`, `a container lays out on a background thread` |
+| What the layout function may capture | `LayoutTest`: `the layout function's class and its captured values decide equivalence`, `deps passed by hand decide equivalence for one function` |
+| Per-child values | `LayoutPropsTest`: `a value set in Style reaches the layout function`, `a child that sets nothing gets the reader's default`, `an outer component's value overrides the one it wraps`, `coupled values are replaced together`, `a Layout's own layout props are read by its parent, not by itself` |
+| A child that renders nothing keeps its slot | `CustomLayoutSlotTest`: `a child that renders nothing keeps its slot` |
+| The children's state and incremental mount work | `CustomLayoutStateReadTest`; `CustomChildPlacementTest`: `incremental mount culls children the container placed outside the viewport` |
+| What each sample does | The sample's own test, in `sample/src/test/java/com/facebook/samples/litho/documentation/customlayout/` |
+| Every number the figures draw | `CustomLayoutGuideConformanceTest`: `F1 …` to `F7 …`, which build each figure's case from the `start_figure_numbers` block the figures are drawn from |
+
+The same rules are covered more broadly, with generated cases in both directions, by `CustomLayoutBoxConstraintsTest`, `CustomLayoutMinMaxTest`, `CustomLayoutRootTest` and `BoxConstraintsTest`.
+
+</details>

@@ -43,6 +43,7 @@ import com.facebook.rendercore.SizeConstraints
  * reads the size back. Override one when the container knows its answer more cheaply — a pager is
  * one page wide however many pages it holds — which needs an object rather than a lambda. An
  * override receives the real children, and an [IntrinsicMeasureScope], which cannot measure them.
+ * Litho doesn't ask these questions yet, so an override changes no layout today.
  */
 @ExperimentalLithoApi
 sealed interface LayoutFunction {
@@ -72,8 +73,8 @@ sealed interface LayoutFunction {
    * The narrowest this container can be at [height] without its content breaking out of it.
    *
    * This is what a container contributes to the CSS Flexbox §4.5 automatic minimum, so a `Row` that
-   * squeezes it cannot take it below this. Nothing here reaches it: Litho asks that question
-   * through a second measure function, which the diffs above register.
+   * squeezes it cannot take it below this. It's reserved for intrinsic sizing: Litho doesn't call
+   * it, or the other intrinsic functions, yet, so overriding one changes no layout today.
    */
   fun IntrinsicMeasureScope.minIntrinsicWidth(measurables: List<Measurable>, height: Int): Int =
       measureForIntrinsic(this@LayoutFunction, measurables, atMostConstraints(0, height)).width
@@ -98,7 +99,7 @@ sealed interface LayoutFunction {
  * A layout function for a container whose child count is not known until runtime.
  *
  * ```kotlin
- * Layout(pages.map { Page(it).key(it.id) }) { measurables, c -> … }
+ * Layout(pages.map { Page(it).key(it.id) }) { measurables, constraints -> … }
  * ```
  */
 @ExperimentalLithoApi
@@ -110,10 +111,11 @@ fun interface LayoutFunctionN : LayoutFunction {
  * A layout function for a container with exactly one child, which it receives by name.
  *
  * ```kotlin
- * Layout(icon) { child, c ->
- *   val placeable = child.measure(c)
- *   layout(c.maxWidth, placeable.height) {
- *     placeable.place(x = (c.maxWidth - placeable.width) / 2, y = 0)
+ * Layout(icon) { child, constraints ->
+ *   val placeable = child.measure(constraints.copy(minWidth = 0, minHeight = 0))
+ *   val width = if (constraints.hasBoundedWidth) constraints.maxWidth else placeable.width
+ *   layout(width, placeable.height) {
+ *     placeable.place(x = (width - placeable.measuredWidth) / 2, y = 0)
  *   }
  * }
  * ```
@@ -261,7 +263,10 @@ internal constructor(
    * earlier measurement than the child's latest may lay that child out again.
    *
    * The child's own size props — width, min and max, aspect ratio, margins, padding and border —
-   * apply within [constraints], and the placeable reports the size it took, kept within them.
+   * are resolved against [constraints] and win over them, so the child may take more or less than
+   * they allow. The placeable reports the size it took as [Placeable.measuredWidth] and
+   * [Placeable.measuredHeight], and that size kept within [constraints] as [Placeable.width] and
+   * [Placeable.height].
    *
    * Not from the placement block: placing only chooses among the measurements already made. Not
    * from an intrinsic override either, which answers a number.
@@ -299,7 +304,7 @@ internal constructor(
    *
    * @param width the width this container asks for; the parent may override it
    * @param height the height this container asks for; the parent may override it
-   * @param placement runs later, once the final size is known, which may differ from [width] by
+   * @param placement runs later, once the final size is known, which may differ from [width] and
    *   [height]. Capture whatever it needs — [Placeable]s, sizes, anything computed while measuring
    *   — and it will see those values. It only places: measuring a child there does not compile.
    * @throws IllegalStateException if called twice, since one of the two sizes would be discarded
@@ -363,8 +368,9 @@ internal constructor(
 
   /**
    * Position this child at [start] from this container's start edge and [top] from its top, so a
-   * right-to-left container mirrors it: the left edge in left-to-right, the right edge in
-   * right-to-left, against the width this container declared.
+   * right-to-left container mirrors it: from the left edge in left-to-right, and from the right
+   * edge in right-to-left, against the width the container ends up with. [start] is measured to the
+   * start edge of this placeable's [Placeable.width].
    */
   fun Placeable.placeRelative(start: Int = 0, top: Int = 0) {
     val x = if (layoutDirection.isRTL) declaredWidth - start - width else start
@@ -372,7 +378,11 @@ internal constructor(
   }
 
   /**
-   * Position this child at [x], [y] relative to this container's top-left.
+   * Position this child at [x], [y] from the top-left of the width this container declared, inside
+   * its padding and border. [x] isn't mirrored in right-to-left: use [placeRelative] for that. The
+   * declared width starts at the content box's start edge, so it's the content box's left edge
+   * whenever the container ends up with the width it declared; when it doesn't, in right-to-left
+   * the declared width is aligned to the right edge.
    *
    * Paint order is placement order: two children that overlap are drawn in the order they were
    * placed in here, the last placed on top, whatever order the container declared them in.

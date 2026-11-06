@@ -41,15 +41,15 @@ import com.facebook.rendercore.utils.areObjectsEquivalent
  * ```kotlin
  * class MyRow(private val header: Component, private val body: Component) : KComponent() {
  *   override fun ComponentScope.render(): Component =
- *       Layout(header, body) { header, body, c -> … }
+ *       Layout(header, body) { header, body, constraints -> … }
  * }
  * ```
  *
  * Pass a list for children that come from data. The one-, two- and three-child forms build the same
  * container and let a fixed set of children be named at the call site:
  * ```kotlin
- * Layout(items.map { Page(it).key(it.id) }) { measurables, c -> … }   // N children
- * Layout(avatar, name, timestamp) { avatar, name, timestamp, c -> … } // three, named
+ * Layout(items.map { Page(it).key(it.id) }) { measurables, constraints -> … }   // N children
+ * Layout(avatar, name, timestamp) { avatar, name, timestamp, constraints -> … } // three, named
  * ```
  *
  * A layout that needs per-child values — an angle, an alignment, a column — reads them with
