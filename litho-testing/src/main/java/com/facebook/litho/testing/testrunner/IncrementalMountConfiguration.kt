@@ -23,12 +23,14 @@ import org.junit.runners.model.FrameworkMethod
 
 class IncrementalMountConfiguration : LithoTestRunConfiguration {
 
+  @Suppress("DATA_CLASS_INVISIBLE_COPY_USAGE_WARNING")
   override fun beforeTest(method: FrameworkMethod) {
     RenderCoreConfig.shouldEnableIMFix = true
     ComponentsConfiguration.defaultInstance =
         ComponentsConfiguration.defaultInstance.copy(unmountOnDetach = UnmountOnDetach.Always)
   }
 
+  @Suppress("DATA_CLASS_INVISIBLE_COPY_USAGE_WARNING")
   override fun afterTest(method: FrameworkMethod) {
     RenderCoreConfig.shouldEnableIMFix = false
     ComponentsConfiguration.defaultInstance =

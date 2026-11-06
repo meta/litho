@@ -61,6 +61,7 @@ public class LithoTestRunner extends RobolectricTestRunner {
    * @param testClass the test class to be run
    * @throws InitializationError if junit says so
    */
+  @SuppressWarnings("this-escape")
   public LithoTestRunner(final Class<?> testClass) throws InitializationError {
     super(testClass);
     @Nullable

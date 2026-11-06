@@ -21,11 +21,13 @@ import org.junit.runners.model.FrameworkMethod
 
 class CachedValueFromStateConfiguration : LithoTestRunConfiguration {
 
+  @Suppress("DATA_CLASS_INVISIBLE_COPY_USAGE_WARNING")
   override fun beforeTest(method: FrameworkMethod) {
     ComponentsConfiguration.defaultInstance =
         ComponentsConfiguration.defaultInstance.copy(useStateForCachedValues = true)
   }
 
+  @Suppress("DATA_CLASS_INVISIBLE_COPY_USAGE_WARNING")
   override fun afterTest(method: FrameworkMethod) {
     ComponentsConfiguration.defaultInstance =
         ComponentsConfiguration.defaultInstance.copy(useStateForCachedValues = false)

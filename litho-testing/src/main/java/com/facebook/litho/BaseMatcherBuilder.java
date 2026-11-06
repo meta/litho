@@ -25,6 +25,7 @@ import org.assertj.core.description.TextDescription;
 public final class BaseMatcherBuilder {
   private BaseMatcherBuilder() {}
 
+  @SuppressWarnings("rawtypes")
   public static Condition<InspectableComponent> buildCommonMatcher(final BaseMatcher matcher) {
     return new Condition<InspectableComponent>() {
       @Override

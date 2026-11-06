@@ -21,6 +21,7 @@ object TempComponentsConfigurations {
   private val original: ComponentsConfiguration = ComponentsConfiguration.defaultInstance
 
   @JvmStatic
+  @Suppress("DATA_CLASS_INVISIBLE_COPY_USAGE_WARNING")
   fun setShouldAddHostViewForRootComponent(value: Boolean) {
     ComponentsConfiguration.defaultInstance =
         ComponentsConfiguration.defaultInstance.copy(shouldAddHostViewForRootComponent = value)
