@@ -87,7 +87,7 @@ constructor(
    * invocations
    */
   @AnyThread
-  interface RootLayoutFunction<
+  fun interface RootLayoutFunction<
       ResolveState,
       RenderContext : Any?,
       Tree : Node<RenderContext>,
@@ -122,7 +122,7 @@ constructor(
     )
   }
 
-  interface HostListener {
+  fun interface HostListener {
     fun onMountInputUpdated(newMountInput: RootHostInput?)
   }
 
