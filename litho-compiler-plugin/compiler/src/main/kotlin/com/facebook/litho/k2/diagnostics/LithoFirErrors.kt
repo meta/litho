@@ -16,11 +16,10 @@
 
 package com.facebook.litho.k2.diagnostics
 
-import com.facebook.kotlin.compilercompat.KtDiagnosticsContainerCompat
-import com.facebook.kotlin.compilercompat.buildKtDiagnosticFactoryToRendererMap
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.diagnostics.KtDiagnosticFactory0
 import org.jetbrains.kotlin.diagnostics.KtDiagnosticFactoryToRendererMap
+import org.jetbrains.kotlin.diagnostics.KtDiagnosticsContainer
 import org.jetbrains.kotlin.diagnostics.SourceElementPositioningStrategies.NAME_IDENTIFIER
 import org.jetbrains.kotlin.diagnostics.error0
 import org.jetbrains.kotlin.diagnostics.rendering.BaseDiagnosticRendererFactory
@@ -32,7 +31,7 @@ import org.jetbrains.kotlin.diagnostics.rendering.BaseDiagnosticRendererFactory
  * removed in D120344640 because structural hook identity makes those patterns safe; the
  * `@Unconditional` variants moved to the `KComponentUnconditionalMisuseDetector` androidlint rule.
  */
-object LithoFirErrors : KtDiagnosticsContainerCompat() {
+object LithoFirErrors : KtDiagnosticsContainer() {
   val HOOK_CALLSITE_MISUSE: KtDiagnosticFactory0 by error0<PsiElement>(NAME_IDENTIFIER)
 
   override fun getRendererFactory(): BaseDiagnosticRendererFactory = LithoFirErrorMessages
@@ -40,7 +39,7 @@ object LithoFirErrors : KtDiagnosticsContainerCompat() {
 
 private object LithoFirErrorMessages : BaseDiagnosticRendererFactory() {
   override val MAP: KtDiagnosticFactoryToRendererMap by
-      buildKtDiagnosticFactoryToRendererMap("Litho") { map ->
+      KtDiagnosticFactoryToRendererMap("Litho") { map ->
         map.put(
             LithoFirErrors.HOOK_CALLSITE_MISUSE,
             "Hooks can only be called from render() or from another @Hook function. Either " +

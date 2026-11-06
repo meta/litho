@@ -17,12 +17,12 @@
 package com.facebook.litho.k2.diagnostics
 
 import com.facebook.kotlin.compilercompat.FirFunctionCallCheckerCompat
-import com.facebook.kotlin.compilercompat.FirNamedFunctionCompat
 import com.facebook.litho.common.LithoNames
 import org.jetbrains.kotlin.diagnostics.DiagnosticReporter
 import org.jetbrains.kotlin.diagnostics.reportOn
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.analysis.checkers.context.CheckerContext
+import org.jetbrains.kotlin.fir.declarations.FirNamedFunction
 import org.jetbrains.kotlin.fir.declarations.hasAnnotation
 import org.jetbrains.kotlin.fir.expressions.FirFunctionCall
 import org.jetbrains.kotlin.fir.references.symbol
@@ -76,13 +76,11 @@ class LithoFirHookUsageChecker : FirFunctionCallCheckerCompat() {
  * rather than only where it is written.
  */
 private fun CheckerContext.hasInvalidParent(): Boolean {
-  val container = containingElements.lastIsInstanceOrNull<FirNamedFunctionCompat>() ?: return true
+  val container = containingElements.lastIsInstanceOrNull<FirNamedFunction>() ?: return true
   return !container.isRenderMethod(session) && !container.hasAnnotation(LithoNames.Hook, session)
 }
 
-// Kept private rather than in a shared util: `FirNamedFunctionCompat` is a typealias, and KOSABI
-// rejects an external type alias in an ABI-relevant position, which a public extension receiver is.
-private fun FirNamedFunctionCompat.isRenderMethod(session: FirSession): Boolean {
+private fun FirNamedFunction.isRenderMethod(session: FirSession): Boolean {
   val receiver = receiverParameter?.typeRef?.coneType
   return name == LithoNames.render && isDescendantOfComponentScope(receiver, session)
 }

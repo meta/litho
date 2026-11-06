@@ -16,16 +16,16 @@
 
 package com.facebook.litho
 
-import com.facebook.kotlin.compilercompat.CompilerPluginRegistrarCompat
 import com.facebook.litho.analysis.TestIrExtension
 import com.facebook.litho.processor.AbstractTestProcessor
 import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
+import org.jetbrains.kotlin.compiler.plugin.CompilerPluginRegistrar
 import org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi
 import org.jetbrains.kotlin.config.CompilerConfiguration
 
 @OptIn(ExperimentalCompilerApi::class)
 class TestComponentRegistrar(private val processor: AbstractTestProcessor) :
-    CompilerPluginRegistrarCompat() {
+    CompilerPluginRegistrar() {
 
   override val pluginId: String = "com.facebook.litho.test"
 

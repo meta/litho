@@ -16,11 +16,10 @@
 
 package com.facebook.litho.k2.diagnostics
 
-import com.facebook.kotlin.compilercompat.KtDiagnosticsContainerCompat
-import com.facebook.kotlin.compilercompat.buildKtDiagnosticFactoryToRendererMap
 import org.jetbrains.kotlin.com.intellij.psi.PsiElement
 import org.jetbrains.kotlin.diagnostics.KtDiagnosticFactory0
 import org.jetbrains.kotlin.diagnostics.KtDiagnosticFactoryToRendererMap
+import org.jetbrains.kotlin.diagnostics.KtDiagnosticsContainer
 import org.jetbrains.kotlin.diagnostics.SourceElementPositioningStrategies.NAME_IDENTIFIER
 import org.jetbrains.kotlin.diagnostics.error0
 import org.jetbrains.kotlin.diagnostics.rendering.BaseDiagnosticRendererFactory
@@ -28,11 +27,11 @@ import org.jetbrains.kotlin.diagnostics.rendering.BaseDiagnosticRendererFactory
 /**
  * The declaration diagnostics Auto Deps reports. Each plugin owns its own container.
  *
- * A [KtDiagnosticsContainerCompat] rather than a bare renderer factory: in Kotlin 2.3 the factory
+ * A [KtDiagnosticsContainer] rather than a bare renderer factory: in Kotlin 2.3 the factory
  * builders (`error0` and friends) are contextual declarations that need a container in scope, and
  * the container is what registers the renderer factory with the compiler.
  */
-object AutoDepsErrors : KtDiagnosticsContainerCompat() {
+object AutoDepsErrors : KtDiagnosticsContainer() {
   val AUTODEPS_MISSING_DEPS_PARAM: KtDiagnosticFactory0 by error0<PsiElement>(NAME_IDENTIFIER)
   val AUTODEPS_DUPLICATE_DEPS_PARAM: KtDiagnosticFactory0 by error0<PsiElement>(NAME_IDENTIFIER)
   val AUTODEPS_MISSING_DEPS_FROM: KtDiagnosticFactory0 by error0<PsiElement>(NAME_IDENTIFIER)
@@ -47,7 +46,7 @@ object AutoDepsErrors : KtDiagnosticsContainerCompat() {
 
 private object AutoDepsErrorMessages : BaseDiagnosticRendererFactory() {
   override val MAP: KtDiagnosticFactoryToRendererMap by
-      buildKtDiagnosticFactoryToRendererMap("Litho") { map ->
+      KtDiagnosticFactoryToRendererMap("Litho") { map ->
         map.put(
             AutoDepsErrors.AUTODEPS_MISSING_DEPS_PARAM,
             "@AutoDeps declarations must have a parameter annotated @Deps to receive the inferred " +

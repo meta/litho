@@ -16,15 +16,15 @@
 
 package com.facebook.litho.k2.diagnostics
 
-import com.facebook.kotlin.compilercompat.FirNamedFunctionCompat
 import com.facebook.kotlin.compilercompat.FirRegularClassCheckerCompat
 import com.facebook.kotlin.compilercompat.FirSimpleFunctionCheckerCompat
-import com.facebook.kotlin.compilercompat.getDeclarationSymbolsCompat
 import com.facebook.litho.common.LithoNames
 import org.jetbrains.kotlin.KtSourceElement
 import org.jetbrains.kotlin.diagnostics.DiagnosticReporter
 import org.jetbrains.kotlin.diagnostics.reportOn
 import org.jetbrains.kotlin.fir.analysis.checkers.context.CheckerContext
+import org.jetbrains.kotlin.fir.declarations.DirectDeclarationsAccess
+import org.jetbrains.kotlin.fir.declarations.FirNamedFunction
 import org.jetbrains.kotlin.fir.declarations.FirRegularClass
 import org.jetbrains.kotlin.fir.declarations.hasAnnotation
 import org.jetbrains.kotlin.fir.resolve.toRegularClassSymbol
@@ -47,7 +47,7 @@ class AutoDepsFunctionChecker : FirSimpleFunctionCheckerCompat(::checkAutoDepsFu
 class AutoDepsClassChecker : FirRegularClassCheckerCompat(::checkAutoDepsClass)
 
 private fun checkAutoDepsFunction(
-    declaration: FirNamedFunctionCompat,
+    declaration: FirNamedFunction,
     context: CheckerContext,
     reporter: DiagnosticReporter,
 ) {
@@ -59,6 +59,7 @@ private fun checkAutoDepsFunction(
   checkParameters(parameters, declaration.source, context, reporter)
 }
 
+@OptIn(DirectDeclarationsAccess::class)
 private fun checkAutoDepsClass(
     declaration: FirRegularClass,
     context: CheckerContext,
@@ -66,8 +67,7 @@ private fun checkAutoDepsClass(
 ) {
   // Every constructor of the class is a call site the transform will look at, so every constructor
   // has to be well formed -- not just the primary one, which a class may not even have.
-  val constructors =
-      declaration.symbol.getDeclarationSymbolsCompat().filterIsInstance<FirConstructorSymbol>()
+  val constructors = declaration.symbol.declarationSymbols.filterIsInstance<FirConstructorSymbol>()
   if (!declaration.hasAnnotation(LithoNames.AutoDeps, context.session)) {
     constructors.forEach { reportOrphanedParticipants(it.valueParameterSymbols, context, reporter) }
     return

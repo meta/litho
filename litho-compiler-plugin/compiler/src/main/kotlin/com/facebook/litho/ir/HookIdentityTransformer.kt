@@ -19,7 +19,6 @@ package com.facebook.litho.ir
 import com.facebook.kotlin.compilercompat.compatExtensionReceiver
 import com.facebook.kotlin.compilercompat.compatPutValueArgument
 import com.facebook.kotlin.compilercompat.compatValueParameters
-import com.facebook.kotlin.compilercompat.fqNameForIrSerialization
 import com.facebook.litho.common.LithoNames
 import org.jetbrains.kotlin.DeprecatedForRemovalCompilerApi
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
@@ -43,6 +42,7 @@ import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.classFqName
 import org.jetbrains.kotlin.ir.types.isSubtypeOfClass
+import org.jetbrains.kotlin.ir.util.fqNameForIrSerialization
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.util.hasAnnotation
 import org.jetbrains.kotlin.ir.util.parentClassOrNull
