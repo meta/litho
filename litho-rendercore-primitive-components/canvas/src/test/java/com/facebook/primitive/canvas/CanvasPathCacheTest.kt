@@ -211,7 +211,7 @@ class CanvasPathCacheTest {
                     CanvasPathRect(
                         topLeft = Point(firstX + i, 0f),
                         size = Size(1f, 1f),
-                        cornerRadius = 0f,
+                        cornerRadiusX = 0f,
                     ),
                 ),
         )

@@ -187,20 +187,26 @@ data class CanvasPathArc(
  *
  * @property topLeft The coordinates of the top left point of the rectangle
  * @property size The size of the rectangle
- * @property cornerRadius The radius of the rounded corners
+ * @property cornerRadiusX The horizontal radius of the rounded corners
+ * @property cornerRadiusY The vertical radius of the rounded corners (elliptical corners when it
+ *   differs from [cornerRadiusX]). As with [Path.addRoundRect], radii too large for the rectangle
+ *   are scaled down together, keeping their ratio
  */
 @SuppressLint("NotInvokedPrivateMethod")
 @DataClassGenerate
-data class CanvasPathRect(
+data class CanvasPathRect
+@JvmOverloads
+constructor(
     private val topLeft: Point,
     private val size: Size,
-    private val cornerRadius: Float,
+    private val cornerRadiusX: Float,
+    private val cornerRadiusY: Float = cornerRadiusX,
 ) : CanvasPathChildModel {
   override fun applyTo(androidPath: Path, state: CanvasState) {
     androidPath.addRoundRect(
         RectF(topLeft.x, topLeft.y, topLeft.x + size.width, topLeft.y + size.height),
-        cornerRadius,
-        cornerRadius,
+        cornerRadiusX,
+        cornerRadiusY,
         Path.Direction.CW,
     )
   }

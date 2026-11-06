@@ -52,7 +52,7 @@ class CanvasPathAddTest {
               CanvasPathRect(
                   topLeft = Point(0f, 0f),
                   size = Size(10f, 10f),
-                  cornerRadius = 0f,
+                  cornerRadiusX = 0f,
               ),
           ),
   )
