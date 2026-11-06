@@ -150,6 +150,10 @@ class CanvasState(
                   }
                 }
                 is CanvasGradientShading -> {
+                  // The paint's alpha modulates the shader; the gradient colors carry their own.
+                  if (alpha != OPAQUE) {
+                    alpha = OPAQUE
+                  }
                   shader = shading.gradient.toShader()
                 }
               }
@@ -184,6 +188,10 @@ class CanvasState(
                   }
                 }
                 is CanvasGradientShading -> {
+                  // The paint's alpha modulates the shader; the gradient colors carry their own.
+                  if (alpha != OPAQUE) {
+                    alpha = OPAQUE
+                  }
                   shader = shading.gradient.toShader()
                 }
               }
@@ -260,5 +268,6 @@ class CanvasState(
   companion object {
     const val DEFAULT_MATRIX_POOL_SIZE = 5
     const val DEFAULT_PATH_CACHE_SIZE = 10
+    private const val OPAQUE = 255
   }
 }
