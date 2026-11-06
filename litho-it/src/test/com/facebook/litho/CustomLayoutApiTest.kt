@@ -971,17 +971,17 @@ class CustomLayoutApiTest {
   }
 
   /**
-   * The other half of an allowance: content taller than it is capped to it.
+   * The other half of an allowance: content taller than it is kept, past it, as a Yoga `Column`
+   * that wraps its content keeps its content's height.
    *
    * On the main axis, so the enclosing Column cannot re-derive the answer the way `alignItems`
    * re-derives a cross-axis one, and with `flexShrink` off so nothing downstream pulls an
-   * over-reported height back. Without the cap the container keeps its content height and
-   * overflows.
+   * over-reported height back.
    */
   @Test
-  fun `an at-most axis caps content that exceeds the allowance`() {
+  fun `an at-most axis keeps content past the allowance, as a wrapping Column does`() {
     val overflowing = VIEWPORT * 2
-    // Declares more than it is allowed; the answer Yoga gets is coerced into the allowance.
+    // Declares more than it is allowed; Yoga gets that answer, past the allowance.
     val layout = LayoutFunctionN { measurables, _ ->
       val placeable = measurables[0].measure(SizeConstraints.exact(CHILD, CHILD))
       layout(CHILD, overflowing) { placeable.place(x = 0, y = 0) }
@@ -1002,8 +1002,8 @@ class CustomLayoutApiTest {
     val result = checkNotNull(findContainer(root as LithoLayoutResult))
 
     assertThat(result.height)
-        .describedAs("capped to the allowance, not the taller content")
-        .isEqualTo(VIEWPORT)
+        .describedAs("the taller content, past the allowance")
+        .isEqualTo(overflowing)
   }
 
   /**
@@ -1292,7 +1292,7 @@ class CustomLayoutApiTest {
               wrap(
                   Layout(
                       listOf(
-                          Column(style = Style.height(CHILD.px).margin(horizontal = (-10).px)),
+                          Column(style = Style.height(CHILD.px).margin(horizontal = (-10f).px)),
                       ),
                       layout = squeeze,
                   ),

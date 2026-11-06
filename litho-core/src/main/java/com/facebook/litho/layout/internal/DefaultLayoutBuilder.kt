@@ -44,7 +44,6 @@ import com.facebook.litho.layout.MeasureScope
 import com.facebook.litho.layout.NO_SIZE_DECLARED
 import com.facebook.litho.layout.Placeable
 import com.facebook.litho.layout.PlacementScope
-import com.facebook.litho.layout.axisSize
 import com.facebook.litho.layout.borderBoxSizeAround
 import com.facebook.litho.layout.contentSpec
 import com.facebook.litho.layout.readLayoutProps
@@ -138,7 +137,12 @@ internal class DefaultLayoutBuilder(
     return borderBoxSizeIn(box)
   }
 
-  /** Its size under [room], with no padding or border: as Yoga measures a node's content. */
+  /**
+   * Its size under [room], with no padding or border: as Yoga measures a node's content. An exact
+   * axis is the room's; otherwise it's the size its function declares, even past the room's
+   * maximum, as a Yoga `Column` that wraps its content grows past an at-most room. Its own max
+   * still bounds it, through its Yoga node.
+   */
   internal fun measureUnder(room: SizeConstraints): IntSize {
     check(stage == Stage.MEASURING) {
       "${node.headComponent.simpleName} measured by Yoga after it was built or discarded"
@@ -147,8 +151,8 @@ internal class DefaultLayoutBuilder(
     val width = declared?.width ?: 0
     val height = declared?.height ?: 0
     return IntSize(
-        axisSize(room.hasExactWidth, room.minWidth, room.maxWidth, width, edges = 0),
-        axisSize(room.hasExactHeight, room.minHeight, room.maxHeight, height, edges = 0),
+        if (room.hasExactWidth) room.maxWidth else width,
+        if (room.hasExactHeight) room.maxHeight else height,
     )
   }
 
@@ -295,29 +299,26 @@ internal class DefaultLayoutBuilder(
   ) {
     val left = box.padding.left + box.border.left
     val top = box.padding.top + box.border.top
-    // Where a child's border box sits across; down is the same, with no start:
+    // Where a child's border box sits across; down is the same, with no start or offset:
     //
     //   |border+padding|<-------------------- content width -------------------->|
     //   |   = left     |<-- start -->|<------------- declared width ------------>|
     //   |              |             |<-- x -->|<- offsetX ->|<- margin ->|child
     //
     // start is 0 left to right; right to left, the declared width ends at the content's right
-    // edge. x is where the placement put the child's placeable. offsetX centers what the child
-    // measured within its placeable's width, which differ when the measured size didn't fit the
-    // child's constraints. Its border box starts after its left margin.
+    // edge. x is where the placement put the child's placeable. What the child measured starts at
+    // the start edge of its placeable's width, which differ when the measured size didn't fit the
+    // child's constraints: offsetX is 0 left to right, and right to left ends what it measured at
+    // the placeable's right edge. Its border box starts after its left margin.
     val start = if (layoutDirection.isRTL) contentWidth - checkNotNull(declared).width else 0
     for (order in 0 until placementScope.placedCount) {
       val index = placementScope.placedOrder[order]
       val placeable = checkNotNull(placementScope.placedWith[index])
+      val offsetX = if (layoutDirection.isRTL) placeable.width - placeable.measuredWidth else 0
       val slot = result.childCount * 2
       positions[slot] =
-          left +
-              start +
-              placementScope.placements[index * 2] +
-              placeable.offsetX +
-              placeable.marginLeft
-      positions[slot + 1] =
-          top + placementScope.placements[index * 2 + 1] + placeable.offsetY + placeable.marginTop
+          left + start + placementScope.placements[index * 2] + offsetX + placeable.marginLeft
+      positions[slot + 1] = top + placementScope.placements[index * 2 + 1] + placeable.marginTop
       result.addChild(buildChildFor(index, placeable))
     }
   }

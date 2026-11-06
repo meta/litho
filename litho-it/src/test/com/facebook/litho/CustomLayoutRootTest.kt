@@ -25,7 +25,9 @@ import com.facebook.litho.core.heightPercent
 import com.facebook.litho.core.margin
 import com.facebook.litho.core.marginPercent
 import com.facebook.litho.core.maxHeight
+import com.facebook.litho.core.maxHeightPercent
 import com.facebook.litho.core.maxWidth
+import com.facebook.litho.core.maxWidthPercent
 import com.facebook.litho.core.minHeight
 import com.facebook.litho.core.minWidth
 import com.facebook.litho.core.padding
@@ -264,7 +266,8 @@ class CustomLayoutRootTest {
 
   /**
    * Its holder is its parent, and gives it a room from 0 to the root constraints, which its own
-   * style decides within, and which it never leaves. Exact width 200, at most height 300.
+   * style decides within, and which only a size it declares or derives from its aspect ratio can
+   * pass, as a child's can. Exact width 200, at most height 300.
    */
   @Test
   fun `its own style decides its box within the room its holder gives`() {
@@ -272,12 +275,12 @@ class CustomLayoutRootTest {
         Triple("no width, start margin", Style.margin(start = 7.px), RootBox(193, 20, 7, 0)),
         Triple("width 100", Style.width(100.px), RootBox(100, 20, 0, 0)),
         Triple("width 50%", Style.widthPercent(50f), RootBox(100, 20, 0, 0)),
-        Triple("width 300", Style.width(300.px), RootBox(200, 20, 0, 0)),
-        Triple("aspect ratio 0.5", Style.aspectRatio(0.5f), RootBox(150, 300, 0, 0)),
+        Triple("width 300", Style.width(300.px), RootBox(300, 20, 0, 0)),
+        Triple("aspect ratio 0.5", Style.aspectRatio(0.5f), RootBox(200, 400, 0, 0)),
         Triple(
             "aspect ratio 0.5, own max height 250",
             Style.aspectRatio(0.5f).maxHeight(250.px),
-            RootBox(125, 250, 0, 0),
+            RootBox(200, 250, 0, 0),
         ),
         Triple("position inset", Style.position(left = 10.px), RootBox(200, 20, 0, 0)),
     )
@@ -308,7 +311,12 @@ class CustomLayoutRootTest {
   fun `its own limits, padding, ratio and percentages follow the rules it documents`() {
     val unbounded = SizeSpec.makeSizeSpec(0, SizeSpec.UNSPECIFIED)
     val cases = listOf(
-        Triple("own min above own max: the max wins", Style.minWidth(150.px).maxWidth(100.px), 100),
+        Triple("own min above own max: the min wins", Style.minWidth(150.px).maxWidth(100.px), 150),
+        Triple(
+            "a declared width with its own min above its own max: the min wins",
+            Style.width(120.px).minWidth(150.px).maxWidth(100.px),
+            150,
+        ),
         Triple(
             "own max with a margin: it bounds the border box, within the room",
             Style.maxWidth(190.px).margin(start = 20.px),
@@ -364,29 +372,27 @@ class CustomLayoutRootTest {
   }
 
   /**
-   * With neither axis decided, the bounded one is decided at its maximum, the width first, and the
-   * ratio derives the other, as Compose's `aspectRatio` takes the most room that keeps it. With
-   * neither bounded, it wraps its content.
+   * With neither axis decided, its aspect ratio has no effect, as a `Layout`'s child's has none.
    */
   @Test
-  fun `with neither axis decided, an aspect ratio takes the most room that keeps it`() {
+  fun `with neither axis decided, its aspect ratio has no effect`() {
     val atMost200 = SizeSpec.makeSizeSpec(200, SizeSpec.AT_MOST)
     val unbounded = SizeSpec.makeSizeSpec(0, SizeSpec.UNSPECIFIED)
     val cases = listOf(
         Triple(
             "at most 200 x 300, ratio 2",
             Triple(atMost200, AT_MOST_300, 2f),
-            RootBox(200, 100, 0, 0),
+            RootBox(30, 20, 0, 0),
         ),
         Triple(
             "at most 200 x 300, ratio 0.5",
             Triple(atMost200, AT_MOST_300, 0.5f),
-            RootBox(150, 300, 0, 0),
+            RootBox(30, 20, 0, 0),
         ),
         Triple(
             "unbounded x at most 300, ratio 2",
             Triple(unbounded, AT_MOST_300, 2f),
-            RootBox(600, 300, 0, 0),
+            RootBox(30, 20, 0, 0),
         ),
         Triple("unbounded, ratio 2", Triple(unbounded, unbounded, 2f), RootBox(30, 20, 0, 0)),
     )
@@ -417,11 +423,10 @@ class CustomLayoutRootTest {
 
   /**
    * Where a `Layout` root and a `Column` root differ, a Yoga root clips content, breaks the ratio
-   * or comes out a pixel off: margins across an exact axis, a declared size past the root
-   * constraints, an aspect ratio, position insets, margins on an axis with an own max (a Yoga root
-   * keeps its margin box within the max), an own min above its own max, and logical and physical
-   * horizontal margins together in RTL. Everywhere else, a `Layout` root gets the box and the
-   * offset a `Column` root gets.
+   * or comes out a pixel off: margins across an exact axis, an aspect ratio, position insets,
+   * margins on an axis with an own max (a Yoga root keeps its margin box within the max), an own
+   * min above its own max, and logical and physical horizontal margins together in RTL. Everywhere
+   * else, a `Layout` root gets the box and the offset a `Column` root gets.
    */
   @Test
   fun `outside the documented differences, its box and offset are a Column root's`() {
@@ -464,6 +469,344 @@ class CustomLayoutRootTest {
               }
           if (layout != column) {
             mismatches += "$constraintName, $styleName, $direction: Layout $layout, Column $column"
+          }
+        }
+      }
+    }
+    assertThat(mismatches).isEmpty()
+  }
+
+  /**
+   * Its own min is kept past the room, as a declared size is and as for a child: exactly and at
+   * most, across and down, in both directions. A Yoga `Column` root keeps it past the room only
+   * down.
+   */
+  @Test
+  fun `its own min is kept past the room, as a declared size is`() {
+    val exactly200 = SizeSpec.makeSizeSpec(200, SizeSpec.EXACTLY)
+    val atMost200 = SizeSpec.makeSizeSpec(200, SizeSpec.AT_MOST)
+    val exactly300 = SizeSpec.makeSizeSpec(300, SizeSpec.EXACTLY)
+    val cases = listOf(
+        Triple(
+            "min width 300, exactly 200 wide",
+            Style.minWidth(300.px),
+            exactly200 to AT_MOST_300,
+        ),
+        Triple("min width 300, at most 200 wide", Style.minWidth(300.px), atMost200 to AT_MOST_300),
+        Triple(
+            "min height 400, at most 300 high",
+            Style.minHeight(400.px),
+            atMost200 to AT_MOST_300,
+        ),
+        Triple(
+            "min height 400, exactly 300 high",
+            Style.minHeight(400.px),
+            atMost200 to exactly300,
+        ),
+    )
+    val expected = listOf(300 to 20, 300 to 20, 30 to 400, 30 to 400)
+    for ((index, case) in cases.withIndex()) {
+      val (name, style, specs) = case
+      for (direction in listOf(YogaDirection.LTR, YogaDirection.RTL)) {
+        val box =
+            rootBoxOf(specs.first, specs.second) {
+              Layout(
+                  listOf(FixedView(30, 20)),
+                  style = Style.layoutDirection(direction) + style,
+                  layout = WRAPS_CHILD,
+              )
+            }
+        assertThat(box.width to box.height)
+            .describedAs("%s, %s", name, direction)
+            .isEqualTo(expected[index])
+      }
+    }
+  }
+
+  /**
+   * A negative size or own max has no effect, as for a child and in CSS: it gets the box it gets
+   * without it, exactly, at most and with no bound, in both directions. A Yoga root fills its room
+   * instead when its size is negative.
+   */
+  @Test
+  fun `a negative size or own max has no effect, as for a child`() {
+    val unbounded = SizeSpec.makeSizeSpec(0, SizeSpec.UNSPECIFIED)
+    val constraints = listOf(
+        "exact x at most" to (EXACTLY_200 to AT_MOST_300),
+        "at most" to (SizeSpec.makeSizeSpec(200, SizeSpec.AT_MOST) to AT_MOST_300),
+        "unbounded" to (unbounded to unbounded),
+    )
+    val styles: List<Pair<String, Style>> = listOf(
+        "width -10" to Style.width((-10f).px),
+        "width -50%" to Style.widthPercent(-50f),
+        "width -0.5%" to Style.widthPercent(-0.5f),
+        "height -10" to Style.height((-10f).px),
+        "height -50%" to Style.heightPercent(-50f),
+        "height -0.5%" to Style.heightPercent(-0.5f),
+        "max width -10" to Style.maxWidth((-10f).px),
+        "max width -50%" to Style.maxWidthPercent(-50f),
+        "max height -10" to Style.maxHeight((-10f).px),
+        "max height -0.5%" to Style.maxHeightPercent(-0.5f),
+    )
+    val mismatches = ArrayList<String>()
+    for ((constraintName, specs) in constraints) {
+      val (widthSpec, heightSpec) = specs
+      for ((name, style) in styles) {
+        for (direction in listOf(YogaDirection.LTR, YogaDirection.RTL)) {
+          val with =
+              rootBoxOf(widthSpec, heightSpec) {
+                Layout(
+                    listOf(FixedView(30, 20)),
+                    style = Style.layoutDirection(direction) + style,
+                    layout = WRAPS_CHILD,
+                )
+              }
+          val without =
+              rootBoxOf(widthSpec, heightSpec) {
+                Layout(
+                    listOf(FixedView(30, 20)),
+                    style = Style.layoutDirection(direction),
+                    layout = WRAPS_CHILD,
+                )
+              }
+          if (with != without)
+              mismatches += "$constraintName, $name, $direction: $with, without $without"
+        }
+      }
+    }
+    assertThat(mismatches).isEmpty()
+  }
+
+  /**
+   * A size it declares stays when it's larger than the room, within its own min and max, as for a
+   * `Column` root: exactly, at most and with no bound, in both directions.
+   */
+  @Test
+  fun `a declared size past its room stays, as for a Column root`() {
+    val constraints = listOf(
+        "exactly 300 x 300" to SizeSpec.makeSizeSpec(300, SizeSpec.EXACTLY),
+        "at most 300 x 300" to SizeSpec.makeSizeSpec(300, SizeSpec.AT_MOST),
+        "unbounded" to SizeSpec.makeSizeSpec(0, SizeSpec.UNSPECIFIED),
+    )
+    val styles: List<Pair<String, Style>> = listOf(
+        "width 400" to Style.width(400.px),
+        "height 400" to Style.height(400.px),
+        "width 400, max width 350" to Style.width(400.px).maxWidth(350.px),
+        "width 100, min width 350" to Style.width(100.px).minWidth(350.px),
+        "width 150%" to Style.widthPercent(150f),
+    )
+    val mismatches = ArrayList<String>()
+    for ((constraintName, spec) in constraints) {
+      for ((styleName, style) in styles) {
+        for (direction in listOf(YogaDirection.LTR, YogaDirection.RTL)) {
+          val styled = Style.layoutDirection(direction) + style
+          val layout =
+              rootBoxOf(spec, spec) {
+                Layout(listOf(FixedView(30, 20)), style = styled, layout = WRAPS_CHILD)
+              }
+          val column = rootBoxOf(spec, spec) { Column(style = styled) { child(FixedView(30, 20)) } }
+          if (layout != column) {
+            mismatches += "$constraintName, $styleName, $direction: Layout $layout, Column $column"
+          }
+        }
+      }
+    }
+    assertThat(mismatches).isEmpty()
+  }
+
+  /**
+   * Across an exact room its margins come out of the room, as a child's do in a `Column` that
+   * stretches it, in both directions, where a Yoga root keeps the room's size and its margins only
+   * move it.
+   */
+  @Test
+  fun `across an exact room its margins come out of the room, as a stretched child's do`() {
+    val exactly300 = SizeSpec.makeSizeSpec(300, SizeSpec.EXACTLY)
+    val cases = listOf(
+        "start margin 6" to Style.margin(start = 6.px),
+        "horizontal margins -20" to Style.margin(horizontal = (-20f).px),
+        "start margin 5%" to Style.marginPercent(start = 5f),
+    )
+    for ((name, style) in cases) {
+      for (direction in listOf(YogaDirection.LTR, YogaDirection.RTL)) {
+        val styled = Style.layoutDirection(direction) + style
+        val root =
+            rootBoxOf(exactly300, exactly300) {
+              Layout(listOf(FixedView(30, 20)), style = styled, layout = WRAPS_CHILD)
+            }
+        val stretched =
+            lithoTestRule.render(widthSpec = exactly300, heightSpec = exactly300) {
+              Column(style = Style.layoutDirection(direction)) {
+                child(Column(style = style) { child(FixedView(30, 20)) })
+              }
+            }
+        val childWidth =
+            (checkNotNull(stretched.componentTree.mainThreadLayoutState?.rootLayoutResult)
+                    as LithoLayoutResult)
+                .getChildAt(0)
+                .width
+        assertThat(root.width).describedAs("%s, %s", name, direction).isEqualTo(childWidth)
+        assertThat(root.height).describedAs("%s, %s", name, direction).isEqualTo(300)
+      }
+    }
+    val vertical =
+        rootBoxOf(exactly300, exactly300) {
+          Layout(
+              listOf(FixedView(30, 20)),
+              style = Style.margin(vertical = 5.px),
+              layout = WRAPS_CHILD,
+          )
+        }
+    assertThat(vertical.height).describedAs("exactly 300 high, less 5 and 5").isEqualTo(290)
+  }
+
+  /**
+   * With an axis decided, its aspect ratio derives the other, as a child's does in a `Column`,
+   * where a Yoga root ignores its ratio and wraps its content.
+   */
+  @Test
+  fun `with an axis decided, its aspect ratio derives the other, as a child's does`() {
+    val atMost300 = SizeSpec.makeSizeSpec(300, SizeSpec.AT_MOST)
+    val cases = listOf(
+        "width 120, ratio 3" to Style.width(120.px).aspectRatio(3f),
+        "height 40, ratio 2" to Style.height(40.px).aspectRatio(2f),
+    )
+    for ((name, style) in cases) {
+      val root =
+          rootBoxOf(atMost300, atMost300) {
+            Layout(listOf(FixedView(30, 20)), style = style, layout = WRAPS_CHILD)
+          }
+      val inColumn =
+          lithoTestRule.render(widthSpec = atMost300, heightSpec = atMost300) {
+            Column { child(Column(style = style) { child(FixedView(30, 20)) }) }
+          }
+      val child =
+          (checkNotNull(inColumn.componentTree.mainThreadLayoutState?.rootLayoutResult)
+                  as LithoLayoutResult)
+              .getChildAt(0)
+      assertThat(root.width to root.height).describedAs(name).isEqualTo(child.width to child.height)
+    }
+  }
+
+  /**
+   * With neither axis decided, its aspect ratio gives it the box it gives the same `Layout` as a
+   * `Layout`'s child measured under the same constraints: none, in both directions.
+   */
+  @Test
+  fun `with neither axis decided, its aspect ratio does what a Layout child's does`() {
+    val unbounded = SizeSpec.makeSizeSpec(0, SizeSpec.UNSPECIFIED)
+    val atMost300 = SizeSpec.makeSizeSpec(300, SizeSpec.AT_MOST)
+    val specs = listOf(
+        "at most 300 x 300" to (atMost300 to atMost300),
+        "unbounded" to (unbounded to unbounded),
+        "unbounded x at most 300" to (unbounded to atMost300),
+        "at most 300 x unbounded" to (atMost300 to unbounded),
+    )
+    val mismatches = ArrayList<String>()
+    for ((specName, spec) in specs) {
+      val (widthSpec, heightSpec) = spec
+      val constraints = SizeConstraints.fromMeasureSpecs(widthSpec, heightSpec)
+      for (ratio in listOf(3f, 2f, 0.5f)) {
+        for (direction in listOf(YogaDirection.LTR, YogaDirection.RTL)) {
+          val style = Style.layoutDirection(direction).aspectRatio(ratio)
+          val root =
+              rootBoxOf(widthSpec, heightSpec) {
+                Layout(listOf(FixedView(30, 20)), style = style, layout = WRAPS_CHILD)
+              }
+          val view =
+              lithoTestRule.render(widthPx = 1000, heightPx = 1000) {
+                Column {
+                  child(
+                      Layout(
+                          listOf(
+                              Layout(
+                                  listOf(FixedView(30, 20)),
+                                  style = style,
+                                  layout = WRAPS_CHILD,
+                              ),
+                          ),
+                          layout =
+                              LayoutFunctionN { measurables, _ ->
+                                val placeable = measurables[0].measure(constraints)
+                                layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                              },
+                      ),
+                  )
+                }
+              }
+          val child = rootResult(view).getChildAt(0).getChildAt(0)
+          if (root.width != child.width || root.height != child.height) {
+            mismatches +=
+                "$specName, ratio $ratio, $direction: root ${root.width}x${root.height}, " +
+                    "child ${child.width}x${child.height}"
+          }
+        }
+      }
+    }
+    assertThat(mismatches).isEmpty()
+  }
+
+  /**
+   * With an axis decided, by an exact constraint or a declared size, its aspect ratio gives it the
+   * box it gives the same `Layout` as a `Layout`'s child under the same constraints: the decided
+   * axis keeps its size and the other is derived, within its own min and max only, in both
+   * directions.
+   */
+  @Test
+  fun `with an axis decided, its aspect ratio does what a Layout child's does`() {
+    val unbounded = SizeSpec.makeSizeSpec(0, SizeSpec.UNSPECIFIED)
+    val atMost300 = SizeSpec.makeSizeSpec(300, SizeSpec.AT_MOST)
+    val cases = listOf(
+        "exactly 200 x at most 300" to Triple(EXACTLY_200, atMost300, Style),
+        "exactly 200 x unbounded" to Triple(EXACTLY_200, unbounded, Style),
+        "at most 300 x exactly 200" to Triple(atMost300, EXACTLY_200, Style),
+        "unbounded x exactly 200" to Triple(unbounded, EXACTLY_200, Style),
+        "width 120, at most 300" to Triple(atMost300, atMost300, Style.width(120.px)),
+        "height 120, at most 300" to Triple(atMost300, atMost300, Style.height(120.px)),
+        "exactly 200 x at most 300, max height 150" to
+            Triple(EXACTLY_200, atMost300, Style.maxHeight(150.px)),
+        "exactly 200 x at most 300, min height 250" to
+            Triple(EXACTLY_200, atMost300, Style.minHeight(250.px)),
+        "at most 300 x exactly 200, max width 150" to
+            Triple(atMost300, EXACTLY_200, Style.maxWidth(150.px)),
+    )
+    val mismatches = ArrayList<String>()
+    for ((name, case) in cases) {
+      val (widthSpec, heightSpec, declared) = case
+      val constraints = SizeConstraints.fromMeasureSpecs(widthSpec, heightSpec)
+      for (ratio in listOf(3f, 2f, 0.5f)) {
+        for (direction in listOf(YogaDirection.LTR, YogaDirection.RTL)) {
+          val style = Style.layoutDirection(direction).aspectRatio(ratio) + declared
+          val root =
+              rootBoxOf(widthSpec, heightSpec) {
+                Layout(listOf(FixedView(30, 20)), style = style, layout = WRAPS_CHILD)
+              }
+          val view =
+              lithoTestRule.render(widthPx = 1000, heightPx = 1000) {
+                Column {
+                  child(
+                      Layout(
+                          listOf(
+                              Layout(
+                                  listOf(FixedView(30, 20)),
+                                  style = style,
+                                  layout = WRAPS_CHILD,
+                              ),
+                          ),
+                          layout =
+                              LayoutFunctionN { measurables, _ ->
+                                val placeable = measurables[0].measure(constraints)
+                                layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                              },
+                      ),
+                  )
+                }
+              }
+          val child = rootResult(view).getChildAt(0).getChildAt(0)
+          if (root.width != child.width || root.height != child.height) {
+            mismatches +=
+                "$name, ratio $ratio, $direction: root ${root.width}x${root.height}, " +
+                    "child ${child.width}x${child.height}"
           }
         }
       }

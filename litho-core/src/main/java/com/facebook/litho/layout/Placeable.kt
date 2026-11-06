@@ -46,14 +46,22 @@ internal constructor(
 
   /**
    * The width this child asked for, margins included, before it was kept within its constraints.
-   * Differs from [width] only when the child does not fit them: it is then centered in [width].
+   * Differs from [width] only when the child does not fit them: it then starts at the start edge of
+   * [width], and falls short of or overflows its end.
    */
   val measuredWidth: Int = measured.width
 
   /** The height this child asked for. The other axis of [measuredWidth]. */
   val measuredHeight: Int = measured.height
 
-  /** The width this child occupies, margins included, within the constraints it was measured at. */
+  /**
+   * The width this child occupies, margins included, within the constraints it was measured at.
+   * [measuredWidth] is the child's own size, so place a child by [measuredWidth] to align it to the
+   * end. A child's content stays within the constraints, as in Compose: its own size, min or max is
+   * what can take [measuredWidth] past them. Under a Yoga parent, a `Layout` instead answers the
+   * size its function declares past an at-most room, as a Yoga `Column` that wraps its content
+   * does.
+   */
   val width: Int = measuredWidth.coerceIn(constraints.minWidth, constraints.maxWidth)
 
   /**
@@ -67,12 +75,4 @@ internal constructor(
 
   internal val marginTop: Int
     get() = box.margins.top
-
-  /** How far this child is shifted to center [measuredWidth] in [width]. */
-  internal val offsetX: Int
-    get() = (width - measuredWidth) / 2
-
-  /** How far this child is shifted to center [measuredHeight] in [height]. */
-  internal val offsetY: Int
-    get() = (height - measuredHeight) / 2
 }

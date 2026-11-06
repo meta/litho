@@ -40,8 +40,8 @@ internal data class IntEdges(val left: Int, val top: Int, val right: Int, val bo
  *
  * The child's answer is its border box plus [margins]. It does not have to fit the constraints: a
  * child's own width, height, min and max win over them, so the container coerces the child's answer
- * into them. A root has no container: [resolveRootBox] keeps it within their maximum unless its
- * edges need more.
+ * into them. A root has no container: [resolveRootBox] keeps the content it wraps within their
+ * maximum, and a size it declares or derives from its aspect ratio, or its own min, can pass it.
  */
 internal data class BoxConstraints(
     val margins: IntEdges,
@@ -69,20 +69,48 @@ internal data class BoxConstraints(
  *    CSS, and is 0 when the width is unbounded.
  * 2. **Margins** come out of the room: both of its bounds drop by them, so a negative margin raises
  *    both, the minimum included.
- * 3. **Own min** replaces the room's minimum, as Compose's `requiredWidthIn` does: a min under a
- *    larger exact room lets the content choose between the two. **Own max** only narrows the room,
- *    as `widthIn` does, so `maxWidth` caps a child as it does in a Column. When the min is above
- *    the max, the max wins, as in Compose.
+ * 3. **Own min** raises the room's minimum, and never lowers it, so a child in an exact room fills
+ *    it, as in a `Column` that stretches it. **Own max** only narrows the room, so `maxWidth` caps
+ *    a child as it does in a Column. When the min is above the max, the min wins, as in CSS. A
+ *    negative own max has no effect, as in CSS.
  * 4. **Own width or height** fixes the axis at that size, limited only by the child's own min and
- *    max, whatever the room, as Compose's `requiredWidth` does. A **percentage** size fixes it as
- *    `fillMaxWidth(fraction)` does: the fraction, at most 1, of the room's maximum, within the
- *    range so far.
+ *    max, whatever the room, as Compose's `requiredWidth` does. A **percentage** size is of the
+ *    room's maximum, and fixes the axis the same way, as in a `Column`. A negative size has no
+ *    effect, so the axis is as if it were auto, as in Yoga and CSS.
  * 5. **Aspect ratio** derives the other axis when exactly one is fixed, limited only by that axis's
  *    own min and max. A ratio that is not a finite number above 0 counts as none, as in Yoga.
  * 6. **Padding and border** set the smallest the border box can be.
  *
  * So the border box plus margins may fall outside the room; the container coerces the child's
  * answer into it.
+ *
+ * Where a child differs from the same node as a `Column`'s child on purpose, because Yoga's box
+ * depends only on the node's kind there or contradicts CSS:
+ * - **An own min above an own max:** the min wins for every child, as in CSS, so
+ *   `minWidth(80).maxWidth(50)` is 80 wide. Yoga gives a leaf its min, 80, and a `Column` child of
+ *   a `Column` that stretches it 80 too, but one that it doesn't stretch its max, 50: a container
+ *   child here is 80 where that `Column` is 50.
+ * - **A percentage height on an axis the room leaves unbounded** has no base and no effect, as CSS
+ *   gives a percentage of an auto height: `heightPercent(50)` keeps its content's height, where
+ *   Yoga takes it of an ancestor's height.
+ * - **A Yoga subtree whose content is wider than its room** is laid out within the room; as the
+ *   child of a Yoga `Column` that doesn't stretch it, it would keep its content's size and
+ *   overflow.
+ * - **A negative own max** has no effect, as in CSS, where Yoga gives a stretched child's width 0
+ *   but leaves a `Row` child's height as it is.
+ * - **An aspect ratio with the other axis stretched:** exact constraints win over the ratio, as
+ *   `align-self: stretch` wins in CSS, so `height(40).aspectRatio(2)` stretched to 300 is 300 by
+ *     40. A Yoga child derives 80 from its height instead.
+ * - **An aspect ratio with neither axis fixed** has no effect, so the child keeps its content's
+ *   box, 30 by 25, as in CSS block layout and a CSS row. A CSS column and a Yoga `Column` child
+ *   derive the width from the content's height, 50, and a Yoga `Row` child derives the height from
+ *   the width, 15, below its content.
+ * - **A percentage under an at-most room** is of the room's maximum, the constraints its container
+ *   passes, as for a child of a container with that width. A Yoga `Column` that wraps its content
+ *   gives its children no width to take it of, so it counts as auto there; CSS resolves it against
+ *   the container's final width instead.
+ * - **Edges and percentages** round to whole pixels each, where Yoga rounds positions on its pixel
+ *   grid, flooring a node with a measure function, so a fractional margin can land a pixel apart.
  *
  * Logical edges resolve as Yoga resolves them (see [BoxEdges.resolve]).
  */
@@ -107,9 +135,19 @@ internal fun resolveBoxConstraints(
 
   val heightBase = if (roomMaxHeight != SizeConstraints.Infinity) roomMaxHeight else null
   val minWidth = props.minWidth.toPx(widthBase)
-  val maxWidth = props.maxWidth.toPx(widthBase)
+  val maxWidth =
+      props.maxWidth
+          .takeUnless {
+            it is BoxLength.Px && it.value < 0f || it is BoxLength.Percent && it.value < 0f
+          }
+          ?.toPx(widthBase)
   val minHeight = props.minHeight.toPx(heightBase)
-  val maxHeight = props.maxHeight.toPx(heightBase)
+  val maxHeight =
+      props.maxHeight
+          .takeUnless {
+            it is BoxLength.Px && it.value < 0f || it is BoxLength.Percent && it.value < 0f
+          }
+          ?.toPx(heightBase)
   widthRange.requireWithin(minWidth, maxWidth)
   heightRange.requireWithin(minHeight, maxHeight)
   widthRange.fixAt(props.width, widthBase, minWidth, maxWidth)
@@ -142,11 +180,12 @@ internal fun resolveBoxConstraints(
  * Applies a root `Layout`'s own box props within [constraints], the ones its holder lays it out
  * under. Its holder, the view for a tree's root or the node that holds deferred content, gives two
  * things: a room from 0 to the constraints' maximum on each axis, which its margin box stays within
- * unless its margins, padding and border alone need more, and a default for a size the root doesn't
- * declare. The root may be smaller than its room, as a `wrap_content` child of an Android
- * `FrameLayout` may be. Its default fills an exact axis and wraps the content on a bounded or
- * unbounded one. Its holder builds [constraints] from measure specs, so on each axis the minimum is
- * 0 or equals the maximum, and the room from 0 loses nothing.
+ * unless a size it declares or derives from its aspect ratio, its own min, or its margins, padding
+ * and border alone, need more, and a default for a size the root doesn't declare. The root may be
+ * smaller than its room, as a `wrap_content` child of an Android `FrameLayout` may be. Its default
+ * fills an exact axis and wraps the content on a bounded or unbounded one. Its holder builds
+ * [constraints] from measure specs, so on each axis the minimum is 0 or equals the maximum, and the
+ * room from 0 loses nothing.
  *
  * Within that, the root's own style decides, per axis:
  * 1. **Margins** come out of the room, and are where its holder places it. An own max bounds the
@@ -156,27 +195,42 @@ internal fun resolveBoxConstraints(
  *    holder; on an at-most or unbounded one it takes the margins out of the max. A percentage
  *    margin or padding is of the width's maximum, as in CSS, and 0 when the width is unbounded.
  * 2. **Own width or height**, in pixels or as a percentage of the constraints' maximum, is used,
- *    then kept within its own min and max and within the room. A percentage of an unbounded axis
- *    has no effect.
- * 3. **Own min and max** apply within the room; when the min is above the max, the max wins, as for
- *    a `Layout`'s child ([resolveBoxConstraints]) and in Compose. A Yoga root keeps one or the
- *    other depending on its declared size and the constraints; CSS keeps the min.
- * 4. **Padding and border** set the smallest the border box can be, even past the room.
- * 5. **Aspect ratio** derives the other axis when exactly one is decided, within each axis's range,
- *    padding and border included. When the derived one would leave its range, it takes its nearest
- *    bound, and an axis its holder decided follows it; a declared size stays and the ratio yields,
- *    as for a child. A declared size below the floor its padding and border set derives the other
- *    axis at that floor, where a child derives it from the declared size: the one place a root and
- *    a child differ on a declared size within the room. When neither is decided, the bounded one is
- *    decided at its maximum, the width first, as Compose's `aspectRatio` takes the most room that
- *    keeps the ratio. When no size in both ranges keeps it, the ratio yields too, the decided axis
- *    kept. A ratio that is not a finite number above 0, or whose inverse is not finite, counts as
- *    none.
+ *    then kept within its own min and max but not within the room, so it can pass the room, as a
+ *    Yoga root's does, and as a `Layout`'s child's does past its constraints. A percentage of an
+ *    unbounded axis, or a negative size, has no effect.
+ * 3. **Own min and max**: an own max applies within the room, and an own min is kept past it, as a
+ *    declared size is. When the min is above the max, the min wins, as for a `Layout`'s child
+ *    ([resolveBoxConstraints]) and in CSS. A Yoga root keeps one or the other depending on its
+ *    axis. A negative own max has no effect, as for a child and in CSS.
+ * 4. **Aspect ratio** derives the other axis when exactly one is decided, by a declared size or an
+ *    exact constraint, as for a `Layout`'s child: the decided axis keeps its size, and the derived
+ *    one is kept within its own min and max only, so it can pass the room. When neither is decided,
+ *    it has no effect. A ratio that is not a finite number above 0, or whose inverse is not finite,
+ *    counts as none.
+ * 5. **Padding and border** then set the smallest the border box can be, even past the room.
  * 6. **Position insets** are not read: its holder places it at its margins.
  *
- * A root that has to be larger than its holder goes in a scroll container, whose room for it is
- * unbounded. On an at-most or unbounded axis, a holder sized to the border box alone leaves no
- * space for a margin there, so part of the border box falls outside it, as for a `Column` root.
+ * A root that declares a size larger than its holder overflows it, as a Yoga root does; one that
+ * has to fit goes in a scroll container, whose room for it is unbounded. On an at-most or unbounded
+ * axis, a holder sized to the border box alone leaves no space for a margin there, so part of the
+ * border box falls outside it, as for a `Column` root.
+ *
+ * Where a root differs from a Yoga root on purpose, because Yoga's box depends only on the node's
+ * role or direction there, or contradicts CSS:
+ * - **An own min above an own max:** the min wins on both axes, as in CSS, so
+ *   `minHeight(300).maxHeight(50)` at most 300 high is 300 high. A Yoga `Column` root keeps the min
+ *   down and the max across, and a `Row` root the max down: a `Row` root is 50 high.
+ * - **Margins across an exact axis** come out of the room, as for a child a `Column` stretches and
+ *   in CSS: `margin(start = 6)` exactly 300 wide is 294 wide, where a Yoga root stays 300 and its
+ *   margins only move it.
+ * - **An aspect ratio with an axis decided** derives the other axis, as for a child:
+ *   `width(120).aspectRatio(3)` is 120 by 40, where a Yoga root ignores its ratio and takes its
+ *   content's height.
+ * - **A negative size** has no effect, as for a child and in CSS: `height(-10)` at most 300 high
+ *   wraps its content, where a Yoga root fills its room, 300 high.
+ * - **An own min** is kept past the room, as a declared size is and as for a child: `minWidth(300)`
+ *   at most 200 wide is 300 wide. A Yoga root keeps it past the room only along its main axis: a
+ *   `Column` root at most 200 wide is 200.
  *
  * A `Layout`'s child is resolved by [resolveBoxConstraints] instead: its room's minimum is a
  * requirement it fills, where a root may be smaller than its room.
@@ -193,32 +247,35 @@ internal fun resolveRootBox(
   val border = props.border.resolve(isRtl, percentBase = null)
 
   val minWidth = props.minWidth.toPx(widthBase)
-  val maxWidth = props.maxWidth.toPx(widthBase)
+  val maxWidth =
+      props.maxWidth
+          .takeUnless {
+            it is BoxLength.Px && it.value < 0f || it is BoxLength.Percent && it.value < 0f
+          }
+          ?.toPx(widthBase)
   val minHeight = props.minHeight.toPx(heightBase)
-  val maxHeight = props.maxHeight.toPx(heightBase)
+  val maxHeight =
+      props.maxHeight
+          .takeUnless {
+            it is BoxLength.Px && it.value < 0f || it is BoxLength.Percent && it.value < 0f
+          }
+          ?.toPx(heightBase)
   val width = RootAxis(constraints.maxWidth, margins.horizontal, minWidth, maxWidth)
   val height = RootAxis(constraints.maxHeight, margins.vertical, minHeight, maxHeight)
   width.decide(props.width, widthBase, isExact = constraints.hasExactWidth)
   height.decide(props.height, heightBase, isExact = constraints.hasExactHeight)
-  width.floorAt(padding.horizontal + border.horizontal)
-  height.floorAt(padding.vertical + border.vertical)
   val ratio = props.aspectRatio
   if (ratio.isFinite() && ratio > 0f && (1f / ratio).isFinite()) {
-    if (width.size == null && height.size == null) {
-      if (width.max != SizeConstraints.Infinity) {
-        width.fix(width.max)
-      } else if (height.max != SizeConstraints.Infinity) {
-        height.fix(height.max)
-      }
-    }
     val decidedWidth = width.size
     val decidedHeight = height.size
     if (decidedWidth != null && decidedHeight == null) {
-      keepRatio(decided = width, derived = height, decidedWidth, ratio, derivesHeight = true)
+      keepRatio(derived = height, decidedWidth, ratio, derivesHeight = true)
     } else if (decidedHeight != null && decidedWidth == null) {
-      keepRatio(decided = height, derived = width, decidedHeight, ratio, derivesHeight = false)
+      keepRatio(derived = width, decidedHeight, ratio, derivesHeight = false)
     }
   }
+  width.floorAt(padding.horizontal + border.horizontal)
+  height.floorAt(padding.vertical + border.vertical)
   return BoxConstraints(
       margins = margins,
       padding = padding,
@@ -234,35 +291,23 @@ internal fun resolveRootBox(
 }
 
 /**
- * Decides [derived] from [decided]'s [decidedSize] by [ratio], keeping the ratio: when the derived
- * size leaves its range, it's kept at the nearest bound and [decided], unless declared, is derived
- * back from it, or, past its own range, takes the nearest size in range that derives that bound.
- * Otherwise the ratio yields: [decided] keeps [decidedSize] and [derived] stays at that bound, the
- * nearest it can come to the ratio.
+ * Decides [derived] from the decided axis's [decidedSize] by [ratio], within [derived]'s own min
+ * and max only, as for a `Layout`'s child: the decided axis keeps its size, and the derived one can
+ * pass the room.
  */
 private fun keepRatio(
-    decided: RootAxis,
     derived: RootAxis,
     decidedSize: Int,
     ratio: Float,
     derivesHeight: Boolean,
 ) {
-  val derivedSize = sizeByRatio(decidedSize, ratio, toHeight = derivesHeight)
-  if (derivedSize in derived.min..derived.max) {
-    derived.fix(derivedSize)
-    return
-  }
-  val derivedInRange = derivedSize.coerceIn(derived.min, derived.max)
-  val decidedForBound = sizeByRatio(derivedInRange, ratio, toHeight = !derivesHeight)
-  val decidedInRange = decidedForBound.coerceIn(decided.min, decided.max)
-  if (
-      !decided.isDeclared &&
-          (decidedInRange == decidedForBound ||
-              sizeByRatio(decidedInRange, ratio, toHeight = derivesHeight) == derivedInRange)
-  ) {
-    decided.fix(decidedInRange)
-  }
-  derived.fix(derivedInRange)
+  derived.fix(
+      coerceOwn(
+          sizeByRatio(decidedSize, ratio, toHeight = derivesHeight),
+          derived.ownMin,
+          derived.ownMax,
+      ),
+  )
 }
 
 /**
@@ -274,11 +319,15 @@ private fun sizeByRatio(size: Int, ratio: Float, toHeight: Boolean): Int =
 
 /**
  * One axis of a root's border box: its range, the room its holder gives, from 0 to [roomMax] less
- * [margins], narrowed by its own [ownMin] and [ownMax] and raised to the floor its padding and
- * border set ([floorAt]); its [size], once it's decided; and whether that size is its own declared
- * one ([isDeclared]).
+ * [margins], narrowed by its own [ownMax], raised to its own [ownMin] even past the room, and to
+ * the floor its padding and border set ([floorAt]); and its [size], once it's decided.
  */
-private class RootAxis(roomMax: Int, margins: Int, ownMin: Int?, ownMax: Int?) {
+private class RootAxis(
+    roomMax: Int,
+    margins: Int,
+    val ownMin: Int?,
+    val ownMax: Int?,
+) {
   var min: Int
     private set
 
@@ -288,14 +337,11 @@ private class RootAxis(roomMax: Int, margins: Int, ownMin: Int?, ownMax: Int?) {
   var size: Int? = null
     private set
 
-  var isDeclared: Boolean = false
-    private set
-
   init {
     val room =
         if (roomMax == SizeConstraints.Infinity) roomMax else (roomMax - margins).coerceAtLeast(0)
-    max = ownMax?.coerceIn(0, room) ?: room
-    min = (ownMin ?: 0).coerceIn(0, max)
+    min = (ownMin ?: 0).coerceAtLeast(0)
+    max = (ownMax?.coerceIn(0, room) ?: room).coerceAtLeast(min)
   }
 
   /** The border box's least size: its size once decided, else its range's minimum. */
@@ -308,15 +354,15 @@ private class RootAxis(roomMax: Int, margins: Int, ownMin: Int?, ownMax: Int?) {
 
   /**
    * Decides the axis at its own [declared] size, in pixels or a percentage of [base], within its
-   * range; or, with none, at its range's maximum when the axis is exact. An undecided axis wraps
-   * its content.
+   * own min and max, however far that passes its room, as a Yoga root's; or, with none, at its
+   * range's maximum when the axis is exact. An undecided axis wraps its content.
    */
   fun decide(declared: BoxLength, base: Int?, isExact: Boolean) {
     val declaredPx =
         when (declared) {
-          is BoxLength.Px -> declared.toPx(base)
+          is BoxLength.Px -> if (declared.value >= 0f) declared.toPx(base) else null
           is BoxLength.Percent ->
-              if (base != null && declared.value.isFinite()) {
+              if (base != null && declared.value.isFinite() && declared.value >= 0f) {
                 // Divides first, as resolveBoxConstraints does; toPx rounds some halves
                 // differently.
                 FastMath.round(declared.value / 100f * base)
@@ -326,10 +372,7 @@ private class RootAxis(roomMax: Int, margins: Int, ownMin: Int?, ownMax: Int?) {
           BoxLength.Unset -> null
         }
     when {
-      declaredPx != null -> {
-        size = declaredPx.coerceIn(min, max)
-        isDeclared = true
-      }
+      declaredPx != null -> size = coerceOwn(declaredPx, ownMin, ownMax)
       isExact && max != SizeConstraints.Infinity -> size = max
     }
   }
@@ -387,10 +430,10 @@ private const val MAX_SIZE: Int = 0x3FFFFFFF - 1
 private const val MAX_RANGE_MIN: Int = 0x1FFF - 1
 private const val MAX_RANGE_MAX: Int = 0x3FFFF - 1
 
-/** [size] within a child's own [ownMin] and [ownMax]; when they conflict, the maximum wins. */
+/** [size] within a box's own [ownMin] and [ownMax]; when they conflict, the minimum wins. */
 private fun coerceOwn(size: Int, ownMin: Int?, ownMax: Int?): Int {
-  val upper = ownMax?.coerceAtLeast(0) ?: Int.MAX_VALUE
-  return size.coerceIn((ownMin ?: 0).coerceIn(0, upper), upper)
+  val lower = (ownMin ?: 0).coerceAtLeast(0)
+  return size.coerceIn(lower, maxOf(ownMax?.coerceAtLeast(0) ?: Int.MAX_VALUE, lower))
 }
 
 /** One axis of the constraints a child's border box is laid out in. [max] may be unbounded. */
@@ -410,35 +453,36 @@ private class AxisRange(var min: Int, var max: Int) {
   }
 
   /**
-   * Applies the child's own bounds: [ownMin] becomes the minimum, as Compose's `requiredWidthIn`
-   * does, and [ownMax] lowers the maximum but never raises it, as `widthIn` does. The other bound
-   * moves only as far as the declared one needs. When [ownMin] is above [ownMax], the maximum wins.
+   * Applies the child's own bounds, as a `Column` applies them to its child: [ownMin] raises the
+   * minimum but never lowers it, so an exact room is still filled, and [ownMax] lowers the maximum
+   * but never raises it. The other bound moves only as far as the declared one needs. When [ownMin]
+   * is above [ownMax], the minimum wins, as in CSS.
    */
   fun requireWithin(ownMin: Int?, ownMax: Int?) {
     if (ownMin == null && ownMax == null) {
       return
     }
-    val upper = ownMax?.coerceAtLeast(0) ?: INFINITY
-    val lower = (ownMin ?: 0).coerceIn(0, upper)
-    val newMin = if (ownMin != null) lower else min.coerceAtMost(upper)
+    val lower = (ownMin ?: 0).coerceAtLeast(0)
+    val upper = maxOf(ownMax?.coerceAtLeast(0) ?: INFINITY, lower)
+    val newMin =
+        if (ownMin != null) maxOf(lower, min.coerceAtMost(upper)) else min.coerceAtMost(upper)
     val newMax = (if (ownMax != null) minOf(upper, max) else max).coerceAtLeast(newMin)
     min = newMin
     max = newMax
   }
 
   /**
-   * Fixes the axis at the child's own [size], if it declares one: a size in pixels within [ownMin]
-   * and [ownMax], whatever the range, as Compose's `requiredWidth` does; a percentage of [base], at
-   * most all of it, within the range, as `fillMaxWidth(fraction)` does. A percentage with no
-   * [base], or a size that is not a finite number, has no effect.
+   * Fixes the axis at the child's own [size], if it declares one, within [ownMin] and [ownMax],
+   * whatever the range, as a `Column` sizes its child: a size in pixels, or a percentage of [base].
+   * A percentage with no [base], or a size that is negative or not a finite number, has no effect.
    */
   fun fixAt(size: BoxLength, base: Int?, ownMin: Int?, ownMax: Int?) {
     when (size) {
-      is BoxLength.Px -> size.toPx(base)?.let { fix(coerceOwn(it, ownMin, ownMax)) }
+      is BoxLength.Px ->
+          if (size.value >= 0f) size.toPx(base)?.let { fix(coerceOwn(it, ownMin, ownMax)) }
       is BoxLength.Percent ->
-          if (base != null && size.value.isFinite()) {
-            val fraction = (size.value / 100f).coerceIn(0f, 1f)
-            fix(FastMath.round(fraction * base).coerceIn(min, max))
+          if (base != null && size.value.isFinite() && size.value >= 0f) {
+            fix(coerceOwn(FastMath.round(size.value / 100f * base), ownMin, ownMax))
           }
       BoxLength.Unset -> Unit
     }

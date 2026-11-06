@@ -27,6 +27,7 @@ import com.facebook.litho.core.heightPercent
 import com.facebook.litho.core.margin
 import com.facebook.litho.core.marginPercent
 import com.facebook.litho.core.maxHeight
+import com.facebook.litho.core.maxHeightPercent
 import com.facebook.litho.core.maxWidth
 import com.facebook.litho.core.maxWidthPercent
 import com.facebook.litho.core.minHeight
@@ -49,6 +50,7 @@ import com.facebook.litho.testing.LithoTestRule
 import com.facebook.litho.testing.testrunner.LithoTestRunner
 import com.facebook.litho.widget.SimpleMountSpecTester
 import com.facebook.litho.widget.Text
+import com.facebook.rendercore.IntSize
 import com.facebook.rendercore.SizeConstraints
 import com.facebook.rendercore.px
 import com.facebook.yoga.YogaAlign
@@ -62,6 +64,18 @@ import org.junit.runner.RunWith
 
 private const val VIEWPORT = 1000
 private const val CHILD = 100
+/**
+ * Lays its children out at 0, 0 and declares their measured size, past its constraints if need be.
+ */
+private val DECLARES_MEASURED = LayoutFunctionN { measurables, constraints ->
+  val placeables = measurables.map {
+    it.measure(SizeConstraints(0, constraints.maxWidth, 0, constraints.maxHeight))
+  }
+  layout(placeables.maxOf { it.measuredWidth }, placeables.maxOf { it.measuredHeight }) {
+    for (placeable in placeables) placeable.place(0, 0)
+  }
+}
+
 private const val PARITY_WIDTH = 300
 private const val ROW_CONTENT_WIDTH = 30
 private const val ROW_CONTENT_HEIGHT = 25
@@ -76,7 +90,7 @@ private val COLUMN_PARITY: List<Pair<String, Style>> = listOf(
     "margins by logical edge" to Style.margin(start = 7.px, top = 5.px, end = 11.px, bottom = 3.px),
     "percent margins" to Style.marginPercent(all = 5f),
     "percent vertical margins" to Style.marginPercent(vertical = 10f),
-    "negative start margin" to Style.margin(start = (-9).px),
+    "negative start margin" to Style.margin(start = (-9f).px),
     "min width" to Style.minWidth(200.px),
     "percent min width" to Style.minWidthPercent(80f),
     "min and max height" to Style.minHeight(40.px).maxHeight(60.px),
@@ -93,20 +107,10 @@ private val COLUMN_PARITY: List<Pair<String, Style>> = listOf(
 )
 
 /**
- * Rows that differ from a stretching Column by a rule (see the next test). Under an exact width, a
- * child whose own width, min or max decides its width is coerced into that width and drawn centred
- * in it, where a Column puts it at the leading edge; exact constraints also override a width
- * derived from an aspect ratio, and a percentage width fills an exact room.
+ * Rows that differ from a stretching Column by a rule (see the next test): exact constraints
+ * override a width derived from an aspect ratio.
  */
 private val UNSTRETCHED_ONLY: Set<String> = setOf(
-    "min width",
-    "percent min width",
-    "width",
-    "percent width",
-    "width, margins and padding",
-    "max width",
-    "percent max width",
-    "max width and margins",
     "aspect ratio with a width",
     "aspect ratio with a height",
     "aspect ratio with a percent width",
@@ -368,42 +372,41 @@ class CustomLayoutBoxConstraintsTest {
         subtreeBounds(inColumn(boxChild(style), stretch), YogaDirection.LTR)[0].left
 
     // A declared width, an own minimum and an own maximum win over the constraints, as in a
-    // Column. Outside the constraints the child is then coerced into them and drawn centred, where
-    // a Column puts it at the leading edge.
+    // Column. Outside the constraints the child then starts at the start edge, as in a Column.
     assertThat(boxWidth(Style.width(80.px), stretch = true)).isEqualTo(80)
     assertThat(columnWidth(Style.width(80.px), stretch = true)).isEqualTo(80)
     assertThat(boxLeft(Style.width(80.px), stretch = true))
-        .describedAs("80 centred in the exact 300")
-        .isEqualTo(columnLeft(Style.width(80.px), stretch = true) + (PARITY_WIDTH - 80) / 2)
+        .describedAs("80 at the start of the exact 300")
+        .isEqualTo(columnLeft(Style.width(80.px), stretch = true))
     assertThat(boxWidth(Style.minWidth(400.px), stretch = false)).isEqualTo(400)
     assertThat(columnWidth(Style.minWidth(400.px), stretch = false)).isEqualTo(400)
     assertThat(boxLeft(Style.minWidth(400.px), stretch = false))
-        .describedAs("400 centred in the 300 it was allowed: 50 past each side")
-        .isEqualTo(columnLeft(Style.minWidth(400.px), stretch = false) - 50)
+        .describedAs("400 from the start of the 300 it was allowed: 100 past the end")
+        .isEqualTo(columnLeft(Style.minWidth(400.px), stretch = false))
     assertThat(boxWidth(Style.maxWidth(80.px), stretch = true)).isEqualTo(80)
     assertThat(columnWidth(Style.maxWidth(80.px), stretch = true)).isEqualTo(80)
 
-    // An own max beats an own min, as in Compose; a Column applies the min.
-    assertThat(boxWidth(Style.minWidth(90.px).maxWidth(50.px), stretch = false)).isEqualTo(50)
+    // An own min beats an own max, as in CSS and here in a Column.
+    assertThat(boxWidth(Style.minWidth(90.px).maxWidth(50.px), stretch = false)).isEqualTo(90)
     assertThat(columnWidth(Style.minWidth(90.px).maxWidth(50.px), stretch = false)).isEqualTo(90)
 
-    // An own min replaces an exact minimum, so the content chooses; a Column stretches it.
-    assertThat(boxWidth(Style.minWidth(200.px), stretch = true)).isEqualTo(200)
+    // An own min under an exact room is stretched past, as in a Column.
+    assertThat(boxWidth(Style.minWidth(200.px), stretch = true)).isEqualTo(PARITY_WIDTH)
     assertThat(columnWidth(Style.minWidth(200.px), stretch = true)).isEqualTo(PARITY_WIDTH)
 
-    // A percentage width fills an exact room as `fillMaxWidth` does; a Column keeps the percentage.
-    assertThat(boxWidth(Style.widthPercent(50f), stretch = true)).isEqualTo(PARITY_WIDTH)
+    // A percentage width in an exact room keeps the percentage, as in a Column.
+    assertThat(boxWidth(Style.widthPercent(50f), stretch = true)).isEqualTo(PARITY_WIDTH / 2)
     assertThat(columnWidth(Style.widthPercent(50f), stretch = true)).isEqualTo(PARITY_WIDTH / 2)
 
-    // Exact constraints win over a width derived from an aspect ratio. A Column that stretches its
-    // children keeps the derived width.
+    // An aspect ratio with the other axis stretched: exact constraints win over the ratio, as
+    // `align-self: stretch` wins in CSS. A Yoga child derives 80 from its height instead.
     assertThat(boxWidth(Style.height(40.px).aspectRatio(2f), stretch = true))
         .isEqualTo(PARITY_WIDTH)
     assertThat(columnWidth(Style.height(40.px).aspectRatio(2f), stretch = true)).isEqualTo(80)
 
-    // An aspect ratio needs one axis fixed by the constraints or the child's own size. A Column
-    // also
-    // derives the width from the height the content measured at.
+    // An aspect ratio with neither axis fixed has no effect, so the child keeps its content's box,
+    // as in CSS block layout and a CSS row. A Yoga `Column` child derives the width from the
+    // content's height.
     assertThat(boxWidth(Style.aspectRatio(2f), stretch = false)).isEqualTo(ROW_CONTENT_WIDTH)
     assertThat(columnWidth(Style.aspectRatio(2f), stretch = false))
         .isEqualTo(ROW_CONTENT_HEIGHT * 2)
@@ -413,6 +416,330 @@ class CustomLayoutBoxConstraintsTest {
     val percentHeight =
         subtreeBounds(inContainer(boxChild(Style.heightPercent(50f)), false), YogaDirection.LTR)[0]
     assertThat(percentHeight.height()).isEqualTo(ROW_CONTENT_HEIGHT)
+  }
+
+  /**
+   * A child's own min raises the room's minimum and never lowers it, and a percentage size is of
+   * the room, within its own min and max: under an exact room a child gets the box a stretched
+   * `Column` or `Row` child gets, and under an at-most room the one a start-aligned child gets, in
+   * both directions. Each container measures its only child under the room and wraps it.
+   */
+  @Test
+  fun `an own min and a percentage size give a child a Column or Row child's box`() {
+    val styles: List<Pair<String, Style>> = listOf(
+        "min width 120" to Style.minWidth(120.px),
+        "min width 400" to Style.minWidth(400.px),
+        "min height 60" to Style.minHeight(60.px),
+        "min height 150" to Style.minHeight(150.px),
+        "width 50%" to Style.widthPercent(50f),
+        "width 50%, max width 100" to Style.widthPercent(50f).maxWidth(100.px),
+        "width 150%" to Style.widthPercent(150f),
+        "height 50%" to Style.heightPercent(50f),
+        "height 50%, min height 70" to Style.heightPercent(50f).minHeight(70.px),
+        "width -10" to Style.width((-10f).px),
+        "height -10" to Style.height((-10f).px),
+        "width -50%" to Style.widthPercent(-50f),
+        "width -0.5%" to Style.widthPercent(-0.5f),
+        "height -50%" to Style.heightPercent(-50f),
+        "height -0.5%" to Style.heightPercent(-0.5f),
+    )
+    // A percentage on the axis a room leaves unbounded has no base under a `Layout`, where a Yoga
+    // parent takes it of the space its own parent gives: the next test covers that axis.
+    // The constraints a Column-like or Row-like function passes, and the Yoga parent they stand
+    // for.
+    val rooms: List<Triple<String, SizeConstraints, (Component) -> Component>> = listOf(
+        Triple(
+            "Column, exact",
+            SizeConstraints(PARITY_WIDTH, PARITY_WIDTH, 0, SizeConstraints.Infinity),
+            { child -> inColumn(child, stretch = true) },
+        ),
+        Triple(
+            "Column, at most",
+            SizeConstraints(maxWidth = PARITY_WIDTH),
+            { child -> inColumn(child, stretch = false) },
+        ),
+        Triple(
+            "Row, exact",
+            SizeConstraints(0, SizeConstraints.Infinity, CHILD, CHILD),
+            { child ->
+              Row(alignItems = YogaAlign.STRETCH, style = Style.height(CHILD.px)) { child(child) }
+            },
+        ),
+        Triple(
+            "Row, at most",
+            SizeConstraints(0, SizeConstraints.Infinity, 0, CHILD),
+            { child ->
+              Row(alignItems = YogaAlign.FLEX_START, style = Style.height(CHILD.px)) {
+                child(child)
+              }
+            },
+        ),
+    )
+    val mismatches = ArrayList<String>()
+    for ((roomName, room, yogaParent) in rooms) {
+      for ((name, style) in styles) {
+        val unboundedAxis = if (room.hasBoundedHeight) "width" else "height"
+        if (name.contains(unboundedAxis) && "%" in name) continue
+        for (direction in listOf(YogaDirection.LTR, YogaDirection.RTL)) {
+          val container = Layout(
+              listOf(boxChild(style)),
+              layout =
+                  LayoutFunctionN { measurables, _ ->
+                    val placeable = measurables[0].measure(room)
+                    layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                  },
+          )
+          val box = subtreeBounds(container, direction)
+          val yoga = subtreeBounds(yogaParent(boxChild(style)), direction)
+          if (box != yoga)
+              mismatches.add("[$name] $roomName $direction\n  box : $box\n  yoga: $yoga")
+        }
+      }
+    }
+    assertThat(mismatches).isEmpty()
+  }
+
+  /** With no bound, an own min still sets the least size and a percentage has no base. */
+  @Test
+  fun `with no bound, an own min is the least size and a percentage has no effect`() {
+    val cases = listOf(
+        "min width 120" to Style.minWidth(120.px) to (120 to ROW_CONTENT_HEIGHT),
+        "min height 60" to Style.minHeight(60.px) to (ROW_CONTENT_WIDTH to 60),
+        "width 50%" to Style.widthPercent(50f) to (ROW_CONTENT_WIDTH to ROW_CONTENT_HEIGHT),
+        "height 50%" to Style.heightPercent(50f) to (ROW_CONTENT_WIDTH to ROW_CONTENT_HEIGHT),
+    )
+    for ((named, size) in cases) {
+      val (name, style) = named
+      for (direction in listOf(YogaDirection.LTR, YogaDirection.RTL)) {
+        val room = SizeConstraints()
+        val container = Layout(
+            listOf(boxChild(style)),
+            layout =
+                LayoutFunctionN { measurables, _ ->
+                  val placeable = measurables[0].measure(room)
+                  layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                },
+        )
+        val bounds = subtreeBounds(container, direction)[0]
+        assertThat(bounds.width() to bounds.height())
+            .describedAs("%s, %s", name, direction)
+            .isEqualTo(size)
+      }
+    }
+  }
+
+  /**
+   * A negative size or own max has no effect, as in CSS: the child gets the box it gets without it,
+   * exactly, at most and with no bound, in both directions. A Yoga `Column` child agrees on the
+   * size, and a `Row` child on the max; a stretched `Column` child's negative max width makes it 0.
+   */
+  @Test
+  fun `a negative size or own max has no effect, as in CSS`() {
+    val styles: List<Pair<String, Style>> = listOf(
+        "width -10" to Style.width((-10f).px),
+        "width -50%" to Style.widthPercent(-50f),
+        "width -0.5%" to Style.widthPercent(-0.5f),
+        "height -10" to Style.height((-10f).px),
+        "height -50%" to Style.heightPercent(-50f),
+        "height -0.5%" to Style.heightPercent(-0.5f),
+        "max width -10" to Style.maxWidth((-10f).px),
+        "max width -50%" to Style.maxWidthPercent(-50f),
+        "max height -10" to Style.maxHeight((-10f).px),
+        "max height -0.5%" to Style.maxHeightPercent(-0.5f),
+    )
+    val rooms = listOf(
+        "exact" to SizeConstraints(PARITY_WIDTH, PARITY_WIDTH, CHILD, CHILD),
+        "at most" to SizeConstraints(maxWidth = PARITY_WIDTH, maxHeight = CHILD),
+        "unbounded" to SizeConstraints(),
+    )
+    val mismatches = ArrayList<String>()
+    for ((roomName, room) in rooms) {
+      for ((name, style) in styles) {
+        for (direction in listOf(YogaDirection.LTR, YogaDirection.RTL)) {
+          fun boxWith(childStyle: Style): List<Rect> = subtreeBounds(
+              Layout(
+                  listOf(boxChild(childStyle)),
+                  layout =
+                      LayoutFunctionN { measurables, _ ->
+                        val placeable = measurables[0].measure(room)
+                        layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                      },
+              ),
+              direction,
+          )
+          val with = boxWith(style)
+          val without = boxWith(Style)
+          if (with != without) mismatches += "$roomName, $name, $direction: $with, without $without"
+        }
+      }
+    }
+    assertThat(mismatches).isEmpty()
+  }
+
+  /**
+   * Under a Yoga parent, a `Layout` answers the size its function declares past an at-most room, as
+   * a Yoga `Column` that wraps its content grows past it, within its own max; an exact room stays
+   * exact. Across and down, in both directions.
+   */
+  @Test
+  fun `under a Yoga parent it answers past an at-most room, as a wrapping Column does`() {
+    val wide = Style.minWidth(400.px).height(10.px)
+    val tall = Style.minHeight(150.px).width(10.px)
+    val acrossAtMost: (Component) -> Component = { content ->
+      Column(alignItems = YogaAlign.FLEX_START, style = Style.width(PARITY_WIDTH.px)) {
+        child(content)
+      }
+    }
+    val acrossExact: (Component) -> Component = { content ->
+      Column(alignItems = YogaAlign.STRETCH, style = Style.width(PARITY_WIDTH.px)) {
+        child(content)
+      }
+    }
+    val downAtMost: (Component) -> Component = { content ->
+      Row(alignItems = YogaAlign.FLEX_START, style = Style.height(CHILD.px)) { child(content) }
+    }
+    val cases = listOf(
+        Triple("at most 300 across", Style to wide, acrossAtMost),
+        Triple("at most 300 across, own max 350", Style.maxWidth(350.px) to wide, acrossAtMost),
+        Triple("exactly 300 across", Style to wide, acrossExact),
+        Triple("at most 100 down", Style to tall, downAtMost),
+    )
+    val mismatches = ArrayList<String>()
+    for ((name, styles, parent) in cases) {
+      val (ownStyle, leafStyle) = styles
+      for (direction in listOf(YogaDirection.LTR, YogaDirection.RTL)) {
+        val layout =
+            subtreeBounds(
+                parent(
+                    Layout(
+                        listOf(SimpleMountSpecTester(style = leafStyle)),
+                        style = ownStyle,
+                        layout = DECLARES_MEASURED,
+                    ),
+                ),
+                direction,
+            )[0]
+        val column =
+            subtreeBounds(
+                parent(
+                    Column(alignItems = YogaAlign.FLEX_START, style = ownStyle) {
+                      child(SimpleMountSpecTester(style = leafStyle))
+                    },
+                ),
+                direction,
+            )[0]
+        if (layout != column) mismatches += "$name, $direction: Layout $layout, Column $column"
+      }
+    }
+    assertThat(mismatches).isEmpty()
+  }
+
+  /**
+   * In a `Layout`, a `Layout` child's content stays within the constraints it's measured under, as
+   * in Compose: a function declaring 400 under at most 300 gives a placeable 300 wide,
+   * measured 300.
+   */
+  @Test
+  fun `in a Layout, a Layout child's content stays within its constraints`() {
+    val seen = java.util.concurrent.atomic.AtomicReference(IntSize(0, 0))
+    subtreeBounds(
+        Layout(
+            listOf(
+                Layout(
+                    listOf(SimpleMountSpecTester(style = Style.minWidth(400.px).height(10.px))),
+                    layout = DECLARES_MEASURED,
+                ),
+            ),
+            layout =
+                LayoutFunctionN { measurables, _ ->
+                  val placeable =
+                      measurables[0].measure(
+                          SizeConstraints(0, PARITY_WIDTH, 0, SizeConstraints.Infinity),
+                      )
+                  seen.set(IntSize(placeable.width, placeable.measuredWidth))
+                  layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                },
+        ),
+        YogaDirection.LTR,
+    )
+    assertThat(seen.get()).describedAs("its width and measured width").isEqualTo(IntSize(300, 300))
+  }
+
+  /**
+   * A Yoga subtree whose content is wider than its room is laid out within the room: a `Row` of 48
+   * and 50 measured at most 80 wide is 80, where a `Column`'s child would keep its content's 98.
+   */
+  @Test
+  fun `a Yoga subtree wider than its room is laid out within the room`() {
+    for (direction in listOf(YogaDirection.LTR, YogaDirection.RTL)) {
+      val bounds = subtreeBounds(
+          Layout(
+              listOf(
+                  Row {
+                    child(
+                        SimpleMountSpecTester(
+                            style = Style.width(48.px).height(20.px).flex(shrink = 0f),
+                        ),
+                    )
+                    child(
+                        SimpleMountSpecTester(
+                            style = Style.width(50.px).height(10.px).flex(shrink = 0f),
+                        ),
+                    )
+                  },
+              ),
+              layout =
+                  LayoutFunctionN { measurables, _ ->
+                    val placeable = measurables[0].measure(SizeConstraints(maxWidth = 80))
+                    layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                  },
+          ),
+          direction,
+      )
+      assertThat(bounds[0].width()).describedAs("%s: the Row's width", direction).isEqualTo(80)
+    }
+  }
+
+  /**
+   * A percentage height on an axis its room leaves unbounded has no base, so it keeps its content's
+   * height, as CSS gives a percentage of an auto height, even where an ancestor is 500 high and
+   * Yoga would take the percentage of it.
+   */
+  @Test
+  fun `a percentage height on an axis its room leaves unbounded keeps its content's height`() {
+    for (direction in listOf(YogaDirection.LTR, YogaDirection.RTL)) {
+      val testView =
+          lithoTestRule.render(
+              widthSpec = SizeSpec.makeSizeSpec(PARITY_WIDTH, SizeSpec.EXACTLY),
+              heightSpec = SizeSpec.makeSizeSpec(500, SizeSpec.EXACTLY),
+          ) {
+            Column(alignItems = YogaAlign.FLEX_START, style = Style.layoutDirection(direction)) {
+              child(
+                  Layout(
+                      listOf(boxChild(Style.heightPercent(50f))),
+                      layout =
+                          LayoutFunctionN { measurables, constraints ->
+                            val placeable =
+                                measurables[0].measure(
+                                    SizeConstraints(
+                                        0,
+                                        constraints.maxWidth,
+                                        0,
+                                        SizeConstraints.Infinity,
+                                    ),
+                                )
+                            layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                          },
+                  ),
+              )
+            }
+          }
+      val root = checkNotNull(testView.componentTree.mainThreadLayoutState?.rootLayoutResult)
+      val container = checkNotNull(findContainer(root as LithoLayoutResult))
+      assertThat(container.getChildAt(0).height)
+          .describedAs("%s: its content's height, not 50%% of an ancestor's", direction)
+          .isEqualTo(ROW_CONTENT_HEIGHT)
+    }
   }
 
   /** A small row, so a child's own content layout is compared, not only its box. */
@@ -514,7 +841,7 @@ class CustomLayoutBoxConstraintsTest {
   }
 
   @Test
-  fun `a child whose own edges cannot fit is kept within its room and centred`() {
+  fun `a child whose own edges cannot fit is kept within its room and starts at its start edge`() {
     val child = SimpleMountSpecTester(style = Style.padding(all = 8.px))
 
     val result = renderAndFindContainer(
@@ -523,17 +850,16 @@ class CustomLayoutBoxConstraintsTest {
 
     assertThat(result.getChildAt(0).width).describedAs("its padding floors it at 16").isEqualTo(16)
     assertThat(result.getXForChildAtIndex(0))
-        .describedAs("16 centred in the 10 it occupies: 3 px past each side")
-        .isEqualTo(-3)
+        .describedAs("16 from the start of the 10 it occupies: 6 px past the end")
+        .isEqualTo(0)
   }
 
   /**
-   * A child that takes more than it was allowed occupies what it was allowed, and is drawn centred
-   * in it, overflowing both sides equally, as in Compose. Its real size is kept as its measured
-   * size.
+   * A child that takes more than it was allowed occupies what it was allowed, and is drawn from its
+   * start edge, overflowing the end, as in a Column. Its real size is kept as its measured size.
    */
   @Test
-  fun `a child larger than its room occupies the room and is drawn centred in it`() {
+  fun `a child larger than its room occupies the room and is drawn from its start edge`() {
     val seen = AtomicReference<Placeable>()
     val result = renderAndFindContainer(
         Layout(
@@ -550,15 +876,12 @@ class CustomLayoutBoxConstraintsTest {
     assertThat(seen.get().width).describedAs("the space it occupies").isEqualTo(100)
     assertThat(seen.get().measuredWidth).describedAs("the size it took").isEqualTo(150)
     assertThat(result.getChildAt(0).width).isEqualTo(150)
-    assertThat(result.getXForChildAtIndex(0)).describedAs("25 past each side").isEqualTo(-25)
+    assertThat(result.getXForChildAtIndex(0)).describedAs("50 past the end").isEqualTo(0)
   }
 
-  /**
-   * A child smaller than an exact room is centred in it too. An odd difference truncates toward
-   * zero, as Compose's does, so the extra pixel goes to the right.
-   */
+  /** A child smaller than an exact room starts at its start edge too, as in a Column. */
   @Test
-  fun `a child smaller than an exact room is centred, the odd pixel to the right`() {
+  fun `a child smaller than an exact room starts at its start edge`() {
     val result = renderAndFindContainer(
         Layout(
             listOf(SimpleMountSpecTester(style = Style.width(81.px).height(CHILD.px))),
@@ -567,7 +890,99 @@ class CustomLayoutBoxConstraintsTest {
     )
 
     assertThat(result.getChildAt(0).width).isEqualTo(81)
-    assertThat(result.getXForChildAtIndex(0)).describedAs("19 / 2 truncates to 9").isEqualTo(9)
+    assertThat(result.getXForChildAtIndex(0)).describedAs("19 short of the end").isEqualTo(0)
+  }
+
+  /**
+   * A child that doesn't fit the constraints it was measured with starts at the start edge of the
+   * space it occupies, as Yoga starts it, and falls short of or overflows the end: in a `Layout`'s
+   * child and in a root `Layout`, in both directions.
+   */
+  @Test
+  fun `a child that doesn't fit its constraints starts at its start edge`() {
+    val exactRoom = LayoutFunctionN { measurables, constraints ->
+      val placeable =
+          measurables[0].measure(
+              SizeConstraints(PARITY_WIDTH, PARITY_WIDTH, 0, SizeConstraints.Infinity),
+          )
+      layout(constraints.maxWidth, placeable.height) { placeable.place(0, 0) }
+    }
+    for (direction in listOf(YogaDirection.LTR, YogaDirection.RTL)) {
+      for (asRoot in listOf(false, true)) {
+        for (width in listOf(120, 400)) {
+          val container = Layout(
+              listOf(SimpleMountSpecTester(style = Style.width(width.px).height(CHILD.px))),
+              style = Style.layoutDirection(direction),
+              layout = exactRoom,
+          )
+          val result = renderStartEdgeSubject(container, asRoot)
+          val expected = if (direction == YogaDirection.RTL) PARITY_WIDTH - width else 0
+          assertThat(result.getXForChildAtIndex(0))
+              .describedAs("%s in an exact %s, %s, root=%s", width, PARITY_WIDTH, direction, asRoot)
+              .isEqualTo(expected)
+        }
+      }
+    }
+  }
+
+  /**
+   * The same for children a `Layout` stacks as a `Column` does inside its own max width, which is
+   * narrower than both: they start at its start edge and overflow its end, as in a `Column`.
+   */
+  @Test
+  fun `children wider than their container's max width start at its start edge`() {
+    val stack = LayoutFunctionN { measurables, constraints ->
+      val placeables = measurables.map {
+        it.measure(SizeConstraints(0, constraints.maxWidth, 0, SizeConstraints.Infinity))
+      }
+      layout(
+          placeables.maxOf { it.width }.coerceIn(constraints.minWidth, constraints.maxWidth),
+          placeables.sumOf { it.height },
+      ) {
+        var y = 0
+        for (placeable in placeables) {
+          placeable.place(0, y)
+          y += placeable.height
+        }
+      }
+    }
+    for (direction in listOf(YogaDirection.LTR, YogaDirection.RTL)) {
+      for (asRoot in listOf(false, true)) {
+        val container = Layout(
+            listOf(
+                SimpleMountSpecTester(style = Style.width(30.px).height(20.px)),
+                SimpleMountSpecTester(style = Style.width(50.px).height(10.px)),
+            ),
+            style = Style.maxWidth(20.px).layoutDirection(direction),
+            layout = stack,
+        )
+        val result = renderStartEdgeSubject(container, asRoot)
+        val starts = listOf(result.getXForChildAtIndex(0), result.getXForChildAtIndex(1))
+        assertThat(result.width).isEqualTo(20)
+        assertThat(starts)
+            .describedAs("%s, root=%s", direction, asRoot)
+            .isEqualTo(
+                if (direction == YogaDirection.RTL) listOf(20 - 30, 20 - 50) else listOf(0, 0),
+            )
+      }
+    }
+  }
+
+  /** [container] as the root of a 300-wide tree, or as the child of a 300-wide `Column`. */
+  private fun renderStartEdgeSubject(container: Layout, asRoot: Boolean): LithoLayoutResult {
+    val testView =
+        lithoTestRule.render(
+            widthSpec = SizeSpec.makeSizeSpec(PARITY_WIDTH, SizeSpec.EXACTLY),
+            heightSpec = SizeSpec.makeSizeSpec(0, SizeSpec.UNSPECIFIED),
+        ) {
+          if (asRoot) container
+          else
+              Column(alignItems = YogaAlign.FLEX_START, style = Style.width(PARITY_WIDTH.px)) {
+                child(container)
+              }
+        }
+    val root = checkNotNull(testView.componentTree.mainThreadLayoutState?.rootLayoutResult)
+    return checkNotNull(findContainer(root as LithoLayoutResult)) { "container not found" }
   }
 
   private fun renderAndFindContainer(component: Component): LithoLayoutResult {

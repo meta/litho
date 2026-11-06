@@ -25,9 +25,11 @@ import com.facebook.litho.core.marginPercent
 import com.facebook.litho.core.maxHeight
 import com.facebook.litho.core.maxWidth
 import com.facebook.litho.core.maxWidthPercent
+import com.facebook.litho.core.minHeight
 import com.facebook.litho.core.minWidth
 import com.facebook.litho.core.minWidthPercent
 import com.facebook.litho.core.width
+import com.facebook.litho.flexbox.layoutDirection
 import com.facebook.litho.layout.LayoutFunctionN
 import com.facebook.litho.layout.flexbox.Column
 import com.facebook.litho.testing.LithoTestRule
@@ -36,6 +38,8 @@ import com.facebook.litho.testing.testrunner.LithoTestRunner
 import com.facebook.litho.widget.SimpleMountSpecTester
 import com.facebook.rendercore.SizeConstraints
 import com.facebook.rendercore.px
+import com.facebook.yoga.YogaAlign
+import com.facebook.yoga.YogaDirection
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.Rule
 import org.junit.Test
@@ -75,7 +79,7 @@ private fun findContainer(result: LithoLayoutResult): LithoLayoutResult? {
 /**
  * A child's declared min and max replace the bound of the constraints a custom layout measures it
  * under on their side, as Compose's `requiredWidthIn` does, rather than being overwritten by them.
- * Both win even over an exact constraint, and between the two the max wins.
+ * Both win even over an exact constraint, and between the two the min wins, as in CSS.
  */
 @RunWith(LithoTestRunner::class)
 class CustomLayoutMinMaxTest {
@@ -309,7 +313,7 @@ class CustomLayoutMinMaxTest {
   }
 
   @Test
-  fun `a declared maxWidth beats a declared minWidth, as in Compose`() {
+  fun `a declared minWidth beats a declared maxWidth, as in CSS`() {
     val capped = SimpleMountSpecTester(
         style = Style.width(20.px).minWidth(80.px).maxWidth(50.px).height(CHILD.px),
     )
@@ -323,7 +327,142 @@ class CustomLayoutMinMaxTest {
         )
 
     assertThat(result.getChildAt(0).width)
-        .describedAs("80 would mean the declared min beat the declared max")
-        .isEqualTo(50)
+        .describedAs("50 would mean the declared max beat the declared min")
+        .isEqualTo(80)
+  }
+
+  /**
+   * An own min above an own max wins on every path, as in CSS: a leaf a `Layout` measures, the same
+   * leaf inside a Yoga tree a `Layout` measures, the leaf in a `Column`, and a root `Layout`,
+   * across and down, in both directions and under any room.
+   */
+  @Test
+  fun `an own min above an own max wins on every path, as in CSS`() {
+    val rooms = listOf(
+        "at most 300" to SizeConstraints(0, 300, 0, 300),
+        "exactly 300" to SizeConstraints.exact(300, 300),
+        "unbounded" to SizeConstraints(),
+    )
+    val mismatches = ArrayList<String>()
+    for (down in listOf(false, true)) {
+      for (size in listOf(20, 100)) {
+        val style =
+            if (down) Style.width(CHILD.px).height(size.px).minHeight(80.px).maxHeight(50.px)
+            else Style.width(size.px).minWidth(80.px).maxWidth(50.px).height(CHILD.px)
+        val axis = if (down) "down" else "across"
+        for (direction in listOf(YogaDirection.LTR, YogaDirection.RTL)) {
+          for ((roomName, room) in rooms) {
+            val direct =
+                lithoTestRule
+                    .renderAndFindContainer(
+                        Column(style = Style.layoutDirection(direction)) {
+                          child(
+                              Layout(
+                                  listOf(SimpleMountSpecTester(style = style)),
+                                  layout = measuringUnder { room },
+                              ),
+                          )
+                        },
+                    )
+                    .getChildAt(0)
+            val inYogaTree =
+                lithoTestRule
+                    .renderAndFindContainer(
+                        Column(style = Style.layoutDirection(direction)) {
+                          child(
+                              Layout(
+                                  listOf(
+                                      Column(alignItems = YogaAlign.FLEX_START) {
+                                        child(SimpleMountSpecTester(style = style))
+                                      },
+                                  ),
+                                  layout = measuringUnder { room },
+                              ),
+                          )
+                        },
+                    )
+                    .getChildAt(0)
+                    .getChildAt(0)
+            val inColumn = checkNotNull(
+                lithoTestRule
+                    .render(widthPx = VIEWPORT, heightPx = VIEWPORT) {
+                      Column(
+                          alignItems = YogaAlign.FLEX_START,
+                          style = Style.layoutDirection(direction),
+                      ) {
+                        child(Column { child(SimpleMountSpecTester(style = style)) })
+                      }
+                    }
+                    .componentTree
+                    .mainThreadLayoutState
+                    ?.rootLayoutResult,
+            )
+                .let { it as LithoLayoutResult }
+                .getChildAt(0)
+                .getChildAt(0)
+            val sizes =
+                listOf(direct, inYogaTree, inColumn).map { if (down) it.height else it.width }
+            if (sizes.any { it != 80 }) {
+              mismatches +=
+                  "$axis, size $size, $direction, $roomName: direct, in a Yoga tree, in a Column = $sizes"
+            }
+          }
+        }
+      }
+    }
+    val unbounded = SizeSpec.makeSizeSpec(0, SizeSpec.UNSPECIFIED)
+    val atMost300 = SizeSpec.makeSizeSpec(300, SizeSpec.AT_MOST)
+    val exactly300 = SizeSpec.makeSizeSpec(300, SizeSpec.EXACTLY)
+    for (down in listOf(false, true)) {
+      val style =
+          if (down) Style.minHeight(80.px).maxHeight(50.px)
+          else Style.minWidth(80.px).maxWidth(50.px)
+      for (spec in listOf(atMost300, exactly300, unbounded)) {
+        for (direction in listOf(YogaDirection.LTR, YogaDirection.RTL)) {
+          val root = checkNotNull(
+              lithoTestRule
+                  .render(widthSpec = spec, heightSpec = spec) {
+                    Layout(
+                        listOf(SimpleMountSpecTester(style = Style.width(30.px).height(20.px))),
+                        style = Style.layoutDirection(direction) + style,
+                        layout =
+                            LayoutFunctionN { measurables, constraints ->
+                              val placeable =
+                                  measurables[0].measure(
+                                      SizeConstraints(
+                                          0,
+                                          constraints.maxWidth,
+                                          0,
+                                          constraints.maxHeight,
+                                      ),
+                                  )
+                              layout(
+                                  placeable.width.coerceIn(
+                                      constraints.minWidth,
+                                      constraints.maxWidth,
+                                  ),
+                                  placeable.height.coerceIn(
+                                      constraints.minHeight,
+                                      constraints.maxHeight,
+                                  ),
+                              ) {
+                                placeable.place(0, 0)
+                              }
+                            },
+                    )
+                  }
+                  .componentTree
+                  .mainThreadLayoutState
+                  ?.rootLayoutResult,
+          )
+              .let { it as LithoLayoutResult }
+          val size = if (down) root.height else root.width
+          if (size != 80) {
+            mismatches += "root, ${if (down) "down" else "across"}, spec $spec, $direction: $size"
+          }
+        }
+      }
+    }
+    assertThat(mismatches).isEmpty()
   }
 }
