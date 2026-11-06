@@ -59,6 +59,10 @@ open class HostView @JvmOverloads constructor(context: Context, attrs: Attribute
   init {
     setWillNotDraw(false)
     isChildrenDrawingOrderEnabled = true
+    // A host never scrolls its own content. Scrollbars a theme turns on for every view would
+    // invalidate the host on each draw, because verifyDrawable accepts the scrollbar drawable.
+    isVerticalScrollBarEnabled = false
+    isHorizontalScrollBarEnabled = false
   }
 
   override fun mount(index: Int, mountItem: MountItem) {

@@ -45,20 +45,20 @@ class HostViewScrollBarsTest {
           .build()
 
   @Test
-  fun `host view keeps scrollbars requested by its attributes`() {
+  fun `host view turns off scrollbars requested by its attributes`() {
     val hostView = HostView(context, alwaysOnScrollBars())
 
-    assertThat(hostView.isVerticalScrollBarEnabled).isTrue
-    assertThat(hostView.isHorizontalScrollBarEnabled).isTrue
+    assertThat(hostView.isVerticalScrollBarEnabled).isFalse
+    assertThat(hostView.isHorizontalScrollBarEnabled).isFalse
   }
 
   @Test
-  fun `host view with always-on scrollbars invalidates itself while drawing`() {
+  fun `host view with always-on scrollbars does not invalidate itself while drawing`() {
     val hostView = HostView(context, alwaysOnScrollBars())
 
     drawOnce(hostView)
 
-    assertThat(hostView.isDirty).isTrue
+    assertThat(hostView.isDirty).isFalse
   }
 
   @Test
