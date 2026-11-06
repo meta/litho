@@ -238,10 +238,7 @@ data class CanvasPathAdd(
     private val transformModel: CanvasTransformModel,
 ) : CanvasPathChildModel {
   override fun applyTo(androidPath: Path, state: CanvasState) {
-    val srcPath =
-        state.getOrCreatePath(src, transformModel).apply {
-          state.getMatrix(transformModel) { matrix -> transform(matrix) }
-        }
-    androidPath.addPath(srcPath)
+    val srcPath = state.getOrCreatePath(src)
+    state.getMatrix(transformModel) { matrix -> androidPath.addPath(srcPath, matrix) }
   }
 }

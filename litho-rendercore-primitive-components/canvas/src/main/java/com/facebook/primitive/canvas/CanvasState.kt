@@ -67,11 +67,9 @@ class CanvasState(
 
   private val matrixPool = Pools.SimplePool<Matrix>(matrixPoolSize)
 
-  // A Path may be transformed with a transform Matrix and there is no way to reset that transform
-  // once it has been applied, that's why the cache key is the CanvasPathModel and an optional
-  // CanvasTransformModel
-  private val pathCache =
-      LruCache<Pair<CanvasPathModel, CanvasTransformModel?>, Path>(pathCacheSize)
+  // Cached paths are shared between all the drawing commands which use an equal CanvasPathModel,
+  // so they must never be mutated after they're created
+  private val pathCache = LruCache<CanvasPathModel, Path>(pathCacheSize)
 
   internal fun getMatrix(transformModel: CanvasTransformModel, block: (Matrix) -> Unit) {
     val matrix = matrixPool.acquire() ?: Matrix()
@@ -82,16 +80,13 @@ class CanvasState(
   }
 
   @SuppressLint("KotlinPreferElvis")
-  internal fun getOrCreatePath(
-      pathModel: CanvasPathModel,
-      transformModel: CanvasTransformModel? = null,
-  ): Path {
-    val fromCache = pathCache.get(Pair(pathModel, transformModel))
+  internal fun getOrCreatePath(pathModel: CanvasPathModel): Path {
+    val fromCache = pathCache.get(pathModel)
     return if (fromCache != null) {
       fromCache
     } else {
       val newPath = pathModel.toAndroidPath(this)
-      pathCache.put(Pair(pathModel, transformModel), newPath)
+      pathCache.put(pathModel, newPath)
       newPath
     }
   }
