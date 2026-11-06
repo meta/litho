@@ -55,15 +55,19 @@ data class CanvasModel(
     private val children: List<CanvasNodeModel>,
 ) {
 
+  private val pathCount: Int = countCachedPaths(children)
+
   /**
    * Draw the model onto the provided canvas.
    *
    * @param canvas a canvas which should be used for executing the drawing commands
    */
   fun draw(canvas: Canvas) {
+    canvasState.ensurePathCacheCapacity(pathCount)
     for (i in children.indices) {
       children[i].draw(canvas, canvasState)
     }
+    canvasState.trimPathCache(pathCount)
   }
 
   /**
@@ -133,6 +137,8 @@ data class CanvasGroup(
   override fun needsSoftwareLayer(): Boolean {
     return checkIfSoftwareLayerNeeded(children = children)
   }
+
+  internal fun countCachedPaths(): Int = (clip?.cachedPathCount() ?: 0) + children.cachedPathCount()
 }
 
 /**
@@ -407,6 +413,35 @@ data class CanvasDrawIntoCanvas(private val block: (Canvas) -> Unit) : CanvasNod
     return false
   }
 }
+
+/**
+ * The number of [CanvasState] path cache entries used to draw [nodes]. Paths used by more than one
+ * node are counted once per use, so this is an upper bound of the distinct paths. Pass it to
+ * [CanvasState.ensurePathCacheCapacity] and [CanvasState.trimPathCache] when drawing nodes without
+ * a [CanvasModel].
+ */
+fun countCachedPaths(nodes: List<CanvasNodeModel>): Int = nodes.cachedPathCount()
+
+private fun List<CanvasNodeModel>.cachedPathCount(): Int {
+  var count = 0
+  for (i in indices) {
+    count +=
+        when (val node = this[i]) {
+          is CanvasGroup -> node.countCachedPaths()
+          is CanvasLayer -> (node.clip?.cachedPathCount() ?: 0) + node.children.cachedPathCount()
+          is CanvasFill -> node.shape.cachedPathCount()
+          is CanvasStroke -> node.shape.cachedPathCount()
+          is CanvasDrawIntoCanvas -> 0
+        }
+  }
+  return count
+}
+
+private fun CanvasShape.cachedPathCount(): Int =
+    when (this) {
+      is CanvasPathModel -> cachedPathCount()
+      is CanvasShapeModel -> 0
+    }
 
 /**
  * According to: https://developer.android.com/topic/performance/hardware-accel#drawing-support

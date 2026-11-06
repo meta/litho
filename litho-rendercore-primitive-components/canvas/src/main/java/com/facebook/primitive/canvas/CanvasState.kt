@@ -21,6 +21,7 @@ import android.graphics.DashPathEffect
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
+import androidx.annotation.VisibleForTesting
 import androidx.collection.LruCache
 import androidx.core.util.Pools
 import com.facebook.primitive.canvas.model.CanvasFill
@@ -47,7 +48,8 @@ import com.facebook.primitive.canvas.model.CanvasTransformModel
  * [useCached](https://fblitho.com/docs/state-and-side-effects/use-cached/).
  *
  * @param matrixPoolSize The Matrix pool max size
- * @param pathCacheSize The Path cache max size
+ * @param pathCacheSize The minimum Path cache size. The cache grows to fit all the paths of the
+ *   model being drawn, and shrinks back when a model with fewer paths is drawn.
  */
 class CanvasState(
     matrixPoolSize: Int = DEFAULT_MATRIX_POOL_SIZE,
@@ -70,6 +72,36 @@ class CanvasState(
   // Cached paths are shared between all the drawing commands which use an equal CanvasPathModel,
   // so they must never be mutated after they're created
   private val pathCache = LruCache<CanvasPathModel, Path>(pathCacheSize)
+  private val minPathCacheSize = pathCacheSize
+
+  @get:VisibleForTesting
+  internal val pathCacheMaxSize: Int
+    get() = pathCache.maxSize()
+
+  /**
+   * Grows the path cache so that drawing a model with [pathCount] paths never evicts any of its own
+   * paths. Call before drawing the model. [CanvasModel.draw] does this; code that draws
+   * [com.facebook.primitive.canvas.model.CanvasNodeModel]s directly sizes the cache with
+   * [com.facebook.primitive.canvas.model.countCachedPaths].
+   */
+  fun ensurePathCacheCapacity(pathCount: Int) {
+    val targetSize = maxOf(minPathCacheSize, pathCount)
+    if (targetSize > pathCache.maxSize()) {
+      pathCache.resize(targetSize)
+    }
+  }
+
+  /**
+   * Shrinks the path cache back to what a model with [pathCount] paths needs. Call after drawing
+   * the model: its paths are then the most recently used entries, so only paths of previous models
+   * are evicted.
+   */
+  fun trimPathCache(pathCount: Int) {
+    val targetSize = maxOf(minPathCacheSize, pathCount)
+    if (targetSize < pathCache.maxSize()) {
+      pathCache.resize(targetSize)
+    }
+  }
 
   internal fun getMatrix(transformModel: CanvasTransformModel, block: (Matrix) -> Unit) {
     val matrix = matrixPool.acquire() ?: Matrix()

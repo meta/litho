@@ -35,6 +35,15 @@ sealed interface CanvasPathChildModel {
 }
 
 /**
+ * The number of [CanvasState] path cache entries used to create this path: the path itself and the
+ * sources of its [CanvasPathAdd] children.
+ */
+internal fun CanvasPathModel.cachedPathCount(): Int =
+    when (this) {
+      is CanvasPath -> countCachedPaths()
+    }
+
+/**
  * A definition for a path which contains a mathematical description of shapes or lines to be drawn
  * on a Canvas.
  *
@@ -48,6 +57,10 @@ data class CanvasPath(
     private val fillRule: FillRule,
     private val children: List<CanvasPathChildModel>,
 ) : CanvasPathModel {
+  // Paths are cache keys, hashed on every draw. The model is immutable, so the deep hash of the
+  // children is computed once.
+  private val cachedHashCode: Int = 31 * fillRule.hashCode() + children.hashCode()
+
   override fun toAndroidPath(state: CanvasState): Path {
     return Path().apply {
       fillRule.applyTo(this)
@@ -55,6 +68,19 @@ data class CanvasPath(
         children[i].applyTo(this, state)
       }
     }
+  }
+
+  override fun hashCode(): Int = cachedHashCode
+
+  internal fun countCachedPaths(): Int {
+    var count = 1
+    for (i in children.indices) {
+      val child = children[i]
+      if (child is CanvasPathAdd) {
+        count += child.countCachedPaths()
+      }
+    }
+    return count
   }
 }
 
@@ -241,4 +267,6 @@ data class CanvasPathAdd(
     val srcPath = state.getOrCreatePath(src)
     state.getMatrix(transformModel) { matrix -> androidPath.addPath(srcPath, matrix) }
   }
+
+  internal fun countCachedPaths(): Int = src.cachedPathCount()
 }
