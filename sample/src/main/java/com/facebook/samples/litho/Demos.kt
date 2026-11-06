@@ -23,6 +23,13 @@ import com.facebook.litho.sections.SectionContext
 import com.facebook.litho.sections.widget.RecyclerCollectionComponent
 import com.facebook.litho.widget.ComponentCreator
 import com.facebook.samples.litho.common.playground.PlaygroundComponent
+import com.facebook.samples.litho.documentation.customlayout.ActionBarLayoutExample
+import com.facebook.samples.litho.documentation.customlayout.AlignedColumnLayoutExample
+import com.facebook.samples.litho.documentation.customlayout.BadgeOverlayLayoutExample
+import com.facebook.samples.litho.documentation.customlayout.CustomLayoutDemo
+import com.facebook.samples.litho.documentation.customlayout.EqualSplitLayoutExample
+import com.facebook.samples.litho.documentation.customlayout.FacepileLayoutExample
+import com.facebook.samples.litho.documentation.customlayout.FlowRowLayoutExample
 import com.facebook.samples.litho.integration.actionhandler.ActionHandlerComponent
 import com.facebook.samples.litho.integration.dataflow.DataFlowComponent
 import com.facebook.samples.litho.integration.listpagination.PaginatedGridComponent
@@ -522,6 +529,73 @@ class Demos {
                         SingleDemo(
                             name = "Draw Animated Square",
                             component = DrawAnimatedSquareCanvasKComponent(),
+                        ),
+                    ),
+                ),
+                DemoGrouping(
+                    name = "Custom Layout",
+                    listOf(
+                        SingleDemo(
+                            name = "Action Bar",
+                            component =
+                                CustomLayoutDemo(
+                                    caption =
+                                        "Narrow the width: the buttons lose their labels and show " +
+                                            "icons only.",
+                                    sample = ActionBarLayoutExample(),
+                                ),
+                        ),
+                        SingleDemo(
+                            name = "Facepile",
+                            component =
+                                CustomLayoutDemo(
+                                    caption =
+                                        "Narrow the width: fewer avatars fit and the count grows. " +
+                                            "RTL: the pile starts at the right.",
+                                    sample = FacepileLayoutExample(),
+                                ),
+                        ),
+                        SingleDemo(
+                            name = "Aligned Column",
+                            component =
+                                CustomLayoutDemo(
+                                    caption =
+                                        "RTL: incoming and outgoing messages swap sides. At most: " +
+                                            "the thread is as wide as its widest bubble.",
+                                    sample = AlignedColumnLayoutExample(),
+                                    showsFit = true,
+                                ),
+                        ),
+                        SingleDemo(
+                            name = "Flow Row",
+                            component =
+                                CustomLayoutDemo(
+                                    caption =
+                                        "Narrow the width: the tags wrap onto more lines. RTL: each " +
+                                            "line starts at the right.",
+                                    sample = FlowRowLayoutExample(),
+                                ),
+                        ),
+                        SingleDemo(
+                            name = "Equal Split",
+                            component =
+                                CustomLayoutDemo(
+                                    caption =
+                                        "Tap a tab. Narrow or widen the width: the tabs keep equal " +
+                                            "widths, whatever their labels.",
+                                    sample = EqualSplitLayoutExample(),
+                                ),
+                        ),
+                        SingleDemo(
+                            name = "Badge Overlay",
+                            component =
+                                CustomLayoutDemo(
+                                    caption =
+                                        "RTL: the badge moves to the top-left corner, still drawn " +
+                                            "over the avatar. Unbounded: the row is as wide as its " +
+                                            "content.",
+                                    sample = BadgeOverlayLayoutExample(),
+                                ),
                         ),
                     ),
                 ),

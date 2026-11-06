@@ -15,7 +15,7 @@
   ~ limitations under the License.
   -->
 
-<resources>
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
   <string name="app_name">Litho Sample</string>
   <string name="name_string" description="name string for documentation example">Rohit Sharma</string>
   <string name="saveable_state_playground_title" translatable="false">Saveable state</string>
@@ -29,4 +29,15 @@
   <string name="saveable_state_playground_scroll_position" translatable="false">Scroll position in saved state: %d px</string>
   <string name="saveable_state_playground_header_taps" translatable="false">Header taps in saved state: %d</string>
   <string name="saveable_state_playground_scroll_item" translatable="false">Item %d</string>
+  <string name="custom_layout_action_like" description="Label of a button that likes a post, shown with a heart icon or as the screen reader text of the icon alone">Like</string>
+  <string name="custom_layout_action_comment" description="Label of a button that opens the comments on a post, shown with a speech bubble icon or as the screen reader text of the icon alone">Comment</string>
+  <string name="custom_layout_action_share" description="Label of a button that shares a post, shown with a share icon or as the screen reader text of the icon alone">Share</string>
+  <plurals name="custom_layout_more_items" description="Screen reader text for a &quot;+N&quot; label that counts the people or items hidden because they don't fit. %d is the number hidden.">
+    <item quantity="one" description="Screen reader text for a &quot;+1&quot; label: one item is hidden. %d is the count."><xliff:g id="count" example="1">%d</xliff:g> more</item>
+    <item quantity="other" description="Screen reader text for a &quot;+N&quot; label: two or more items are hidden. %d is the count."><xliff:g id="count" example="3">%d</xliff:g> more</item>
+  </plurals>
+  <plurals name="custom_layout_new_items" description="Screen reader text for a badge that counts new items. %d is the number of new items.">
+    <item quantity="one" description="Screen reader text for a badge counting one new item. %d is the count."><xliff:g id="count" example="1">%d</xliff:g> new item</item>
+    <item quantity="other" description="Screen reader text for a badge counting two or more new items. %d is the count."><xliff:g id="count" example="3">%d</xliff:g> new items</item>
+  </plurals>
 </resources>
