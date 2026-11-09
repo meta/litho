@@ -17,6 +17,10 @@
 package com.facebook.litho.widget.collection
 
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.facebook.litho.Style
+import com.facebook.litho.core.height
+import com.facebook.litho.core.width
+import com.facebook.litho.layout.flexbox.Row
 import com.facebook.litho.testing.LithoTestRule
 import com.facebook.litho.testing.exactly
 import com.facebook.litho.testing.testrunner.LithoTestRunner
@@ -25,6 +29,7 @@ import com.facebook.litho.widget.LinearLayoutInfo
 import com.facebook.rendercore.IntSize
 import com.facebook.rendercore.SizeConstraints
 import com.facebook.rendercore.SizeConstraints.Companion.Infinity
+import com.facebook.rendercore.px
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.Rule
 import org.junit.Test
@@ -525,6 +530,98 @@ class CollectionLayoutFunctionsTest {
     assertThat(result.height).isEqualTo(200)
   }
 
+  // The tests below replay MatchFirstChild layouts across passes: each pass's result becomes the
+  // next pass's committed collectionSize, as it does in CollectionRecyclerComponent.
+
+  // Condition: horizontal, AT_MOST 400x400, three passes while the data loads, then an 80x50 item
+  // Expectation: the empty passes take no height, and the loaded pass matches the item (50px)
+  @Test
+  fun `MatchFirstChild replay takes no height while empty then matches the first item`() {
+    val heights = replay(
+        isVertical = false,
+        passes =
+            listOf(
+                emptyList<CollectionItem<*>>() to atMost(400, 400),
+                emptyList<CollectionItem<*>>() to atMost(400, 400),
+                emptyList<CollectionItem<*>>() to atMost(400, 400),
+                listOf(item(80, 50)) to atMost(400, 400),
+            ),
+    )
+        .map { it.height }
+
+    assertThat(heights).containsExactly(0, 0, 0, 50)
+  }
+
+  // Condition: vertical, AT_MOST 400x400, one pass while the data loads, then an 80x50 item
+  // Expectation: the empty pass takes no width, and the loaded pass matches the item (80px)
+  @Test
+  fun `MatchFirstChild replay takes no width while empty then matches the first item vertical`() {
+    val widths = replay(
+        isVertical = true,
+        passes =
+            listOf(
+                emptyList<CollectionItem<*>>() to atMost(400, 400),
+                listOf(item(80, 50)) to atMost(400, 400),
+            ),
+    )
+        .map { it.width }
+
+    assertThat(widths).containsExactly(0, 80)
+  }
+
+  // Condition: horizontal, AT_MOST 400x400, a 50px tall first item replaced by a 120px tall one
+  // Expectation: the collection grows to the new first item (120px)
+  @Test
+  fun `MatchFirstChild replay grows when the first item grows`() {
+    val heights = replay(
+        isVertical = false,
+        passes =
+            listOf(
+                listOf(item(80, 50)) to atMost(400, 400),
+                listOf(item(80, 120)) to atMost(400, 400),
+            ),
+    )
+        .map { it.height }
+
+    assertThat(heights).containsExactly(50, 120)
+  }
+
+  // Condition: horizontal, AT_MOST 400x400, a 120px tall first item replaced by a 50px tall one
+  // Expectation: the collection shrinks to the new first item (50px)
+  @Test
+  fun `MatchFirstChild replay shrinks when the first item shrinks`() {
+    val heights = replay(
+        isVertical = false,
+        passes =
+            listOf(
+                listOf(item(80, 120)) to atMost(400, 400),
+                listOf(item(80, 50)) to atMost(400, 400),
+            ),
+    )
+        .map { it.height }
+
+    assertThat(heights).containsExactly(120, 50)
+  }
+
+  // Condition: horizontal, a 50px tall item laid out at AT_MOST 400, then at AT_MOST 30
+  // Expectation: the second pass stays within the new 30px maximum
+  @Test
+  fun `MatchFirstChild replay stays within a shrinking maximum`() {
+    val firstItem = item(80, 50)
+    val heights = replay(
+        isVertical = false,
+        passes =
+            listOf(
+                listOf(firstItem) to atMost(400, 400),
+                listOf(firstItem) to atMost(400, 30),
+            ),
+    )
+        .map { it.height }
+
+    assertThat(heights[0]).isEqualTo(50)
+    assertThat(heights[1]).isLessThanOrEqualTo(30)
+  }
+
   // Tests calculateLayout with Dynamic wrap mode in vertical orientation
   // Condition:
   //  - Collection is vertically oriented (items stacked top-to-bottom)
@@ -749,4 +846,44 @@ class CollectionLayoutFunctionsTest {
   }
 
   // endregion
+
+  private fun replay(
+      isVertical: Boolean,
+      passes: List<Pair<List<CollectionItem<*>>, SizeConstraints>>,
+  ): List<IntSize> {
+    val layoutInfo = LinearLayoutInfo(
+        LinearLayoutManager(
+            lithoTestRule.context.androidContext,
+            if (isVertical) LinearLayoutManager.VERTICAL else LinearLayoutManager.HORIZONTAL,
+            false,
+        ),
+    )
+    var committed = IntSize.Invalid
+    return passes.map { (items, constraints) ->
+      CollectionLayoutScope(
+          layoutInfo = layoutInfo,
+          collectionConstraints = constraints,
+          collectionSize = committed,
+          collectionItems = items,
+          isVertical = isVertical,
+          wrapInMainAxis = false,
+          crossAxisWrapMode = CrossAxisWrapMode.MatchFirstChild,
+          firstVisiblePosition = 0,
+          lastVisiblePosition = 10,
+      )
+          .calculateLayout()
+          .also { committed = it }
+    }
+  }
+
+  private fun item(width: Int, height: Int): CollectionItem<*> = LithoCollectionItem(
+      lithoTestRule.context,
+      renderInfo =
+          ComponentRenderInfo.create()
+              .component(Row(style = Style.width(width.px).height(height.px)))
+              .build(),
+  )
+
+  private fun atMost(width: Int, height: Int): SizeConstraints =
+      SizeConstraints(maxWidth = width, maxHeight = height)
 }

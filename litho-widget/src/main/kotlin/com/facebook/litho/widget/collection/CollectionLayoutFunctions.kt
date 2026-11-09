@@ -215,8 +215,16 @@ fun CollectionLayoutScope.calculateLayout(): IntSize {
     }
   }
 
-  if (crossAxisWrapMode == CrossAxisWrapMode.MatchFirstChild && collectionItems.isNotEmpty()) {
-    val firstChildSize = getMeasuredSize(collectionItems.first())
+  if (crossAxisWrapMode == CrossAxisWrapMode.MatchFirstChild && collectionItems.isEmpty()) {
+    // Nothing to match yet: take the least cross-axis space allowed, like RecyclerBinder.
+    sizeInCrossAxis =
+        if (isVertical) collectionConstraints.minWidth else collectionConstraints.minHeight
+  } else if (crossAxisWrapMode == CrossAxisWrapMode.MatchFirstChild) {
+    // Measure against the incoming constraints, not the last committed size, which comes from an
+    // earlier pass with other items or constraints.
+    val firstChild = collectionItems.first()
+    val firstChildSize =
+        getMeasuredSize(firstChild, getChildSizeConstraints(firstChild, IntSize.Invalid))
     sizeInCrossAxis = if (isVertical) firstChildSize.width else firstChildSize.height
 
     // Perform synchronous layout for other visible items when on the UI thread
