@@ -46,6 +46,7 @@ import org.jetbrains.kotlin.ir.util.fqNameForIrSerialization
 import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
 import org.jetbrains.kotlin.ir.util.hasAnnotation
 import org.jetbrains.kotlin.ir.util.parentClassOrNull
+import org.jetbrains.kotlin.ir.util.render
 import org.jetbrains.kotlin.ir.visitors.IrElementTransformerVoid
 import org.jetbrains.kotlin.name.FqName
 
@@ -254,7 +255,10 @@ class HookIdentityTransformer(private val pluginContext: IrPluginContext) :
     return "$receiver$scopedName($parameters)"
   }
 
-  private fun IrType.stableName(): String = classFqName?.asString() ?: toString()
+  // Type parameters and local classes have no class FqName. Render them: `IrType` does not
+  // override `toString()`, and `IrType.hashCode()` mixes in identity hashes, so `toString()`
+  // changes on every compilation.
+  private fun IrType.stableName(): String = classFqName?.asString() ?: render()
 
   private fun nextCallSiteId(functionIdentity: String): Int {
     val ordinal = hookCallCounters[functionIdentity] ?: 0

@@ -44,7 +44,24 @@ class HookIdentityTransformerTest : AbstractCompilerTest() {
     assertThat(first.single()).isNotEqualTo(second.single())
   }
 
-  private fun compileCallSiteIds(packageName: String): List<Int> {
+  @Test
+  fun callSiteIds_areStableForTypeParameters() {
+    val hooks =
+        """
+        @Hook fun <T> ComponentScope.useLatest(value: T): State<T> = run { useState { value } }
+        @Hook fun <S : ComponentScope> S.useCounter(): State<Int> = run { useState { 0 } }
+        """
+    val first = compileCallSiteIds("first", hooks)
+    val firstAgain = compileCallSiteIds("first", hooks)
+
+    assertThat(first).hasSize(2)
+    assertThat(first).containsExactlyElementsOf(firstAgain)
+  }
+
+  private fun compileCallSiteIds(
+      packageName: String,
+      hooks: String = "@Hook fun ComponentScope.useCallSite(): State<Int> = run { useState { 0 } }",
+  ): List<Int> {
     val processor = HookIdentityCallProcessor()
     val result = compile(
         SourceFile.kotlin(
@@ -57,8 +74,7 @@ class HookIdentityTransformerTest : AbstractCompilerTest() {
                 import com.facebook.litho.annotations.Hook
                 import com.facebook.litho.useState
 
-                @Hook
-                fun ComponentScope.useCallSite(): State<Int> = run { useState { 0 } }
+                $hooks
                 """
                 .trimIndent(),
         ),
