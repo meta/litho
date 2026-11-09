@@ -480,6 +480,74 @@ class MountContentPoolsTest {
   }
 
   @Test
+  fun `content recycled after its lifecycle scope ends is discarded instead of pooled`() {
+    val poolScope = PoolScope.LifecycleAware((service as LifecycleService).lifecycle)
+    val testRenderUnit = TestRenderUnit(0)
+    val content = acquireMountContent(activity, testRenderUnit, poolScope)
+
+    // scenario: the surface owning the scope is gone, then one of its items unmounts late
+    serviceController.destroy()
+    recycle(activity, testRenderUnit, content, poolScope)
+
+    // expectation: nothing is pooled under the dead scope, and the content's resources are freed
+    Assertions.assertThat(getContentPoolItemCount(activity, testRenderUnit, poolScope)).isZero
+    Assertions.assertThat(testRenderUnit.contentDiscardedCount).isEqualTo(1)
+    Assertions.assertThat(acquireMountContent(activity, testRenderUnit, poolScope))
+        .isNotSameAs(content)
+  }
+
+  @Test
+  fun `a lifecycle scope made from a destroyed lifecycle pools nothing`() {
+    serviceController.destroy()
+    val poolScope = PoolScope.LifecycleAware((service as LifecycleService).lifecycle)
+    val testRenderUnit = TestRenderUnit(0)
+
+    val content = acquireMountContent(activity, testRenderUnit, poolScope)
+    recycle(activity, testRenderUnit, content, poolScope)
+
+    Assertions.assertThat(getContentPoolItemCount(activity, testRenderUnit, poolScope)).isZero
+    Assertions.assertThat(testRenderUnit.contentDiscardedCount).isEqualTo(1)
+  }
+
+  @Test
+  fun `a manually managed scope pools again after it is released`() {
+    val poolScope = PoolScope.ManuallyManaged()
+    val testRenderUnit = TestRenderUnit(0)
+
+    // scenario: a list releases its scope when it detaches, then comes back with the same scope
+    recycle(
+        activity,
+        testRenderUnit,
+        acquireMountContent(activity, testRenderUnit, poolScope),
+        poolScope,
+    )
+    poolScope.releaseScope()
+    val contentAfterRelease = acquireMountContent(activity, testRenderUnit, poolScope)
+    recycle(activity, testRenderUnit, contentAfterRelease, poolScope)
+
+    // expectation: the scope pools again; only the content pooled before the release was discarded
+    Assertions.assertThat(getContentPoolItemCount(activity, testRenderUnit, poolScope)).isEqualTo(1)
+    Assertions.assertThat(testRenderUnit.contentDiscardedCount).isEqualTo(1)
+    Assertions.assertThat(acquireMountContent(activity, testRenderUnit, poolScope))
+        .isSameAs(contentAfterRelease)
+  }
+
+  @Test
+  fun `a view attached by someone else stays with them when it is recycled into an ended scope`() {
+    captureReports()
+    val poolScope = PoolScope.LifecycleAware((service as LifecycleService).lifecycle)
+    val testRenderUnit = TestRenderUnit(0)
+    val content = acquireMountContent(activity, testRenderUnit, poolScope) as View
+    FrameLayout(activity).addView(content)
+
+    serviceController.destroy()
+    recycle(activity, testRenderUnit, content, poolScope)
+
+    Assertions.assertThat(testRenderUnit.contentDiscardedCount).isZero
+    Assertions.assertThat(content.parent).isNotNull
+  }
+
+  @Test
   fun testReleaseMountContentWithCustomPoolScopeForReleasedLifecycleAwarePoolScopeDoesNothing() {
     val servicePoolScope = PoolScope.LifecycleAware((service as LifecycleService).lifecycle)
     val testRenderUnit = TestRenderUnit(0)

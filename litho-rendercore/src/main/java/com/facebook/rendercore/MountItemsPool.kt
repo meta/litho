@@ -179,6 +179,18 @@ object MountContentPools {
         mountContent.translationX = 0f
         mountContent.translationY = 0f
       }
+      if (mountContent is View && mountContent.parent != null) {
+        reportAttachedView(
+            ATTACHED_VIEW_RELEASED_CATEGORY,
+            "Released",
+            mountContent,
+            poolableMountContent.poolKeyTypeName,
+        )
+        // Owned by whoever attached it, so it is neither pooled nor discarded; see
+        // discardIfAttached.
+        return
+      }
+
       val pool =
           if (poolableMountContent.poolingPolicy.canReleaseContent) {
             getOrCreateMountContentPool(
@@ -193,17 +205,6 @@ object MountContentPools {
       if (pool == null) {
         // There is no pool, call onContentDiscarded to allow for releasing resources if needed.
         poolableMountContent.onContentDiscarded?.invoke(mountContent)
-        return
-      }
-
-      if (mountContent is View && mountContent.parent != null) {
-        reportAttachedView(
-            ATTACHED_VIEW_RELEASED_CATEGORY,
-            "Released",
-            mountContent,
-            poolableMountContent.poolKeyTypeName,
-        )
-        // Owned by whoever attached it; see discardIfAttached.
         return
       }
 
@@ -262,6 +263,9 @@ object MountContentPools {
     }
 
     return synchronized(mountContentLock) {
+      if (poolScope.isReleased()) {
+        return@synchronized 0
+      }
       val contextContentPools = mountContentPoolsByContext[context]
       val scopedPools = contextContentPools?.getPools(poolScope)
       val pool = scopedPools?.get(allocator.getPoolKey())
@@ -355,6 +359,9 @@ object MountContentPools {
     }
 
     synchronized(mountContentLock) {
+      if (poolScope.isReleased()) {
+        return null
+      }
       var contextContentPools = mountContentPoolsByContext[context]
       if (contextContentPools == null) {
         val rootContext = getRootContext(context)
@@ -894,7 +901,7 @@ sealed interface PoolScope {
    * A pool scope that automatically releases the pool when the given [lifecycle] transitions to
    * destroyed state
    */
-  class LifecycleAware(lifecycle: Lifecycle) : PoolScope {
+  class LifecycleAware(internal val lifecycle: Lifecycle) : PoolScope {
     init {
       lifecycle.addObserver(
           object : DefaultLifecycleObserver {
@@ -966,3 +973,10 @@ private class ContextContentPools {
     contentPool.setOnClearedListener(null)
   }
 }
+
+/**
+ * A [PoolScope.LifecycleAware] scope whose lifecycle is destroyed gets no pool, so content its
+ * surface recycles late is discarded instead of kept where nothing will release it.
+ */
+private fun PoolScope.isReleased(): Boolean =
+    this is PoolScope.LifecycleAware && lifecycle.currentState == Lifecycle.State.DESTROYED

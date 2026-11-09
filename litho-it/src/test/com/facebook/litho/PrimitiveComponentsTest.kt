@@ -37,7 +37,9 @@ import com.facebook.litho.accessibility.onInitializeAccessibilityNodeInfo
 import com.facebook.litho.accessibility.onPopulateAccessibilityNode
 import com.facebook.litho.accessibility.stateDescription
 import com.facebook.litho.animated.alpha
+import com.facebook.litho.annotations.ExperimentalLithoApi
 import com.facebook.litho.config.ComponentsConfiguration
+import com.facebook.litho.config.PreAllocationHandler
 import com.facebook.litho.core.height
 import com.facebook.litho.core.heightPercent
 import com.facebook.litho.core.margin
@@ -63,7 +65,9 @@ import com.facebook.litho.widget.LithoScrollView
 import com.facebook.litho.widget.collection.LazyList
 import com.facebook.rendercore.IntSize
 import com.facebook.rendercore.MeasureResult
+import com.facebook.rendercore.MountContentPools
 import com.facebook.rendercore.PoolScope
+import com.facebook.rendercore.RunnableHandler
 import com.facebook.rendercore.SizeConstraints
 import com.facebook.rendercore.dp
 import com.facebook.rendercore.primitives.DrawableAllocator
@@ -1393,6 +1397,136 @@ class PrimitiveComponentsTest {
   }
 
   @Test
+  fun `a tree whose configuration uses pool scopes sees its pool scope without the global flag`() {
+    val poolScope = PoolScope.ManuallyManaged()
+    val config =
+        ComponentsConfiguration.create(mLithoTestRule.context.lithoConfiguration.componentsConfig)
+            .usePoolScopes(true)
+            .build()
+    val componentTree =
+        ComponentTree.create(mLithoTestRule.context)
+            .componentsConfiguration(config)
+            .poolScope(poolScope)
+            .build()
+
+    var resolvedPoolScope: PoolScope? = null
+    val component =
+        object : PrimitiveComponent() {
+          override fun PrimitiveComponentScope.render(): LithoPrimitive {
+            resolvedPoolScope = PoolScopeTreeProp.value
+            val primitive = Primitive(
+                layoutBehavior = FixedSizeLayoutBehavior(100.px, 100.px),
+                MountBehavior(ViewAllocator { context -> TextView(context) }) {},
+            )
+            return LithoPrimitive(primitive, null)
+          }
+        }
+
+    val testView = mLithoTestRule.render(componentTree = componentTree) { component }
+
+    assertThat(ComponentsConfiguration.customPoolScopesEnabled).isFalse()
+    assertThat(resolvedPoolScope).isSameAs(poolScope)
+    testView.lithoView.unmountAllItems()
+  }
+
+  @Test
+  fun `a tree whose configuration uses pool scopes pools only the content that asks for it`() {
+    val poolScope = PoolScope.ManuallyManaged()
+    val plainAllocator = ViewAllocator { context -> TextView(context) }
+    val scopedAllocator = ViewAllocator(useCustomPoolScope = true) { context -> TextView(context) }
+
+    val testView =
+        mLithoTestRule.render(componentTree = treeWithPoolScope(poolScope)) {
+          Column {
+            child(FixedSizeViewComponent(plainAllocator))
+            child(FixedSizeViewComponent(scopedAllocator))
+          }
+        }
+    testView.lithoView.unmountAllItems()
+
+    val androidContext = mLithoTestRule.context.androidContext
+    assertThat(MountContentPools.getContentPoolItemCount(androidContext, plainAllocator, poolScope))
+        .isZero()
+    assertThat(MountContentPools.getContentPoolItemCount(androidContext, plainAllocator))
+        .isEqualTo(1)
+    assertThat(
+        MountContentPools.getContentPoolItemCount(androidContext, scopedAllocator, poolScope),
+    )
+        .isEqualTo(1)
+  }
+
+  @Test
+  fun `a nested tree keeps its parent's pool scope`() {
+    val poolScope = PoolScope.ManuallyManaged()
+    var parentContext: ComponentContext? = null
+    var nestedPoolScope: PoolScope? = null
+    val parent =
+        object : PrimitiveComponent() {
+          override fun PrimitiveComponentScope.render(): LithoPrimitive {
+            parentContext = context
+            return fixedSizeView(ViewAllocator { c -> TextView(c) })
+          }
+        }
+    mLithoTestRule.render(componentTree = treeWithPoolScope(poolScope)) { parent }
+
+    val nestedTree = ComponentTree.createNestedComponentTree(requireNotNull(parentContext)).build()
+    mLithoTestRule.render(componentTree = nestedTree) {
+      object : PrimitiveComponent() {
+        override fun PrimitiveComponentScope.render(): LithoPrimitive {
+          nestedPoolScope = PoolScopeTreeProp.value
+          return fixedSizeView(ViewAllocator { c -> TextView(c) })
+        }
+      }
+    }
+
+    assertThat(nestedPoolScope).isSameAs(poolScope)
+  }
+
+  @Test
+  fun `preallocated content goes to the tree's pool scope`() {
+    val poolScope = PoolScope.ManuallyManaged()
+    val allocator =
+        ViewAllocator(canPreallocate = true, useCustomPoolScope = true) { context ->
+          TextView(context)
+        }
+    val tree = treeWithPoolScope(
+        poolScope,
+        preAllocationHandler =
+            PreAllocationHandler.Custom(
+                RunnableHandler.DefaultHandler(android.os.Looper.getMainLooper()),
+            ),
+    )
+
+    tree.setRootAndSizeSpecSync(FixedSizeViewComponent(allocator), exactly(100), exactly(100))
+    mLithoTestRule.idle()
+
+    val androidContext = mLithoTestRule.context.androidContext
+    assertThat(MountContentPools.getContentPoolItemCount(androidContext, allocator, poolScope))
+        .isEqualTo(1)
+    assertThat(MountContentPools.getContentPoolItemCount(androidContext, allocator)).isZero()
+  }
+
+  @OptIn(ExperimentalLithoApi::class)
+  private fun treeWithPoolScope(
+      poolScope: PoolScope,
+      preAllocationHandler: PreAllocationHandler? = null,
+  ): ComponentTree =
+      ComponentTree.create(mLithoTestRule.context)
+          .componentsConfiguration(
+              mLithoTestRule.context.lithoConfiguration.componentsConfig.copy(
+                  usePoolScopes = true,
+                  preAllocationHandler = preAllocationHandler,
+              ),
+          )
+          .poolScope(poolScope)
+          .build()
+
+  private class FixedSizeViewComponent(private val allocator: ViewAllocator<TextView>) :
+      PrimitiveComponent() {
+    override fun PrimitiveComponentScope.render(): LithoPrimitive = fixedSizeView(allocator)
+  }
+
+  @Test
   fun `should see custom pool scope in render only if the component is inside of a lazy list`() {
     try {
       ComponentsConfiguration.customPoolScopesEnabled = true
@@ -1642,3 +1776,10 @@ class TestPrimitiveWithTwoBindersComponent(
 }
 
 @DataClassGenerate data class TestPrimitiveLayoutData(val width: Int, val height: Int)
+
+private fun PrimitiveComponentScope.fixedSizeView(
+    allocator: ViewAllocator<TextView>,
+): LithoPrimitive = LithoPrimitive(
+    Primitive(FixedSizeLayoutBehavior(100.px, 100.px), MountBehavior(allocator) {}),
+    null,
+)

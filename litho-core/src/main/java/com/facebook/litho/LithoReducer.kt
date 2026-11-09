@@ -39,8 +39,10 @@ import com.facebook.rendercore.LayoutCache
 import com.facebook.rendercore.LayoutResult
 import com.facebook.rendercore.LogLevel
 import com.facebook.rendercore.MountState
+import com.facebook.rendercore.PoolScope
 import com.facebook.rendercore.RenderState
 import com.facebook.rendercore.RenderTreeNode
+import com.facebook.rendercore.RenderUnit
 import com.facebook.rendercore.incrementalmount.IncrementalMountOutput
 import com.facebook.rendercore.incrementalmount.IncrementalMountRenderCoreExtension
 import com.facebook.rendercore.visibility.VisibilityEventCallbackData
@@ -202,7 +204,7 @@ internal object LithoReducer {
                 isSizeDependant = true,
                 debugHierarchy = debugNode,
             ),
-        poolScope = reductionState.poolScope,
+        poolScope = reductionState.poolScopeFor(rootHostRenderUnit),
     )
 
     addRenderTreeNode(
@@ -350,9 +352,23 @@ internal object LithoReducer {
                 debugHierarchy = debugHierarchyNode,
             ),
         parent = parent,
-        poolScope = reductionState.poolScope,
+        poolScope = reductionState.poolScopeFor(unit),
     )
   }
+
+  /**
+   * With the global flag every pooled content uses the tree's scope. A tree that opts in through
+   * its configuration scopes only the content that asks for it.
+   */
+  private fun ReductionState.poolScopeFor(unit: RenderUnit<*>): PoolScope =
+      if (
+          ComponentsConfiguration.customPoolScopesEnabled ||
+              unit.contentAllocator.usesCustomPoolScope
+      ) {
+        poolScope
+      } else {
+        PoolScope.None
+      }
 
   /**
    * Acquires a [VisibilityOutput] object and computes the bounds for it using the information

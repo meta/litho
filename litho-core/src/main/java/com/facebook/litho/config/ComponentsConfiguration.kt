@@ -240,6 +240,13 @@ internal constructor(
      * one: the render that gave the tree its size renders the same root or a newer one.
      */
     @JvmField val dropResolveRequestedBeforeSize: Boolean = false,
+    /**
+     * When true, a tree built with this configuration uses the [com.facebook.rendercore.PoolScope]
+     * it is given even if [customPoolScopesEnabled] is off. Content whose allocator opts into
+     * custom pool scopes is then pooled per scope and dropped when the scope is released, instead
+     * of in the Context's pool, which lives as long as the Activity.
+     */
+    @JvmField val usePoolScopes: Boolean = false,
 ) {
 
   companion object {
@@ -734,6 +741,10 @@ internal constructor(
 
     fun dropResolveRequestedBeforeSize(enabled: Boolean): Builder = apply {
       config = config.copy(dropResolveRequestedBeforeSize = enabled)
+    }
+
+    fun usePoolScopes(enabled: Boolean): Builder = apply {
+      config = config.copy(usePoolScopes = enabled)
     }
 
     fun build(): ComponentsConfiguration = config

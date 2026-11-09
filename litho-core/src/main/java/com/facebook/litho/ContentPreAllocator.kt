@@ -99,7 +99,7 @@ constructor(
         val preallocated = preAllocator(
             componentContext.androidContext,
             treeNode.renderUnit.contentAllocator,
-            componentContext.getTreeProp(PoolScopeTreeProp),
+            treeNode.poolScope,
         )
         Log.d(
             "ContentPreAllocator",

@@ -359,7 +359,7 @@ open class ComponentTree protected constructor(builder: Builder) :
 
     val implicitLifecycleOwner = getImplicitLifecycleOwner(builder.treePropContainer)
     implicitTreePropContainer = createImplicitTreePropContainer(implicitLifecycleOwner)
-    if (ComponentsConfiguration.customPoolScopesEnabled) {
+    if (ComponentsConfiguration.customPoolScopesEnabled || builder.config.usePoolScopes) {
       requireNotNull(implicitTreePropContainer) { "implicitTreePropContainer should not be null" }
           .put(PoolScopeTreeProp, builder.poolScope)
     }
@@ -3227,7 +3227,7 @@ open class ComponentTree protected constructor(builder: Builder) :
 
     internal var stateUpdater: StateUpdater? = null
 
-    internal var poolScope: PoolScope = PoolScope.None
+    internal var poolScope: PoolScope = context.getTreeProp(PoolScopeTreeProp)
 
     internal var saveableStateKey: String? = null
 
@@ -3372,9 +3372,6 @@ open class ComponentTree protected constructor(builder: Builder) :
 
     @ExperimentalLithoApi
     fun poolScope(poolScope: PoolScope): Builder {
-      if (!ComponentsConfiguration.customPoolScopesEnabled) {
-        return this
-      }
       this.poolScope = poolScope
       return this
     }

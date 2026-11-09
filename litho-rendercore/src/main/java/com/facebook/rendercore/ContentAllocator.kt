@@ -71,6 +71,13 @@ interface ContentAllocator<Content : Any> {
   fun poolSize(): Int = DEFAULT_MAX_PREALLOCATION
 
   /**
+   * Whether this content is pooled under a custom [PoolScope] when the renderer scopes only the
+   * content that asks for it.
+   */
+  val usesCustomPoolScope: Boolean
+    get() = false
+
+  /**
    * Creates the content pool the framework should use for this [ContentAllocator].
    *
    * Note: [getPoolKey] is passed to [DefaultContentPool] so the pool's debug name reflects the

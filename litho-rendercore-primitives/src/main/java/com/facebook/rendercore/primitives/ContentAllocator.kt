@@ -70,6 +70,9 @@ class ViewAllocator<Content : View>(
 
   override fun poolSize(): Int = poolSize
 
+  override val usesCustomPoolScope: Boolean
+    get() = useCustomPoolScope
+
   override fun canPreallocate(): Boolean = canPreallocate
 
   override fun getPoolKey(): Any = allocator.javaClass
@@ -122,6 +125,9 @@ class DrawableAllocator<Content : Drawable>(
 
   override fun poolSize(): Int = poolSize
 
+  override val usesCustomPoolScope: Boolean
+    get() = useCustomPoolScope
+
   override fun canPreallocate(): Boolean = canPreallocate
 
   override fun getPoolKey(): Any = allocator.javaClass
@@ -157,6 +163,8 @@ fun <Content : Any> ContentAllocator<Content>.withContentType(
       }
 
   return object : ContentAllocator<Content> by this {
+    override val usesCustomPoolScope: Boolean = useCustomPoolScope
+
     override fun getPoolKey(): Any {
       return contentType
     }
