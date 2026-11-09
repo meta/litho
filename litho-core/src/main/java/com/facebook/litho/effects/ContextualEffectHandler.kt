@@ -46,7 +46,7 @@ internal class ContextualEffectHandler : EffectHandler {
    * Note that all outgoing effects are always detached as necessary before exiting this function.
    *
    * @return the [Runnable] through which the incoming effects can be executed. This is a
-   *   [AttachableHandler.EmptyRunnable] if there are no new effects to run.
+   *   [EffectHandler.EmptyRunnable] if there are no new effects to run.
    */
   override fun EffectContext.updateEffects(effects: List<Attachable>?): Runnable {
     ThreadUtils.assertMainThread()
