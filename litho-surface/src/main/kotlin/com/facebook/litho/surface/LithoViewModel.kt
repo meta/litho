@@ -319,7 +319,7 @@ internal constructor(
     componentSaveableStateRegistry = null
     val toRun = closeActions.toList()
     closeActions.clear()
-    toRun.forEach { runCatching { it() } }
+    toRun.forEach { runCatching { it() }.getOrDefault(Unit) }
   }
 
   // --------------------------- Internal binding ------------------------------

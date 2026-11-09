@@ -59,6 +59,28 @@ class LithoViewModelRetentionTest {
   }
 
   @Test
+  fun `close actions continue in registration order after a Throwable and run once`() {
+    val ownerStore = ViewModelStore()
+    val host = createHost(ownerStore)
+    val calls = mutableListOf<String>()
+    host.onSurfaceClose { calls += "first" }
+    host.onSurfaceClose {
+      calls += "failing"
+      throw Error("close action failure")
+    }
+    host.onSurfaceClose { calls += "last" }
+
+    ownerStore.clear()
+
+    assertThat(calls).containsExactly("first", "failing", "last")
+    assertThatThrownBy { host.onSurfaceClose { calls += "unexpected" } }
+        .isInstanceOf(IllegalStateException::class.java)
+        .hasMessageContaining("cleared")
+    ownerStore.clear()
+    assertThat(calls).containsExactly("first", "failing", "last")
+  }
+
+  @Test
   fun `saved state owner must be restored before setting Litho content`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val ownerStore = ViewModelStore()
