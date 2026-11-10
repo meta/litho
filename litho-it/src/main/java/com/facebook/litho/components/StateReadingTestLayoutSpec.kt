@@ -27,7 +27,9 @@ class StateReadingTestLayoutComponent(
     private val getState: (GlobalKey) -> Int,
 ) : KComponent() {
   override fun ComponentScope.render(): Component? {
-    if (readState) getState(context.globalKey)
+    if (readState) {
+      @Suppress("RETURN_VALUE_NOT_USED") getState(context.globalKey)
+    }
     return Column()
   }
 }
