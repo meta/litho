@@ -203,6 +203,10 @@ public class LinearLayoutInfoKeyboardTraversalTest {
    * <p>It cannot trap focus: `ExploreByTouchHelper.moveFocus` searches with `wrap = false`, so once
    * the spans are exhausted it returns false and the key falls through to the focus search. The
    * links cost one extra press each, which is the correct behaviour for a link.
+   *
+   * <p>The helper claims TAB only if the host can take focus. The host is focusable only when view
+   * flattening merges it with the focusable `Column`, which the coverage build does not do, so the
+   * test makes it focusable.
    */
   @Test
   public void virtualViewsClaimTabButAlwaysReleaseIt() throws Throwable {
@@ -228,11 +232,8 @@ public class LinearLayoutInfoKeyboardTraversalTest {
           assertTrue(
               "the delegation gate needs a single accessible item",
               host.getHasOnlyOneAccessibleItem());
-          // dispatchKeyEvent delegates to the a11y helper on the host's virtual-view state alone,
-          // not on who holds focus, so the claim sequence below never depends on this. Whether the
-          // host can even take focus is build-dependent -- it only does when view flattening merges
-          // it with the focusable Column, which the coverage build does not -- so it must not gate.
-          host.requestFocus();
+          host.setFocusableInTouchMode(true);
+          assertTrue("the host must hold focus for its helper to claim TAB", host.requestFocus());
           for (int i = 0; i < 6; i++) {
             claims.add(
                 host.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_TAB)));
