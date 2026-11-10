@@ -747,6 +747,42 @@ class ComponentTreeTest {
     newLayoutThread.quit()
   }
 
+  @Test
+  fun `an older root that resolves late on the previous handler is never laid out`() {
+    val componentTree =
+        ComponentTree.create(context, SimpleMountSpecTester(color = 1))
+            .componentsConfiguration(
+                ComponentsConfiguration.defaultInstance.copy(
+                    skipRedundantAsyncMeasureLayout = true,
+                    renderWithCurrentInputs = true,
+                ),
+            )
+            .build()
+    componentTree.setLithoView(LithoView(context))
+    componentTree.attach()
+    componentTree.measure(widthSpec, heightSpec, IntArray(2), false)
+
+    // The older root stays queued on the previous handler and runs after the newer root resolved.
+    val olderRoot = SimpleMountSpecTester(color = 2)
+    val newerRoot = SimpleMountSpecTester(color = 3)
+    componentTree.setRootAsync(olderRoot)
+    val newLayoutThread = createAndStartNewHandlerThread()
+    componentTree.updateLayoutThreadHandler(RunnableHandler.DefaultHandler(newLayoutThread.looper))
+    componentTree.setRootAsync(newerRoot)
+    val newLayoutLooper = Shadow.extract<ShadowLooper>(newLayoutThread.looper)
+    newLayoutLooper.runToEndOfTasks()
+    runToEndOfTasks()
+    ShadowLooper.runUiThreadTasks()
+    assertThat(componentTree.mainThreadLayoutState?.isForComponentId(newerRoot.instanceId)).isTrue
+
+    componentTree.measure(widthSpec, heightSpec, IntArray(2), false)
+    newLayoutLooper.runToEndOfTasks()
+    ShadowLooper.runUiThreadTasks()
+
+    assertThat(componentTree.mainThreadLayoutState?.isForComponentId(newerRoot.instanceId)).isTrue
+    newLayoutThread.quit()
+  }
+
   /** An attached tree with one committed layout at [widthSpec] x [heightSpec]. */
   private fun stateUpdateTree(
       caller: SimpleStateUpdateEmulatorSpec.Caller,

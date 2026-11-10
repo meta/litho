@@ -23,11 +23,13 @@ import com.facebook.litho.TreeFuture.FutureExecutionType
 import com.facebook.litho.animation.height
 import com.facebook.litho.annotations.ExperimentalLithoApi
 import com.facebook.litho.config.ComponentsConfiguration
+import com.facebook.litho.core.height as styleHeight
 import com.facebook.litho.core.width
 import com.facebook.litho.layout.flexbox.Column as FlexColumn
 import com.facebook.litho.layout.flexbox.Row
 import com.facebook.litho.testing.LithoStatsRule
 import com.facebook.litho.testing.LithoTestRule
+import com.facebook.litho.testing.TestLithoView
 import com.facebook.litho.testing.ThreadTestingUtils
 import com.facebook.litho.testing.TimeOutSemaphore
 import com.facebook.litho.testing.exactly
@@ -218,28 +220,325 @@ class SplitFuturesTest {
   @Test
   fun lateResolveRequestedBeforeSize_updateFromFirstMount_isLaidOut() {
     val layoutThread = QueuedLayoutThread()
-    val componentTree =
-        ComponentTree.create(lithoTestRule.context)
-            .componentsConfiguration(
-                ComponentsConfiguration.create().dropResolveRequestedBeforeSize(true).build(),
-            )
-            .layoutThreadHandler(layoutThread)
-            .build()
+    val testLithoView = createLateResolveRace(layoutThread, requestedSize = null)
+
+    finishLateResolveRace(layoutThread)
+    assertThat(testLithoView.findViewWithTagOrNull(UPDATED_TAG)).isNotNull
+  }
+
+  /**
+   * As above, but the late resolve was requested with a size the tree no longer has. It commits the
+   * state update, and its layout runs at the tree's current size.
+   */
+  @Test
+  fun lateResolveRequestedWithStaleSize_updateFromFirstMount_isLaidOut() {
+    val layoutThread = QueuedLayoutThread()
+    val testLithoView = createLateResolveRace(layoutThread, requestedSize = exactly(100))
+
+    finishLateResolveRace(layoutThread)
+    assertThat(testLithoView.findViewWithTagOrNull(UPDATED_TAG)).isNotNull
+  }
+
+  /**
+   * Sets [UpdatesStateOnMount] as the root, with [requestedSize] or before any size, then measures
+   * and mounts at 200 px before the layout thread runs the resolve it already took.
+   */
+  private fun createLateResolveRace(
+      layoutThread: QueuedLayoutThread,
+      requestedSize: Int?,
+  ): TestLithoView {
+    val componentTree = createTreeWithCurrentInputs(layoutThread)
     val testLithoView =
         lithoTestRule.createTestLithoView(componentTree = componentTree).attachToWindow()
     // Holds the batched state update until idle(), so it can't render the update first.
     ShadowLooper.pauseMainLooper()
 
-    componentTree.setRootAsync(UpdatesStateOnMount())
+    if (requestedSize == null) {
+      componentTree.setRootAsync(UpdatesStateOnMount())
+    } else {
+      componentTree.setRootAndSizeSpecAsync(UpdatesStateOnMount(), requestedSize, requestedSize)
+    }
     val lateResolve = layoutThread.takeNext()
-    testLithoView.setSizeSpecs(exactly(100), exactly(100)).measure().layout()
+    testLithoView.setSizeSpecs(exactly(200), exactly(200)).measure().layout()
     ThreadTestingUtils.runOnBackgroundThread { lateResolve.run() }.acquire()
-    assertThat(lithoStatsRule.resolveCount).isEqualTo(1)
+    return testLithoView
+  }
+
+  private fun finishLateResolveRace(layoutThread: QueuedLayoutThread) {
     lithoTestRule.idle()
     ThreadTestingUtils.runOnBackgroundThread { layoutThread.runAll() }.acquire()
     lithoTestRule.idle()
+  }
+
+  /** The resolve of an older root runs late, after a newer root was laid out at the same size. */
+  @Test
+  fun lateResolveOfOlderRoot_newerRootStays() {
+    val layoutThread = QueuedLayoutThread()
+    val (componentTree, testLithoView) = createMountedTree(layoutThread)
+
+    componentTree.setRootAsync(Row(style = Style.viewTag(OLDER_ROOT_TAG)))
+    val lateResolve = layoutThread.takeNext()
+    componentTree.setRoot(Row(style = Style.viewTag(NEWER_ROOT_TAG)))
+    ThreadTestingUtils.runOnBackgroundThread { lateResolve.run() }.acquire()
+    finishLateResolveRace(layoutThread)
+    testLithoView.measure().layout()
+
+    assertShowsOnly(testLithoView, NEWER_ROOT_TAG, OLDER_ROOT_TAG)
+  }
+
+  /**
+   * As above, but the older root was requested at a size the tree no longer has: laying it out at
+   * the current size must not bring it back.
+   */
+  @Test
+  fun lateResolveOfOlderRootWithStaleSize_newerRootStays() {
+    val layoutThread = QueuedLayoutThread()
+    val (componentTree, testLithoView) = createMountedTree(layoutThread)
+
+    componentTree.setRootAsync(Row(style = Style.viewTag(OLDER_ROOT_TAG)))
+    val lateResolve = layoutThread.takeNext()
+    testLithoView.setSizeSpecs(exactly(200), exactly(200)).measure().layout()
+    componentTree.setRoot(Row(style = Style.viewTag(NEWER_ROOT_TAG)))
+    ThreadTestingUtils.runOnBackgroundThread { lateResolve.run() }.acquire()
+    finishLateResolveRace(layoutThread)
+    testLithoView.measure().layout()
+
+    assertShowsOnly(testLithoView, NEWER_ROOT_TAG, OLDER_ROOT_TAG)
+  }
+
+  /**
+   * A sync render of an older root resolves after a newer root's render started and committed, and
+   * the newer root's own async resolve runs late. The older root must not commit.
+   */
+  @Test
+  fun syncRenderOfOlderRootResolvesLate_newerRootStays() {
+    lateinit var componentTree: ComponentTree
+    val isWaitingForSyncRender = AtomicBoolean(false)
+    var lateResolve: Runnable? = null
+    val layoutThread = QueuedLayoutThread {
+      if (isWaitingForSyncRender.getAndSet(false)) {
+        componentTree.setRootAsync(Row(style = Style.viewTag(NEWER_ROOT_TAG)))
+        lateResolve = takeNext()
+        componentTree.setSizeSpec(exactly(100), exactly(100))
+      }
+    }
+    val (tree, testLithoView) = createMountedTree(layoutThread)
+    componentTree = tree
+    // Leaves a resolve queued, so the sync render below removes it between its request and its
+    // resolve.
+    componentTree.setRootAsync(Row())
+
+    isWaitingForSyncRender.set(true)
+    componentTree.setRootAndSizeSpecSync(
+        Row(style = Style.viewTag(OLDER_ROOT_TAG)),
+        exactly(100),
+        exactly(100),
+    )
+    ThreadTestingUtils.runOnBackgroundThread { requireNotNull(lateResolve).run() }.acquire()
+    finishLateResolveRace(layoutThread)
+    testLithoView.measure().layout()
+
+    assertShowsOnly(testLithoView, NEWER_ROOT_TAG, OLDER_ROOT_TAG)
+  }
+
+  /**
+   * The same root is set twice before any size. The second resolve starts before the first measure,
+   * which lays out the first resolve, and commits while that layout runs.
+   */
+  @Test
+  fun sameRootResolveCommitsDuringFirstMeasure_rootIsLaidOut() {
+    val layoutThread = QueuedLayoutThread()
+    val componentTree = createTreeWithCurrentInputs(layoutThread)
+    val testLithoView =
+        lithoTestRule.createTestLithoView(componentTree = componentTree).attachToWindow()
+    val root = Row(style = Style.viewTag(NEWER_ROOT_TAG))
+    componentTree.setRootAsync(root)
+    val firstResolve = layoutThread.takeNext()
+    componentTree.setRootAsync(root)
+    val secondResolve = layoutThread.takeNext()
+    ThreadTestingUtils.runOnBackgroundThread { firstResolve.run() }.acquire()
+
+    lateinit var secondResolveRun: TimeOutSemaphore
+    val pause = PauseResolveUntilFirstLayout { secondResolveRun.acquire() }
+    componentTree.setFutureExecutionListener(pause)
+    secondResolveRun = ThreadTestingUtils.runOnBackgroundThread { secondResolve.run() }
+    pause.awaitResolvePaused()
+    testLithoView.setSizeSpecs(exactly(100), exactly(100)).measure().layout()
+    componentTree.setFutureExecutionListener(null)
+    finishLateResolveRace(layoutThread)
+    testLithoView.layout()
+
+    assertThat(testLithoView.findViewWithTagOrNull(NEWER_ROOT_TAG)).isNotNull
+  }
+
+  /**
+   * The same root is set twice before any size. The first resolve commits, the first measure only
+   * lays it out and mounts it, and the second resolve runs late.
+   */
+  @Test
+  fun sameRootSetTwice_firstMeasureOnlyLaysOut_updateFromFirstMountIsLaidOut() {
+    val layoutThread = QueuedLayoutThread()
+    val componentTree = createTreeWithCurrentInputs(layoutThread)
+    val testLithoView =
+        lithoTestRule.createTestLithoView(componentTree = componentTree).attachToWindow()
+    // Holds the batched state update until the late resolve has run.
+    ShadowLooper.pauseMainLooper()
+    val root = UpdatesStateOnMount()
+
+    componentTree.setRootAsync(root)
+    val firstResolve = layoutThread.takeNext()
+    componentTree.setRootAsync(root)
+    val lateResolve = layoutThread.takeNext()
+    ThreadTestingUtils.runOnBackgroundThread { firstResolve.run() }.acquire()
+    testLithoView.setSizeSpecs(exactly(100), exactly(100)).measure().layout()
+    ThreadTestingUtils.runOnBackgroundThread { lateResolve.run() }.acquire()
+    finishLateResolveRace(layoutThread)
+    testLithoView.measure().layout()
 
     assertThat(testLithoView.findViewWithTagOrNull(UPDATED_TAG)).isNotNull
+  }
+
+  /**
+   * A newer root's sync render takes its state snapshot and pauses; a state update is queued; then
+   * the older root's resolve, requested earlier, runs. The older root must not show, and the update
+   * must show on the newer root.
+   */
+  @Test
+  fun updateQueuedWhileNewerResolveRuns_olderRequestStartsAfter_updateShowsOnNewerRoot() {
+    val layoutThread = QueuedLayoutThread()
+    val componentTree = createTreeWithCurrentInputs(layoutThread)
+    val testLithoView =
+        lithoTestRule.createTestLithoView(componentTree = componentTree).attachToWindow()
+    val counter = AtomicReference<State<Int>>()
+    componentTree.setRoot(CountingScreen(INITIAL_ROOT_TAG, counter))
+    testLithoView.setSizeSpecs(exactly(100), exactly(100)).measure().layout()
+    ShadowLooper.pauseMainLooper()
+
+    componentTree.setRootAsync(CountingScreen(OLDER_ROOT_TAG, counter))
+    val lateResolve = layoutThread.takeNext()
+    val newerResolve = PauseFirstResolveAfterSnapshot()
+    componentTree.setFutureExecutionListener(newerResolve)
+    val newerRender = ThreadTestingUtils.runOnBackgroundThread {
+      componentTree.setRoot(CountingScreen(NEWER_ROOT_TAG, counter))
+    }
+    newerResolve.awaitPaused()
+    requireNotNull(counter.get()).update { count -> count + 1 }
+    ThreadTestingUtils.runOnBackgroundThread { lateResolve.run() }.acquire()
+    newerResolve.resume()
+    newerRender.acquire()
+    componentTree.setFutureExecutionListener(null)
+    finishLateResolveRace(layoutThread)
+    finishLateResolveRace(layoutThread)
+    testLithoView.measure().layout()
+
+    assertShowsOnly(testLithoView, NEWER_ROOT_TAG, OLDER_ROOT_TAG)
+    assertThat(testLithoView.findViewWithTagOrNull(countTag(1))).isNotNull
+  }
+
+  /**
+   * A sync render with an output size is requested, and a newer async render starts and resolves
+   * before the sync render reaches its resolve. The sync render still fills its output.
+   */
+  @Test
+  fun syncRenderSupersededBeforeItsResolve_stillReturnsItsSize() {
+    lateinit var componentTree: ComponentTree
+    val isWaitingForSyncRender = AtomicBoolean(false)
+    val layoutThread = QueuedLayoutThread {
+      if (isWaitingForSyncRender.getAndSet(false)) {
+        componentTree.setRootAsync(Row())
+        takeNext().run()
+      }
+    }
+    componentTree = createTreeWithCurrentInputs(layoutThread)
+    // Leaves a resolve queued, so the sync render removes it between its request and its resolve.
+    componentTree.setRootAsync(Row())
+    val output = Size()
+
+    isWaitingForSyncRender.set(true)
+    componentTree.setRootAndSizeSpecSync(Row(), exactly(100), exactly(100), output)
+
+    assertThat(isWaitingForSyncRender.get()).describedAs("The newer render ran first").isFalse
+    assertThat(output.width).isEqualTo(100)
+    assertThat(output.height).isEqualTo(100)
+  }
+
+  /** A resolve that runs late with nothing new to render does no work. */
+  @Test
+  fun lateResolveWithNothingNew_doesNoWork() {
+    val layoutThread = QueuedLayoutThread()
+    val componentTree = createTreeWithCurrentInputs(layoutThread)
+    val testLithoView =
+        lithoTestRule.createTestLithoView(componentTree = componentTree).attachToWindow()
+
+    componentTree.setRootAsync(Row(style = Style.viewTag(NEWER_ROOT_TAG)))
+    val lateResolve = layoutThread.takeNext()
+    testLithoView.setSizeSpecs(exactly(100), exactly(100)).measure().layout()
+    val resolveCount = lithoStatsRule.resolveCount
+    val layoutCount = lithoStatsRule.layoutCount
+    ThreadTestingUtils.runOnBackgroundThread { lateResolve.run() }.acquire()
+    finishLateResolveRace(layoutThread)
+
+    assertThat(lithoStatsRule.resolveCount).isEqualTo(resolveCount)
+    assertThat(lithoStatsRule.layoutCount).isEqualTo(layoutCount)
+    assertThat(testLithoView.findViewWithTagOrNull(NEWER_ROOT_TAG)).isNotNull
+  }
+
+  /** A tree whose renders read the root, tree props and size when they use them. */
+  private fun createTreeWithCurrentInputs(layoutThread: QueuedLayoutThread): ComponentTree =
+      ComponentTree.create(lithoTestRule.context)
+          .componentsConfiguration(
+              ComponentsConfiguration.create().renderWithCurrentInputs(true).build(),
+          )
+          .layoutThreadHandler(layoutThread)
+          .build()
+
+  /** A tree with a [Row] root, laid out and mounted at 100 px. */
+  private fun createMountedTree(
+      layoutThread: QueuedLayoutThread,
+  ): Pair<ComponentTree, TestLithoView> {
+    val componentTree = createTreeWithCurrentInputs(layoutThread)
+    val testLithoView =
+        lithoTestRule.createTestLithoView(componentTree = componentTree).attachToWindow()
+    componentTree.setRootAsync(Row())
+    testLithoView.setSizeSpecs(exactly(100), exactly(100)).measure().layout()
+    return componentTree to testLithoView
+  }
+
+  private fun assertShowsOnly(testLithoView: TestLithoView, shownTag: String, hiddenTag: String) {
+    assertThat(testLithoView.findViewWithTagOrNull(shownTag)).isNotNull
+    assertThat(testLithoView.findViewWithTagOrNull(hiddenTag)).isNull()
+  }
+
+  /**
+   * Pauses the first resolve after it took its state snapshot until the first layout starts, then
+   * holds that layout until [awaitResolveThread] returns.
+   */
+  private class PauseResolveUntilFirstLayout(private val awaitResolveThread: () -> Unit) :
+      TreeFuture.FutureExecutionListener {
+    private val resolvePaused = TimeOutSemaphore(0)
+    private val resolveResumed = TimeOutSemaphore(0)
+    private val isFirstResolve = AtomicBoolean(true)
+    private val isFirstLayout = AtomicBoolean(true)
+
+    fun awaitResolvePaused() {
+      resolvePaused.acquire()
+    }
+
+    override fun onPreExecution(
+        version: Int,
+        futureExecutionType: FutureExecutionType,
+        attribution: String,
+    ) {
+      if (attribution == ResolveTreeFuture.DESCRIPTION && isFirstResolve.getAndSet(false)) {
+        resolvePaused.release()
+        resolveResumed.acquire()
+      } else if (attribution == LayoutTreeFuture.DESCRIPTION && isFirstLayout.getAndSet(false)) {
+        resolveResumed.release()
+        awaitResolveThread()
+      }
+    }
+
+    override fun onPostExecution(version: Int, released: Boolean, attribution: String) = Unit
   }
 
   /**
@@ -1258,6 +1557,54 @@ class SplitFuturesTest {
     }
   }
 
+  /** A screen named by [tag], with a counter whose state carries over to the next screen. */
+  private class CountingScreen(
+      private val tag: String,
+      private val counter: AtomicReference<State<Int>>,
+  ) : KComponent() {
+    override fun ComponentScope.render(): Component {
+      return FlexColumn(style = Style.viewTag(tag)) { child(ScreenCounter(counter)) }
+    }
+  }
+
+  private class ScreenCounter(private val counter: AtomicReference<State<Int>>) : KComponent() {
+    override fun ComponentScope.render(): Component {
+      val count = useState { 0 }
+      counter.set(count)
+      return Row(style = Style.width(10.px).styleHeight(10.px).viewTag(countTag(count.value)))
+    }
+  }
+
+  /** Pauses the first resolve that runs, after it took its state snapshot, until [resume]. */
+  private class PauseFirstResolveAfterSnapshot : TreeFuture.FutureExecutionListener {
+    private val isWaitingForFirstResolve = AtomicBoolean(true)
+    private val paused = TimeOutSemaphore(0)
+    private val resumed = TimeOutSemaphore(0)
+
+    fun awaitPaused() {
+      paused.acquire()
+    }
+
+    fun resume() {
+      resumed.release()
+    }
+
+    override fun onPreExecution(
+        version: Int,
+        futureExecutionType: FutureExecutionType,
+        attribution: String,
+    ) {
+      if (
+          attribution == ResolveTreeFuture.DESCRIPTION && isWaitingForFirstResolve.getAndSet(false)
+      ) {
+        paused.release()
+        resumed.acquire()
+      }
+    }
+
+    override fun onPostExecution(version: Int, released: Boolean, attribution: String) = Unit
+  }
+
   private class UpdatesStateOnMount : KComponent() {
     override fun ComponentScope.render(): Component {
       val isUpdated = useState { false }
@@ -1270,7 +1617,11 @@ class SplitFuturesTest {
   }
 
   /** A layout thread that runs its queue only when told to. */
-  private class QueuedLayoutThread : RunnableHandler {
+  /**
+   * A layout thread that runs its queue only when told to, and calls [onRemove] on each removal.
+   */
+  private class QueuedLayoutThread(private val onRemove: QueuedLayoutThread.() -> Unit = {}) :
+      RunnableHandler {
     private val queue = ArrayDeque<Runnable>()
 
     override fun isTracing(): Boolean = false
@@ -1285,6 +1636,7 @@ class SplitFuturesTest {
 
     override fun remove(runnable: Runnable) {
       queue.remove(runnable)
+      onRemove()
     }
 
     /** Takes the next task as the thread does just before running it, so it can't be removed. */
@@ -1299,5 +1651,10 @@ class SplitFuturesTest {
     private const val READER_TAG = "layout_phase_height_reader"
     private const val UPDATED_TAG = "updated_on_mount"
     private const val NOT_UPDATED_TAG = "not_updated_on_mount"
+    private const val OLDER_ROOT_TAG = "older_root"
+    private const val NEWER_ROOT_TAG = "newer_root"
+    private const val INITIAL_ROOT_TAG = "initial_root"
+
+    private fun countTag(count: Int): String = "count_$count"
   }
 }

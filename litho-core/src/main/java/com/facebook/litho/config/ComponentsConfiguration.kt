@@ -236,10 +236,13 @@ internal constructor(
      */
     @JvmField val boundDataRenderedCallbacksBeforeMount: Boolean = false,
     /**
-     * When true, a resolve requested before the tree had a size doesn't start once the tree has
-     * one: the render that gave the tree its size renders the same root or a newer one.
+     * When true, a render reads the root and tree props when its resolve starts, and the size when
+     * its layout starts, not when it was requested. A resolve the layout thread runs late then
+     * renders the tree as it is, instead of committing an older root or applying a state update at
+     * a size the tree no longer has. A late async resolve with nothing new to render returns at
+     * once.
      */
-    @JvmField val dropResolveRequestedBeforeSize: Boolean = false,
+    @JvmField val renderWithCurrentInputs: Boolean = false,
     /**
      * When true, a tree built with this configuration uses the [com.facebook.rendercore.PoolScope]
      * it is given even if [customPoolScopesEnabled] is off. Content whose allocator opts into
@@ -739,8 +742,8 @@ internal constructor(
       config = config.copy(boundDataRenderedCallbacksBeforeMount = enabled)
     }
 
-    fun dropResolveRequestedBeforeSize(enabled: Boolean): Builder = apply {
-      config = config.copy(dropResolveRequestedBeforeSize = enabled)
+    fun renderWithCurrentInputs(enabled: Boolean): Builder = apply {
+      config = config.copy(renderWithCurrentInputs = enabled)
     }
 
     fun usePoolScopes(enabled: Boolean): Builder = apply {

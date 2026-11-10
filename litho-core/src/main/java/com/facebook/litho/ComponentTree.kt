@@ -2200,24 +2200,31 @@ open class ComponentTree protected constructor(builder: Builder) :
       output: Size?,
       @RenderSource source: Int,
       extraAttribution: String?,
-      root: Component?,
-      treePropContainer: TreePropContainer?,
+      requestedRoot: Component?,
+      requestedTreePropContainer: TreePropContainer?,
       widthSpec: Int,
       heightSpec: Int,
   ) {
-    val isRequestedBeforeSize =
-        widthSpec == SIZE_UNINITIALIZED &&
-            heightSpec == SIZE_UNINITIALIZED &&
-            context.lithoConfiguration.componentsConfig.dropResolveRequestedBeforeSize
+    val root: Component
+    val treePropContainer: TreePropContainer?
     val localResolveVersion: Int
     val treeState: TreeState
     val resolveContext: ComponentContext
     val currentResult: ResolveResult?
 
     synchronized(this) {
-      // The render that gave the tree its size renders this root or a newer one.
-      if (root == null || (isRequestedBeforeSize && hasSize())) {
-        return
+      if (context.lithoConfiguration.componentsConfig.renderWithCurrentInputs) {
+        // The root and tree props are read with the version and the state snapshot, not when the
+        // render was requested: a resolve that runs late renders the tree as it is now, so commits
+        // in version order never go back to an older root.
+        root = _root ?: return
+        treePropContainer = this.treePropContainer
+        if (!isFromSyncLayout(source) && isUpToDate(root, treePropContainer)) {
+          return
+        }
+      } else {
+        root = requestedRoot ?: return
+        treePropContainer = requestedTreePropContainer
       }
 
       localResolveVersion = nextResolveVersion++
@@ -2227,7 +2234,7 @@ open class ComponentTree protected constructor(builder: Builder) :
     }
 
     if (
-        root?.builderContextName != null &&
+        root.builderContextName != null &&
             Component.getBuilderContextName(context.androidContext) != root.builderContextName
     ) {
       val message =
@@ -2243,7 +2250,6 @@ open class ComponentTree protected constructor(builder: Builder) :
       )
     }
 
-    val localRoot = root ?: return
     // If sync operations are interruptible and happen on background thread, which could end
     // up being moved to UI thread with null result and causing crash later. To prevent that
     // we mark it as Non-Interruptible.
@@ -2252,7 +2258,7 @@ open class ComponentTree protected constructor(builder: Builder) :
     val initialStateScope = InitialStateScope.forResolve(treeState)
     val treeFuture = ResolveTreeFuture(
         resolveContext,
-        localRoot,
+        root,
         treeState,
         currentResult,
         localResolveVersion,
@@ -2310,6 +2316,21 @@ open class ComponentTree protected constructor(builder: Builder) :
           heightSpec,
       )
     }
+  }
+
+  /**
+   * Whether the tree already shows [root] with [treePropContainer]: the committed resolve rendered
+   * them, no state update is pending, and its layout is committed at the current size.
+   */
+  @GuardedBy("this")
+  private fun isUpToDate(root: Component, treePropContainer: TreePropContainer?): Boolean {
+    val resolveResult = committedResolveResult ?: return false
+    val layoutState = committedLayoutState ?: return false
+    return resolveResult.component === root &&
+        layoutState.resolveResult === resolveResult &&
+        isCompatibleSpec(layoutState, widthSpec, heightSpec) &&
+        getCommittedTreeStateSync()?.hasUncommittedUpdates() != true &&
+        equals(resolveResult.context.treePropContainer, treePropContainer)
   }
 
   @GuardedBy("this")
@@ -2408,6 +2429,8 @@ open class ComponentTree protected constructor(builder: Builder) :
     val currentDiffNode: DiffNode?
     val treePropContainer: TreePropContainer?
     val layoutTreeState: TreeState
+    var layoutWidthSpec = widthSpec
+    var layoutHeightSpec = heightSpec
 
     synchronized(this) {
       currentLayoutState = committedLayoutState
@@ -2423,9 +2446,20 @@ open class ComponentTree protected constructor(builder: Builder) :
       currentDiffNode = currentLayoutState?.diffTree
       layoutVersion = nextLayoutVersion++
       treePropContainer = resolveResult.context.treePropContainer
+      // Likewise the size: the committed resolve is laid out at the size the tree has now, which is
+      // the only size commitLayoutState accepts.
+      if (
+          context.lithoConfiguration.componentsConfig.renderWithCurrentInputs &&
+              output == null &&
+              resolveResult === committedResolveResult &&
+              hasSize()
+      ) {
+        layoutWidthSpec = this.widthSpec
+        layoutHeightSpec = this.heightSpec
+      }
     }
 
-    if (widthSpec == SIZE_UNINITIALIZED && heightSpec == SIZE_UNINITIALIZED) {
+    if (layoutWidthSpec == SIZE_UNINITIALIZED && layoutHeightSpec == SIZE_UNINITIALIZED) {
       return
     }
 
@@ -2434,8 +2468,8 @@ open class ComponentTree protected constructor(builder: Builder) :
         resolveResult,
         currentLayoutState,
         currentDiffNode,
-        widthSpec,
-        heightSpec,
+        layoutWidthSpec,
+        layoutHeightSpec,
         id,
         layoutTreeState,
         layoutVersion,
