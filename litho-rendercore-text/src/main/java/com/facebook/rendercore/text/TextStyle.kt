@@ -150,7 +150,7 @@ class TextStyle : Cloneable {
    */
   fun hasSameValuesAs(other: TextStyle): Boolean =
       this === other ||
-          (TextUtils.equals(customEllipsisText, other.customEllipsisText) &&
+          (customEllipsisText.contentEquals(other.customEllipsisText) &&
               typeface === other.typeface &&
               textDirection === other.textDirection &&
               _textColorStateList === other._textColorStateList &&

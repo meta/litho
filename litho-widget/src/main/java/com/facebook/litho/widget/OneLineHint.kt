@@ -52,7 +52,7 @@ internal class OneLineHint {
       typeface = paint.typeface
       cut = cutToOneLine(hint, view, width)
     }
-    if (!TextUtils.equals(view.hint, cut)) {
+    if (!view.hint.contentEquals(cut)) {
       view.hint = cut
     }
   }
