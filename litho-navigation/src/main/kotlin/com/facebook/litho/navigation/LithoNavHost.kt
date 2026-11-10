@@ -50,6 +50,7 @@ import com.facebook.litho.ThreadUtils
 import com.facebook.litho.TreeProp
 import com.facebook.litho.TreePropProvider
 import com.facebook.litho.annotations.ExperimentalLithoApi
+import com.facebook.litho.flexbox.positionType
 import com.facebook.litho.key
 import com.facebook.litho.layout.flexbox.Column
 import com.facebook.litho.lifecycle.LifecycleOwnerTreeProp
@@ -59,6 +60,7 @@ import com.facebook.litho.useEffect
 import com.facebook.litho.useRef
 import com.facebook.litho.useSaveableStateHolder
 import com.facebook.litho.useState
+import com.facebook.yoga.YogaPositionType
 import com.meta.foa.navigation.core.BackStackController
 import com.meta.foa.navigation.core.BackStackHolder
 import com.meta.foa.navigation.core.BackStackTracer
@@ -323,6 +325,7 @@ private class LithoNavHostComponent(
     val shownStack = useRef<FoaBackStack<LithoDestination>?> { null }
     // The latest close callback, so a host created again in place keeps its back callback.
     val onCloseRequested = useRef<(() -> Unit)?> { null }
+    val backCallback = useRef<OnBackPressedCallback?> { null }
     val handlesBack = backPress is LithoNavBackPress.HostManaged
     val androidContext = context.androidContext
     val lifecycleOwner = LifecycleOwnerTreeProp.value
@@ -337,31 +340,20 @@ private class LithoNavHostComponent(
         sessionProvider,
         controller,
         holder,
-        androidContext,
         lifecycleOwner,
-        handlesBack,
     ) {
       check(backStack.onStackChanged == null) {
         "Another LithoNavHost shows this back stack; show one host per owner and key at a time."
       }
       shownStack.value = backStack
       val entries = tracker.getOrCreate(state)
-      // Added before the entries start, so a callback the top screen adds on its entry's lifecycle
-      // comes later and handles back first.
-      val backCallback =
-          if (handlesBack) {
-            addBackCallback(backStack, androidContext, lifecycleOwner, onCloseRequested)
-          } else {
-            null
-          }
       entries.attachHost(lifecycleOwner)
       controller.attach {
         onStackChanged(backStack, controller.session, destinationSpecs, entries, holder, navState)
-        backCallback?.isEnabled = backStack.backStack.isNotEmpty()
+        backCallback.value?.isEnabled = backStack.backStack.isNotEmpty()
       }
       onCleanup {
         controller.detach()
-        backCallback?.remove()
         entries.detachHost()
       }
     }
@@ -391,6 +383,9 @@ private class LithoNavHostComponent(
 
     val top = state.top ?: return EmptyComponent()
     return Column(style = style) {
+      // Effects run children first, in child order, and the dispatcher orders callbacks by when
+      // they were added: first, so the top screen's callbacks handle back before the host's.
+      child(HostBackCallback(backStack, handlesBack, onCloseRequested, backCallback))
       child(
           holder.SaveableStateProvider(top.id) {
             TreePropProvider(
@@ -483,6 +478,41 @@ private fun rendererFor(
   }
   @Suppress("UNCHECKED_CAST")
   return renderer as LithoDestinationRenderer<LithoDestination>
+}
+
+/**
+ * Adds the host's back callback while [handlesBack], and keeps it in [callback]. The container
+ * gives the effect a node of its own.
+ */
+private class HostBackCallback(
+    // FoaBackStack and Ref do not implement structural equals; changes are handled by the effect.
+    @field:SuppressLint("KComponentNonComparableInputDetector")
+    private val backStack: FoaBackStack<LithoDestination>,
+    private val handlesBack: Boolean,
+    @field:SuppressLint("KComponentNonComparableInputDetector")
+    private val onCloseRequested: Ref<(() -> Unit)?>,
+    @field:SuppressLint("KComponentNonComparableInputDetector")
+    private val callback: Ref<OnBackPressedCallback?>,
+) : KComponent() {
+
+  override fun ComponentScope.render(): Component {
+    val androidContext = context.androidContext
+    val lifecycleOwner = LifecycleOwnerTreeProp.value
+    useEffect(backStack, androidContext, lifecycleOwner, handlesBack) {
+      val added =
+          if (handlesBack) {
+            addBackCallback(backStack, androidContext, lifecycleOwner, onCloseRequested)
+          } else {
+            null
+          }
+      callback.value = added
+      onCleanup {
+        added?.remove()
+        callback.value = null
+      }
+    }
+    return Column(style = Style.positionType(YogaPositionType.ABSOLUTE))
+  }
 }
 
 private fun addBackCallback(
