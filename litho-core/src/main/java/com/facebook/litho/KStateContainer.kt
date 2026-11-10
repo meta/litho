@@ -222,6 +222,7 @@ class KStateContainer : StateContainer {
      * for control and treatment, not to make it match the treatment.
      */
     @DoNotStrip
+    @Suppress("ASSIGNED_VALUE_IS_NEVER_READ")
     internal fun warmUpForProfile(): Any {
       // Non-interned keys: the scan has to run HookKey.equals's full body rather than short-circuit
       // on `===`, and nothing here should be retained by the process-lifetime intern map.
@@ -237,7 +238,7 @@ class KStateContainer : StateContainer {
       // Flat seeding followed by a lookup per key, the last of which is a
       // full-length indexOfHookKey scan.
       var container = fromEntries(entries)
-      var sink: Any? = null
+      @Suppress("VARIABLE_INITIALIZER_IS_REDUNDANT") var sink: Any? = null
       for (i in keys.indices) {
         sink = container.getByHookKey(keys[i])
       }

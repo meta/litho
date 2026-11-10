@@ -183,6 +183,7 @@ object ComponentKeyUtils {
    * key split, no list allocation, no iteration over all segments.
    */
   @JvmStatic
+  @Suppress("REDUNDANT_ELSE_IN_WHEN", "USELESS_CAST")
   fun parentNameFromKey(globalKey: GlobalKey?, idToTypeMap: Map<Int, Any>): String? {
     return when (globalKey) {
       null -> null

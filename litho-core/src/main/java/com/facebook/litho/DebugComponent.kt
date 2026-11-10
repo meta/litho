@@ -424,7 +424,7 @@ private constructor(
       val host = component.lithoView ?: return null
       return mounts.getOrPut(host) {
         val index = MountIndex()
-        val target = host.mountDelegateTarget ?: return@getOrPut index
+        @Suppress("USELESS_ELVIS") val target = host.mountDelegateTarget ?: return@getOrPut index
         val count = target.getRenderUnitCount()
         for (i in 0 until count) {
           checkActive()

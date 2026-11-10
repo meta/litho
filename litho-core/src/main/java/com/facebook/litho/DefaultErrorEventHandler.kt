@@ -24,6 +24,7 @@ object DefaultErrorEventHandler : ErrorEventHandler() {
 
   private const val DEFAULT_ERROR_EVENT_HANDLER = "DefaultErrorEventHandler"
 
+  @Suppress("SENSELESS_COMPARISON")
   override fun onError(cc: ComponentContext, e: Exception): Component? {
     var e = e
     if (cc != null) {

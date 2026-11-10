@@ -53,6 +53,7 @@ class DynamicPropsManager : DynamicValue.OnValueChangeListener<Any?> {
   private val contents: MutableMap<Component, Any> = HashMap()
   private val backgroundsBeforeDynamic: MutableMap<View, Drawable?> = HashMap()
 
+  @Suppress("USELESS_CAST")
   fun onBindComponentToContent(
       component: Component,
       scopedContext: ComponentContext?,
@@ -167,6 +168,7 @@ class DynamicPropsManager : DynamicValue.OnValueChangeListener<Any?> {
     }
   }
 
+  @Suppress("SENSELESS_COMPARISON")
   override fun onValueChange(value: DynamicValue<Any?>) {
     val dependentComponents = dependentComponents[value] ?: return
 

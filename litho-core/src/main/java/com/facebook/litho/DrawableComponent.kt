@@ -42,7 +42,7 @@ private constructor(
       content: Any,
       interStagePropsContainer: InterStagePropsContainer?,
   ) {
-    val drawable = content as MatrixDrawable<Drawable>
+    @Suppress("UNCHECKED_CAST") val drawable = content as MatrixDrawable<Drawable>
     drawable.mount(this.drawable)
   }
 

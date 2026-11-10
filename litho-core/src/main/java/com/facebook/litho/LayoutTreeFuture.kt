@@ -50,7 +50,9 @@ class LayoutTreeFuture(
     override val treeId: Int,
     private val treeState: TreeState,
     private val version: Int,
-    @RenderSource private val source: Int,
+    @Suppress("ANNOTATION_WILL_BE_APPLIED_ALSO_TO_PROPERTY_OR_FIELD")
+    @RenderSource
+    private val source: Int,
     private val debugBreadcrumb: String? = null,
 ) : TreeFuture<LayoutState>(treeId, false) {
 

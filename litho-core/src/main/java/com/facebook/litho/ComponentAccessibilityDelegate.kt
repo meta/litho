@@ -187,6 +187,7 @@ constructor(
         ?: super.sendAccessibilityEventUnchecked(host, event)
   }
 
+  @Suppress("SENSELESS_COMPARISON")
   override fun onInitializeAccessibilityNodeInfo(host: View, node: AccessibilityNodeInfoCompat) {
     val mountItem = getAccessibleMountItem(view)
 
@@ -367,6 +368,7 @@ constructor(
    * DPAD_CENTER unconditionally — delegating to it with no virtual views to move between swallows
    * those keys before the host's own `View.onKeyUp` can turn them into a click.
    */
+  @Suppress("SENSELESS_COMPARISON")
   fun hasExtraAccessibilityNodes(): Boolean {
     val mountItem = getAccessibleMountItem(view) ?: return false
     val component = getRenderUnit(mountItem).component as? SpecGeneratedComponent ?: return false
@@ -381,6 +383,7 @@ constructor(
     }
   }
 
+  @Suppress("SENSELESS_COMPARISON")
   override fun getVisibleVirtualViews(virtualViewIds: MutableList<Int>) {
     val mountItem = getAccessibleMountItem(view) ?: return
 
@@ -388,7 +391,7 @@ constructor(
     if (renderUnit.component !is SpecGeneratedComponent) {
       return
     }
-    val component = renderUnit.component as SpecGeneratedComponent
+    @Suppress("USELESS_CAST") val component = renderUnit.component as SpecGeneratedComponent
     val scopedContext = getComponentContext(mountItem)
 
     try {
@@ -408,6 +411,7 @@ constructor(
     }
   }
 
+  @Suppress("SENSELESS_COMPARISON")
   override fun onPopulateNodeForVirtualView(virtualViewId: Int, node: AccessibilityNodeInfoCompat) {
     val mountItem = getAccessibleMountItem(view)
     if (mountItem == null) {
@@ -424,7 +428,7 @@ constructor(
       populateInvalidVirtualViewNodeIfEnabled(node)
       return
     }
-    val component = renderUnit.component as SpecGeneratedComponent
+    @Suppress("USELESS_CAST") val component = renderUnit.component as SpecGeneratedComponent
     val scopedContext = getComponentContext(mountItem)
 
     node.className = component.javaClass.name
@@ -461,6 +465,7 @@ constructor(
    * Finds extra accessibility nodes under the given event coordinates. Returns [INVALID_ID]
    * otherwise.
    */
+  @Suppress("SENSELESS_COMPARISON")
   override fun getVirtualViewAt(x: Float, y: Float): Int {
     val mountItem = getAccessibleMountItem(view) ?: return INVALID_ID
 
@@ -468,7 +473,7 @@ constructor(
     if (renderUnit.component !is SpecGeneratedComponent) {
       return INVALID_ID
     }
-    val component = renderUnit.component as SpecGeneratedComponent
+    @Suppress("USELESS_CAST") val component = renderUnit.component as SpecGeneratedComponent
     val scopedContext = getComponentContext(mountItem)
 
     try {
@@ -513,8 +518,8 @@ constructor(
       dispatchOnVirtualViewKeyboardFocusChangedEvent(view, node, virtualViewId, hasFocus)
       return
     }
-    val component = renderUnit.component as SpecGeneratedComponent
-    val scopedContext = getComponentContext(mountItem) ?: return
+    @Suppress("USELESS_CAST") val component = renderUnit.component as SpecGeneratedComponent
+    @Suppress("USELESS_ELVIS") val scopedContext = getComponentContext(mountItem) ?: return
 
     try {
       if (
@@ -569,8 +574,8 @@ constructor(
           arguments,
       )
     }
-    val component = renderUnit.component as SpecGeneratedComponent
-    val scopedContext = getComponentContext(mountItem) ?: return false
+    @Suppress("USELESS_CAST") val component = renderUnit.component as SpecGeneratedComponent
+    @Suppress("USELESS_ELVIS") val scopedContext = getComponentContext(mountItem) ?: return false
 
     try {
       if (
@@ -606,6 +611,7 @@ constructor(
    * custom accessibility logic. Returns `NULL` otherwise. Components with accessibility content are
    * automatically wrapped in hosts by [LayoutState].
    */
+  @Suppress("SENSELESS_COMPARISON")
   override fun getAccessibilityNodeProvider(host: View): AccessibilityNodeProviderCompat? {
     val mountItem = getAccessibleMountItem(view)
     if (mountItem != null && getRenderUnit(mountItem) != null) {

@@ -242,4 +242,5 @@ private value class MemoizedCallback7<A, B, C, D, E, F, G, R>(
 }
 
 /** A simple holder for a lambda that can be updated to a newer instance on the UI thread. */
+@Suppress("REDUNDANT_VISIBILITY_MODIFIER")
 private class CallbackHolder<T : Function<*>>(@UiThread internal var callback: T)

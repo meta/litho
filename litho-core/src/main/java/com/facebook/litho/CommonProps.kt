@@ -106,10 +106,13 @@ class CommonProps : LayoutProps, Equivalence<CommonProps?> {
    * reconciliation and a LazyList row both reuse a component that compares equal, and for a Spec
    * component this map is the only place the value lives. Null for a component that sets none.
    */
+  @Suppress("OPT_IN_USAGE")
   private var _valuesForParentLayout: MutableMap<Class<out ParentLayoutProps>, ParentLayoutProps>? =
       null
 
+  @Suppress("OPT_IN_USAGE")
   internal fun <T : ParentLayoutProps> setValueForParentLayout(type: Class<T>, value: T) {
+    @Suppress("OPT_IN_USAGE")
     val map =
         _valuesForParentLayout
             ?: HashMap<Class<out ParentLayoutProps>, ParentLayoutProps>().also {
@@ -118,6 +121,7 @@ class CommonProps : LayoutProps, Equivalence<CommonProps?> {
     map[type] = value
   }
 
+  @Suppress("OPT_IN_USAGE")
   internal fun <T : ParentLayoutProps> getValueForParentLayout(type: Class<T>): T? =
       _valuesForParentLayout?.get(type)?.let(type::cast)
 
@@ -798,6 +802,7 @@ class CommonProps : LayoutProps, Equivalence<CommonProps?> {
     _otherProps?.copyInto(node)
   }
 
+  @Suppress("OPT_IN_USAGE")
   override fun isEquivalentTo(other: CommonProps?): Boolean {
     if (this === other) {
       return true
@@ -1371,6 +1376,7 @@ class CommonProps : LayoutProps, Equivalence<CommonProps?> {
       borderEdges = (borderEdges ?: Edges()).apply { this[edge] = borderWidth }
     }
 
+    @Suppress("REDUNDANT_ELSE_IN_WHEN")
     override fun gap(gutter: YogaGutter, length: Int) {
       when (gutter) {
         YogaGutter.COLUMN -> columnGap = length

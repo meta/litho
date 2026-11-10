@@ -168,7 +168,7 @@ class InitialState {
         hooks[hookKey] = CachedValue(hookKey, deps, initializer.init())
       }
       val container = KStateContainer.fromEntries(hooks.values)
-      val existing = states[key] as ComponentState<KStateContainer>?
+      @Suppress("UNCHECKED_CAST") val existing = states[key] as ComponentState<KStateContainer>?
       existing?.copy(value = container) ?: ComponentState(value = container)
     }
   }

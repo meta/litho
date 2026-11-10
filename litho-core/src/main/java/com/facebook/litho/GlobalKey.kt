@@ -162,6 +162,7 @@ class ManualGlobalKey(
     }
     return ComponentsSystrace.trace({ "ManualGlobalKey.buildKeyString" }) {
       val parentStr = parent?.toString()
+      @Suppress("REDUNDANT_SINGLE_EXPRESSION_STRING_TEMPLATE")
       val base = if (parentStr != null) "$parentStr,$key" else "$key"
       if (position == 0) base else "$base!$position"
     }

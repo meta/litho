@@ -60,6 +60,7 @@ internal fun <T> ComponentScope.getUpdatedStateByHookKey(
   val key = context.globalKey
   val treeState: TreeState = resolveContext.treeState
   val isLayoutState = context.isContextForLayout
+  @Suppress("UNCHECKED_CAST")
   val existing = treeState.getState(key, isLayoutState) as ComponentState<KStateContainer>?
   val previousEntry = existing?.value?.getByHookKey(hookKey)
 
@@ -152,6 +153,7 @@ internal fun <T> ComponentScope.getUpdatedStateByHookKey(
  * @see [State]
  */
 @Hook
+@Suppress("UNCHECKED_CAST")
 fun <T> ComponentScope.useStateWithDeps(
     vararg deps: Any? = NoDeps,
     initializer: () -> T,
@@ -165,6 +167,7 @@ fun <T> ComponentScope.useStateWithDeps(
  * trigger a UI layout only once per batch.
  */
 @Hook
+@Suppress("USELESS_CAST")
 fun <T> ComponentScope.useState(initializer: () -> T): State<T> =
     useStateImpl(NoDeps as Array<Any?>, initializer)
 

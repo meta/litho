@@ -101,8 +101,10 @@ protected constructor(
       nextStateContainer: StateContainer?,
   ): Boolean = true
 
+  @Suppress("REDUNDANT_VISIBILITY_MODIFIER")
   public override fun getCommonDynamicProps(): SparseArray<DynamicValue<*>>? = commonDynamicProps
 
+  @Suppress("REDUNDANT_VISIBILITY_MODIFIER")
   public override fun hasCommonDynamicProps(): Boolean =
       CollectionsUtils.isNotNullOrEmpty(commonDynamicProps)
 

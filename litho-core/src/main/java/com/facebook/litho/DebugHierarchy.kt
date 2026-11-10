@@ -57,7 +57,10 @@ object DebugHierarchy {
       @JvmField val parent: Node?,
       @JvmField val component: Component,
       @JvmField val components: List<Component>,
-      @OutputUnitType @JvmField val type: Int,
+      @Suppress("ANNOTATION_WILL_BE_APPLIED_ALSO_TO_PROPERTY_OR_FIELD")
+      @OutputUnitType
+      @JvmField
+      val type: Int,
   ) {
 
     fun mutateType(type: Int): Node =

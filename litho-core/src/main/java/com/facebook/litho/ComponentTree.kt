@@ -391,6 +391,7 @@ open class ComponentTree protected constructor(builder: Builder) :
           mountContentHandler = instrumentHandler(preAllocationHandler.handler)
         }
       }
+      @Suppress("SENSELESS_COMPARISON")
       if (mountContentHandler != null) {
         preAllocator =
             ContentPreAllocator(
@@ -1119,6 +1120,7 @@ open class ComponentTree protected constructor(builder: Builder) :
   }
 
   @Synchronized
+  @Suppress("PARAMETER_NAME_CHANGED_ON_OVERRIDE")
   override fun updateStateLazy(
       componentKey: GlobalKey,
       stateUpdate: StateUpdate,
@@ -1138,6 +1140,7 @@ open class ComponentTree protected constructor(builder: Builder) :
    *   in if there were no updates to apply. This method won't mutate the passed container.
    */
   @Synchronized
+  @Suppress("PARAMETER_NAME_CHANGED_ON_OVERRIDE")
   override fun applyLazyStateUpdatesForContainer(
       componentKey: GlobalKey,
       container: StateContainer,
@@ -1161,6 +1164,7 @@ open class ComponentTree protected constructor(builder: Builder) :
     updateStateSync(componentKey, stateUpdate, attribution, false)
   }
 
+  @Suppress("PARAMETER_NAME_CHANGED_ON_OVERRIDE")
   override fun updateStateSync(
       componentKey: GlobalKey,
       stateUpdate: StateUpdate,
@@ -1192,6 +1196,7 @@ open class ComponentTree protected constructor(builder: Builder) :
     updateStateAsync(StringGlobalKey(componentKey), stateUpdate, attribution, false)
   }
 
+  @Suppress("PARAMETER_NAME_CHANGED_ON_OVERRIDE")
   override fun updateStateAsync(
       componentKey: GlobalKey,
       stateUpdate: StateUpdate,
@@ -1212,6 +1217,7 @@ open class ComponentTree protected constructor(builder: Builder) :
     onAsyncStateUpdateEnqueued(attribution)
   }
 
+  @Suppress("PARAMETER_NAME_CHANGED_ON_OVERRIDE")
   override fun updateHookStateSync(
       stateId: StateId,
       updater: HookUpdater,
@@ -1350,6 +1356,7 @@ open class ComponentTree protected constructor(builder: Builder) :
     }
   }
 
+  @Suppress("PARAMETER_NAME_CHANGED_ON_OVERRIDE")
   override fun updateHookStateAsync(
       stateId: StateId,
       updater: HookUpdater,
@@ -2631,6 +2638,7 @@ open class ComponentTree protected constructor(builder: Builder) :
    * Transfers mCommittedLayoutState to mMainThreadLayoutState. This will proxy to the main thread
    * if necessary.
    */
+  @Suppress("OPT_IN_USAGE")
   private fun postBackgroundLayoutStateUpdated() {
     // Remove the job from the queue to avoid unnecessary cost
     mainThreadHandler.remove(backgroundLayoutStateUpdateRunnable)
@@ -2925,6 +2933,7 @@ open class ComponentTree protected constructor(builder: Builder) :
    * pending render produces this layout.
    */
   @GuardedBy("this")
+  @Suppress("OPT_IN_USAGE")
   private fun isAsyncMeasureLayoutRedundant(
       mainThreadLayoutState: LayoutState,
       widthSpec: Int,
@@ -3448,7 +3457,9 @@ open class ComponentTree protected constructor(builder: Builder) :
   }
 
   private inner class DoResolveRunnable(
-      @RenderSource private val source: Int,
+      @Suppress("ANNOTATION_WILL_BE_APPLIED_ALSO_TO_PROPERTY_OR_FIELD")
+      @RenderSource
+      private val source: Int,
       private val root: Component,
       private val treePropContainer: TreePropContainer?,
       private val widthSpec: Int,
@@ -3463,7 +3474,9 @@ open class ComponentTree protected constructor(builder: Builder) :
 
   private inner class DoLayoutRunnable(
       private val resolveResult: ResolveResult,
-      @RenderSource private val source: Int,
+      @Suppress("ANNOTATION_WILL_BE_APPLIED_ALSO_TO_PROPERTY_OR_FIELD")
+      @RenderSource
+      private val source: Int,
       private val widthSpec: Int,
       private val heightSpec: Int,
       private val attribution: String?,

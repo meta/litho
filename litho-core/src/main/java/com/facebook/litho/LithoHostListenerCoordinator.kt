@@ -216,6 +216,7 @@ class LithoHostListenerCoordinator(private val mountDelegateTarget: MountDelegat
         )
   }
 
+  @Suppress("USELESS_CAST")
   internal fun enableStyleTransitions() {
     if (styleTransitionsExtensionState != null) {
       throw IllegalStateException(

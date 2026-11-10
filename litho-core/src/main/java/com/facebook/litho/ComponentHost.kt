@@ -930,7 +930,7 @@ open class ComponentHost(
         val item = drawableMountItems.valueAt(i)
         val content = item.content
         if (content is Touchable && !isTouchableDisabled(getRenderUnit(item).flags)) {
-          val t = content as Touchable
+          @Suppress("USELESS_CAST") val t = content as Touchable
           if (t.shouldHandleTouchEvent(event) && t.onTouchEvent(event, this)) {
             handled = true
             break

@@ -98,6 +98,7 @@ class EndToEndTestingExtension(private val mountDelegateTarget: MountDelegateTar
 
   /** @see LithoViewTestHelper.findTestItems */
   @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+  @Suppress("SENSELESS_COMPARISON")
   fun findTestItems(testKey: String?): Deque<TestItem> {
     if (testItemMap == null) {
       throw UnsupportedOperationException(

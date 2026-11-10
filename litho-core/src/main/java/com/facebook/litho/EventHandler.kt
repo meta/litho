@@ -32,6 +32,7 @@ open class EventHandler<E>(
 ) : Function<Void?>, Equivalence<EventHandler<*>?> {
 
   @SuppressLint("KotlinGenericsCast")
+  @Suppress("UNCHECKED_CAST")
   override fun call(vararg arguments: Any?): Void? {
     dispatchEvent(arguments[0] as E)
     return null

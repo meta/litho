@@ -23,6 +23,7 @@ class AttributesHolder : AttributesAcceptor {
 
   private val _attributes: MutableMap<AttributeKey<*>, Any?> = LinkedHashMap()
 
+  @Suppress("UNCHECKED_CAST")
   operator fun <T> get(key: AttributeKey<T>): T? = _attributes[key] as T?
 
   override fun <T> setDebugAttributeKey(attributeKey: AttributeKey<T>, value: T) {

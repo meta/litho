@@ -178,7 +178,9 @@ object ComponentUtils {
   private class ComparedField(
       val field: Field,
       val classType: Class<*>,
-      @Comparable.Type val comparableType: Int,
+      @Suppress("ANNOTATION_WILL_BE_APPLIED_ALSO_TO_PROPERTY_OR_FIELD")
+      @Comparable.Type
+      val comparableType: Int,
   )
 
   /**
@@ -249,6 +251,7 @@ object ComponentUtils {
         COMPARABLE_TYPE_UNREADABLE
       }
 
+  @Suppress("UNCHECKED_CAST")
   private fun isEquivalentUtil(
       @Comparable.Type comparableType: Int,
       classType: Class<*>,

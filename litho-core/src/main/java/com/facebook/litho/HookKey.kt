@@ -96,7 +96,7 @@ private constructor(
     return h
   }
 
-  open override fun toString(): String = "$id:$parent"
+  @Suppress("REDUNDANT_MODALITY_MODIFIER") open override fun toString(): String = "$id:$parent"
 
   internal val callSiteId: Int
     get() = (id shr 32).toInt()

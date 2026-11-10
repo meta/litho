@@ -502,6 +502,7 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
 
   private fun consumeReentrantMounts() {
     if (reentrantMounts != null) {
+      @Suppress("TYPE_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
       val requests: Deque<ReentrantMount> = ArrayDeque(reentrantMounts)
       requireNotNull(reentrantMounts).clear()
 
@@ -656,6 +657,7 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
    * Rebinds binders and invalidates hosts that read [dirtyStates]; returns true if anything was
    * applied.
    */
+  @Suppress("UNCHECKED_CAST")
   fun applyChanges(dirtyStates: Set<StateId>): Boolean {
     val binders = uiStateReadRecords.getBindersToRebind(dirtyStates)
     val dirtyHosts = uiStateReadRecords.getContentIdsToInvalidate(dirtyStates)
