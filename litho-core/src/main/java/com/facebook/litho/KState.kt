@@ -61,13 +61,14 @@ internal fun <T> ComponentScope.getUpdatedStateByHookKey(
   val treeState: TreeState = resolveContext.treeState
   val isLayoutState = context.isContextForLayout
   val existing = treeState.getState(key, isLayoutState) as ComponentState<KStateContainer>?
+  val previousEntry = existing?.value?.getByHookKey(hookKey)
 
   recordVisitedHookKey(hookKey)
 
   @Suppress("UNCHECKED_CAST") val deps = deps as Array<Any?>
 
   val current: ComponentState<KStateContainer> =
-      if (existing != null && !existing.value.hasHookKey(hookKey)) {
+      if (existing != null && previousEntry == null) {
         // Prior committed state is missing this hookKey (a new/conditional hook). Get its initial
         // value and merge into the EXISTING container (not InitialState's) to avoid the drain
         // state-loss hazard (initialstate-drain-state-loss.md).
@@ -109,12 +110,16 @@ internal fun <T> ComponentScope.getUpdatedStateByHookKey(
         existing
       }
 
-  val existingEntry = current.value.getByHookKey(hookKey)
+  val existingEntry = previousEntry ?: current.value.getByHookKey(hookKey)
+  val value: T
   val updated: ComponentState<KStateContainer> =
       if (existingEntry != null && areObjectsEquivalent(existingEntry.deps, deps)) {
+        @Suppress("UNCHECKED_CAST") val cachedValue = existingEntry.value as T
+        value = cachedValue
         current
       } else {
-        val newContainer = transientMutate(current.value, hookKey, initializer(), deps)
+        value = initializer()
+        val newContainer = transientMutate(current.value, hookKey, value, deps)
         if (newContainer === current.value) {
           current
         } else {
@@ -130,8 +135,7 @@ internal fun <T> ComponentScope.getUpdatedStateByHookKey(
     stateAlreadyMarkedAsUsed = true
   }
 
-  @Suppress("UNCHECKED_CAST")
-  return checkNotNull(updated.value.getByHookKey(hookKey)).value as T
+  return value
 }
 
 /**

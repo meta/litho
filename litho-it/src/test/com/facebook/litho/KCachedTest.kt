@@ -39,6 +39,41 @@ class KCachedTest {
   @JvmField @Rule val lithoViewRule = LithoTestRule()
 
   @Test
+  fun `many cached hooks reuse warm values and update only changed dependencies`() {
+    val calculations = IntArray(64)
+    val dependency = AtomicInteger(0)
+    class TestComponent : KComponent() {
+      override fun ComponentScope.render(): Component {
+        val count = useState { 0 }
+        var total = 0
+        for (index in calculations.indices) {
+          val input = if (index == 0) dependency.get() else 0
+          total +=
+              useCached(index, input) {
+                calculations[index]++
+                index + input
+              }
+        }
+        return Text("$total:${count.value}", style = Style.onClick { count.update { it + 1 } })
+      }
+    }
+
+    val handle = lithoViewRule.render { TestComponent() }
+    assertThat(calculations).containsOnly(1)
+    handle.findViewWithText("2016:0").performClick()
+    lithoViewRule.idle()
+    assertThat(handle.findViewWithText("2016:1")).isNotNull
+    assertThat(calculations).containsOnly(1)
+
+    dependency.incrementAndGet()
+    handle.findViewWithText("2016:1").performClick()
+    lithoViewRule.idle()
+    assertThat(handle.findViewWithText("2017:2")).isNotNull
+    assertThat(calculations[0]).isEqualTo(2)
+    assertThat(calculations.drop(1)).containsOnly(1)
+  }
+
+  @Test
   fun `when component is removed then cached value should be cleared`() {
     val initCounter = AtomicInteger(0)
     class TestComponent : KComponent() {

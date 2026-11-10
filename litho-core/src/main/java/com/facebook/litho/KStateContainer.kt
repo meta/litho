@@ -96,6 +96,19 @@ class KStateContainer : StateContainer {
    * index entries are always kept). Returns `this` when nothing is dropped.
    */
   fun retainByHookKeys(live: List<HookKey>): KStateContainer {
+    if (states.size == live.size) {
+      var sameOrder = true
+      for (i in states.indices) {
+        if (states[i].hookKey != live[i]) {
+          sameOrder = false
+          break
+        }
+      }
+      if (sameOrder) {
+        return this
+      }
+    }
+
     var anyDropped = false
     for (i in states.indices) {
       val hookKey = states[i].hookKey
