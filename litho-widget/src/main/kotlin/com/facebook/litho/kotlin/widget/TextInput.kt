@@ -61,6 +61,8 @@ fun ResourcesScope.TextInput(
     multiline: Boolean = false,
     minLines: Int = 1,
     maxLines: Int = Int.MAX_VALUE,
+    includeFontPadding: Boolean = true,
+    lineSpacingMultiplier: Float = 1f,
     inputType: Int = EditorInfo.TYPE_CLASS_TEXT,
     rawInputType: Int = EditorInfo.TYPE_NULL,
     imeOptions: Int = EditorInfo.IME_NULL,
@@ -103,6 +105,8 @@ fun ResourcesScope.TextInput(
         .multiline(multiline)
         .minLines(minLines)
         .maxLines(maxLines)
+        .shouldIncludeFontPadding(includeFontPadding)
+        .lineSpacingMultiplier(lineSpacingMultiplier)
         .inputType(inputType)
         .rawInputType(rawInputType)
         .imeOptions(imeOptions)

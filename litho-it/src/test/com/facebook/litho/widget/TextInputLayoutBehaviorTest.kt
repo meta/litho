@@ -120,6 +120,8 @@ class TextInputLayoutBehaviorTest {
       ellipsize = TextUtils.TruncateAt.END,
       minLines = 1,
       maxLines = 2,
+      shouldIncludeFontPadding = true,
+      lineSpacingMultiplier = 1f,
       cursorDrawableRes = 0,
       error = "error",
       errorDrawable = errorDrawable,

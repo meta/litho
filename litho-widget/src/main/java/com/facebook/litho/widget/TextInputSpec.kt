@@ -130,6 +130,13 @@ import com.facebook.litho.config.ComponentsConfiguration
  *   for behavior description.
  * @prop minLines Minimum number of lines to show.
  * @prop maxLines Maximum number of lines to show.
+ * @prop shouldIncludeFontPadding If set to false, removes the extra font metric padding above the
+ *   first line and below the last line. With a [maxLines] cap the asymmetry between that top and
+ *   bottom padding leaves the scroll offset off a line boundary, which renders a partially clipped
+ *   row of text; setting this to false keeps the visible viewport an exact multiple of the line
+ *   height. Defaults to true, matching the platform [android.widget.TextView] default.
+ * @prop lineSpacingMultiplier Line spacing multiplier, see
+ *   [android.widget.TextView.setLineSpacing]. Defaults to 1, the platform default.
  * @prop textWatchers Used to register text watchers e.g. mentions detection.
  * @prop movementMethod Used to set cursor positioning, scrolling and text selection functionality
  *   in EditText
@@ -192,6 +199,8 @@ internal object TextInputSpec {
   @JvmField @PropDefault val multiline: Boolean = false
   @JvmField @PropDefault val minLines: Int = 1
   @JvmField @PropDefault val maxLines: Int = Int.MAX_VALUE
+  @JvmField @PropDefault val shouldIncludeFontPadding: Boolean = true
+  @JvmField @PropDefault val lineSpacingMultiplier: Float = 1f
   @JvmField @PropDefault val importantForAutofill: Int = 0
   @JvmField @PropDefault val disableAutofill: Boolean = false
   @JvmField @PropDefault val movementMethod: MovementMethod = ArrowKeyMovementMethod.getInstance()
@@ -230,6 +239,8 @@ internal object TextInputSpec {
       @Prop(optional = true) ellipsize: TextUtils.TruncateAt?,
       @Prop(optional = true) minLines: Int,
       @Prop(optional = true) maxLines: Int,
+      @Prop(optional = true, resType = ResType.BOOL) shouldIncludeFontPadding: Boolean,
+      @Prop(optional = true) lineSpacingMultiplier: Float,
       @Prop(optional = true) cursorDrawableRes: Int,
       @Prop(optional = true, resType = ResType.STRING) error: CharSequence?,
       @Prop(optional = true, resType = ResType.DRAWABLE) errorDrawable: Drawable?,
@@ -278,6 +289,8 @@ internal object TextInputSpec {
           ellipsize = ellipsize,
           minLines = minLines,
           maxLines = maxLines,
+          shouldIncludeFontPadding = shouldIncludeFontPadding,
+          lineSpacingMultiplier = lineSpacingMultiplier,
           cursorDrawableRes = cursorDrawableRes,
           error = error,
           errorDrawable = errorDrawable,
@@ -397,6 +410,8 @@ internal object TextInputSpec {
           .ellipsize(ellipsize)
           .minLines(minLines)
           .maxLines(maxLines)
+          .shouldIncludeFontPadding(shouldIncludeFontPadding)
+          .lineSpacingMultiplier(lineSpacingMultiplier)
           .cursorDrawableRes(cursorDrawableRes)
           .error(error)
           .errorDrawable(errorDrawable)

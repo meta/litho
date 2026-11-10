@@ -97,6 +97,8 @@ class ExperimentalTextInputExactSizeTest {
         ellipsize = TextUtils.TruncateAt.END,
         minLines = input.minLines,
         maxLines = Int.MAX_VALUE,
+        shouldIncludeFontPadding = true,
+        lineSpacingMultiplier = 1f,
         cursorDrawableRes = -1,
         error = input.error,
         errorDrawable = input.errorDrawable,

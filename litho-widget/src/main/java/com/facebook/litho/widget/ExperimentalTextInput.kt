@@ -163,6 +163,13 @@ import kotlin.math.min
  *   for behavior description.
  * @property minLines Minimum number of lines to show.
  * @property maxLines Maximum number of lines to show.
+ * @property shouldIncludeFontPadding If set to false, removes the extra font metric padding above
+ *   the first line and below the last line. With a [maxLines] cap the asymmetry between that top
+ *   and bottom padding leaves the scroll offset off a line boundary, which renders a partially
+ *   clipped row of text; setting this to false keeps the visible viewport an exact multiple of the
+ *   line height. Defaults to true, matching the platform [android.widget.TextView] default.
+ * @property lineSpacingMultiplier Line spacing multiplier, see
+ *   [android.widget.TextView.setLineSpacing]. Defaults to 1, the platform default.
  * @property cursorDrawableRes Drawable to set as an edit text cursor.
  * @property error Sets the right-hand compound drawable of the TextView to the "error" icon and
  *   sets an error message that will be displayed in a popup when the TextView has focus. The icon
@@ -235,6 +242,8 @@ class ExperimentalTextInput(
     private val ellipsize: TextUtils.TruncateAt? = null,
     private val minLines: Int = 1,
     private val maxLines: Int = Int.MAX_VALUE,
+    private val shouldIncludeFontPadding: Boolean = true,
+    private val lineSpacingMultiplier: Float = 1f,
     @param:DrawableRes private val cursorDrawableRes: Int = -1,
     private val error: CharSequence? = null,
     private val errorDrawable: Drawable? = null,
@@ -332,6 +341,8 @@ class ExperimentalTextInput(
                 ellipsize = ellipsize,
                 minLines = minLines,
                 maxLines = maxLines,
+                shouldIncludeFontPadding = shouldIncludeFontPadding,
+                lineSpacingMultiplier = lineSpacingMultiplier,
                 cursorDrawableRes = cursorDrawableRes,
                 error = error,
                 errorDrawable = errorDrawable,
@@ -412,6 +423,8 @@ class ExperimentalTextInput(
                     ellipsize,
                     multiline,
                     LineRangeComparator(minLines, maxLines, multiline),
+                    shouldIncludeFontPadding,
+                    lineSpacingMultiplier,
                     cursorDrawableRes,
                     movementMethod,
                     error,
@@ -457,6 +470,8 @@ class ExperimentalTextInput(
                       ellipsize,
                       minLines,
                       maxLines,
+                      shouldIncludeFontPadding,
+                      lineSpacingMultiplier,
                       cursorDrawableRes,
                       movementMethod,
                       // onMount happens:
@@ -597,6 +612,8 @@ internal class TextInputLayoutBehavior(
     private val ellipsize: TextUtils.TruncateAt?,
     private val minLines: Int,
     private val maxLines: Int,
+    private val shouldIncludeFontPadding: Boolean,
+    private val lineSpacingMultiplier: Float,
     private val cursorDrawableRes: Int,
     private val error: CharSequence?,
     private val errorDrawable: Drawable?,
@@ -653,6 +670,8 @@ internal class TextInputLayoutBehavior(
         ellipsize == other.ellipsize &&
         minLines == other.minLines &&
         maxLines == other.maxLines &&
+        shouldIncludeFontPadding == other.shouldIncludeFontPadding &&
+        lineSpacingMultiplier == other.lineSpacingMultiplier &&
         cursorDrawableRes == other.cursorDrawableRes &&
         areObjectsEquivalent(error, other.error) &&
         errorDrawable == other.errorDrawable &&
@@ -726,6 +745,8 @@ internal class TextInputLayoutBehavior(
         ellipsize,
         minLines,
         maxLines,
+        shouldIncludeFontPadding,
+        lineSpacingMultiplier,
         cursorDrawableRes,
         error,
         errorDrawable,
@@ -889,6 +910,8 @@ internal fun createAndMeasureEditText(
     ellipsize: TextUtils.TruncateAt?,
     minLines: Int,
     maxLines: Int,
+    shouldIncludeFontPadding: Boolean,
+    lineSpacingMultiplier: Float,
     cursorDrawableRes: Int,
     error: CharSequence?,
     errorDrawable: Drawable?,
@@ -945,6 +968,8 @@ internal fun createAndMeasureEditText(
         ellipsize,
         minLines,
         maxLines,
+        shouldIncludeFontPadding,
+        lineSpacingMultiplier,
         cursorDrawableRes,
         forMeasure.movementMethod,
         textToMeasure,
@@ -1005,6 +1030,8 @@ fun setParams(
     ellipsize: TextUtils.TruncateAt?,
     minLines: Int,
     maxLines: Int,
+    shouldIncludeFontPadding: Boolean,
+    lineSpacingMultiplier: Float,
     cursorDrawableRes: Int,
     movementMethod: MovementMethod?,
     text: CharSequence?,
@@ -1026,6 +1053,9 @@ fun setParams(
   } else {
     editText.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSize.toFloat())
   }
+
+  editText.includeFontPadding = shouldIncludeFontPadding
+  editText.setLineSpacing(editText.lineSpacingExtra, lineSpacingMultiplier)
 
   if (multiline) {
     inputTypeToSet =
