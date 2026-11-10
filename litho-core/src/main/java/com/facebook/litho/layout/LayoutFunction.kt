@@ -175,6 +175,7 @@ fun interface LayoutFunction3 : LayoutFunction {
  * takes a `Component` whose `resolve` produces no node at all — and naming that beats the
  * `IndexOutOfBoundsException` reading past the end would raise from inside the layout pass.
  */
+@Suppress("OPT_IN_USAGE")
 private fun List<Measurable>.requireArity(expected: Int) {
   check(size == expected) {
     "A layout function naming $expected children was handed $size. The constructors pair the two, " +

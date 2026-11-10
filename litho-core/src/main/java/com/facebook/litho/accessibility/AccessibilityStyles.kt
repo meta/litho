@@ -78,6 +78,7 @@ internal data class AccessibilityStyleItem(
     override val field: AccessibilityField,
     override val value: Any?,
 ) : StyleItem<Any?> {
+  @Suppress("UNCHECKED_CAST")
   override fun applyCommonProps(context: ComponentContext, commonProps: CommonProps) {
     when (field) {
       AccessibilityField.ACCESSIBILITY_HEADING -> commonProps.accessibilityHeading(value as Boolean)
@@ -111,12 +112,12 @@ internal data class AccessibilityStyleItem(
           )
       AccessibilityField.ON_REQUEST_SEND_ACCESSIBILITY_EVENT -> {
         // The value is always the non-null lambda passed to the Style function.
-        @Suppress("KotlinNullableVariableCastToNonnullType")
+        @Suppress("KotlinNullableVariableCastToNonnullType", "UNCHECKED_CAST")
         val handler = value as (OnRequestSendAccessibilityEventEvent) -> Boolean
         commonProps.onRequestSendAccessibilityEventHandler(eventHandlerWithReturn(handler, context))
       }
       AccessibilityField.PERFORM_ACCESSIBILITY_ACTION -> {
-        @Suppress("KotlinNullableVariableCastToNonnullType")
+        @Suppress("KotlinNullableVariableCastToNonnullType", "UNCHECKED_CAST")
         val handler = value as (PerformAccessibilityActionEvent) -> Boolean
         commonProps.performAccessibilityActionHandler(eventHandlerWithReturn(handler, context))
       }
@@ -129,7 +130,7 @@ internal data class AccessibilityStyleItem(
               eventHandler(value as (SendAccessibilityEventUncheckedEvent) -> Unit, null, context),
           )
       AccessibilityField.ON_PERFORM_ACTION_FOR_VIRTUAL_VIEW -> {
-        @Suppress("KotlinNullableVariableCastToNonnullType")
+        @Suppress("KotlinNullableVariableCastToNonnullType", "UNCHECKED_CAST")
         val handler = value as (PerformActionForVirtualViewEvent) -> Boolean
         commonProps.onPerformActionForVirtualViewHandler(eventHandlerWithReturn(handler, context))
       }
@@ -219,6 +220,7 @@ fun Style.importantForAccessibility(importantForAccessibility: ImportantForAcces
  *
  * See [android.view.View.AccessibilityDelegateCompat#onInitializeAccessibilityEvent].
  */
+@Suppress("NOTHING_TO_INLINE")
 inline fun Style.onInitializeAccessibilityEvent(
     noinline onInitializeAccessibilityEventHandler: (OnInitializeAccessibilityEventEvent) -> Unit,
 ): Style =
@@ -233,6 +235,7 @@ inline fun Style.onInitializeAccessibilityEvent(
  *
  * See [android.view.View.AccessibilityDelegateCompat#onPopulateAccessibilityEvent].
  */
+@Suppress("NOTHING_TO_INLINE")
 inline fun Style.onPopulateAccessibilityEvent(
     noinline onPopulateAccessibilityEventHandler: (OnPopulateAccessibilityEventEvent) -> Unit,
 ): Style =
@@ -243,6 +246,7 @@ inline fun Style.onPopulateAccessibilityEvent(
         )
 
 /** Gives a chance to the component to implement its own accessibility support. */
+@Suppress("NOTHING_TO_INLINE")
 inline fun Style.onPopulateAccessibilityNode(
     noinline onPopulateAccessibilityNodeHandler: (OnPopulateAccessibilityNodeEvent) -> Unit,
 ): Style =
@@ -258,6 +262,7 @@ inline fun Style.onPopulateAccessibilityNode(
  *
  * See [android.view.View.AccessibilityDelegateCompat#onRequestSendAccessibilityEvent].
  */
+@Suppress("NOTHING_TO_INLINE")
 inline fun Style.onRequestSendAccessibilityEventWithResult(
     noinline onRequestSendAccessibilityEventHandler:
         (OnRequestSendAccessibilityEventEvent) -> Boolean,
@@ -274,6 +279,7 @@ inline fun Style.onRequestSendAccessibilityEventWithResult(
  *
  * See [android.view.View.AccessibilityDelegateCompat#performAccessibilityAction].
  */
+@Suppress("NOTHING_TO_INLINE")
 inline fun Style.onPerformAccessibilityActionWithResult(
     noinline onPerformAccessibilityActionHandler: (PerformAccessibilityActionEvent) -> Boolean,
 ): Style =
@@ -289,6 +295,7 @@ inline fun Style.onPerformAccessibilityActionWithResult(
  *
  * See [android.view.View.AccessibilityDelegateCompat#sendAccessibilityEvent].
  */
+@Suppress("NOTHING_TO_INLINE")
 inline fun Style.onSendAccessibilityEvent(
     noinline onSendAccessibilityEventHandler: (SendAccessibilityEventEvent) -> Unit,
 ): Style =
@@ -305,6 +312,7 @@ inline fun Style.onSendAccessibilityEvent(
  *
  * See [android.view.View.AccessibilityDelegateCompat#sendAccessibilityEventUnchecked].
  */
+@Suppress("NOTHING_TO_INLINE")
 inline fun Style.onSendAccessibilityEventUnchecked(
     noinline onSendAccessibilityEventUncheckedHandler:
         (SendAccessibilityEventUncheckedEvent) -> Unit,
@@ -321,6 +329,7 @@ inline fun Style.onSendAccessibilityEventUnchecked(
  *
  * See [androidx.customview.widget.ExploreByTouchHelper#onVirtualViewKeyboardFocusChanged].
  */
+@Suppress("NOTHING_TO_INLINE")
 inline fun Style.onVirtualViewKeyboardFocusChanged(
     noinline onVirtualViewKeyboardFocusChangedHandler:
         (VirtualViewKeyboardFocusChangedEvent) -> Unit,
@@ -337,6 +346,7 @@ inline fun Style.onVirtualViewKeyboardFocusChanged(
  *
  * See [androidx.customview.widget.ExploreByTouchHelper#onPerformActionForVirtualView].
  */
+@Suppress("NOTHING_TO_INLINE")
 inline fun Style.onPerformActionForVirtualViewWithResult(
     noinline onPerformActionForVirtualViewHandler: (PerformActionForVirtualViewEvent) -> Boolean,
 ): Style =
@@ -351,6 +361,7 @@ inline fun Style.onPerformActionForVirtualViewWithResult(
  *
  * See [android.view.View.AccessibilityDelegateCompat#onInitializeAccessibilityNodeInfo].
  */
+@Suppress("NOTHING_TO_INLINE")
 inline fun Style.onInitializeAccessibilityNodeInfo(
     noinline onInitializeAccessibilityNodeInfoHandler:
         (OnInitializeAccessibilityNodeInfoEvent) -> Unit,

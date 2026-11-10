@@ -549,7 +549,9 @@ internal data class BorderConfiguration(
 @PublishedApi
 @DataClassGenerate
 internal data class BorderEdgeConfig(
-    @ColorInt val color: Int? = null,
+    @Suppress("ANNOTATION_WILL_BE_APPLIED_ALSO_TO_PROPERTY_OR_FIELD")
+    @ColorInt
+    val color: Int? = null,
     val width: Dimen? = null,
 ) {
   fun applyEdge(edge: YogaEdge, builder: Border.Builder, resolver: ResourceResolver) {

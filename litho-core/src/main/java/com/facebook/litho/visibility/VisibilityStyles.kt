@@ -85,6 +85,7 @@ internal data class VisibilityStyleItem(
     override val value: Any?,
     val tag: (() -> String)? = null,
 ) : StyleItem<Any?> {
+  @Suppress("UNCHECKED_CAST")
   override fun applyCommonProps(context: ComponentContext, commonProps: CommonProps) {
     if (LithoDebugConfigurations.isVisibilityCallbackCommonPropTrackerEnabled) {
       val handlerField =

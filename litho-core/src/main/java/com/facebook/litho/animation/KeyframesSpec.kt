@@ -103,7 +103,7 @@ internal constructor(
  */
 private data class KeyframesSpec<T>(
     val duration: Duration,
-    internal val keyframes: List<Keyframe<T>>,
+    @Suppress("REDUNDANT_VISIBILITY_MODIFIER") internal val keyframes: List<Keyframe<T>>,
 ) : DurationBasedAnimationSpec<T> {
 
   override val totalDurationNanos: Long = duration.toFiniteNanos()

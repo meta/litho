@@ -78,6 +78,7 @@ value class LayoutDirection private constructor(val value: Int) {
       return if (context.isLayoutDirectionRTL()) RTL else LTR
     }
 
+    @Suppress("REDUNDANT_ELSE_IN_WHEN")
     fun fromYoga(node: YogaNode): LayoutDirection {
       return when (node.layoutDirection) {
         YogaDirection.INHERIT -> INHERIT

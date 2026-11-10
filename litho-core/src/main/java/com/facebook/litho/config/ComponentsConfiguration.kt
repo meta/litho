@@ -38,6 +38,7 @@ import com.facebook.rendercore.visibility.VisibilityBoundsTransformer
  * in [.defaultBuilder]
  */
 data class ComponentsConfiguration
+@Suppress("DATA_CLASS_COPY_VISIBILITY_WILL_BE_CHANGED_WARNING")
 internal constructor(
     val shouldAddHostViewForRootComponent: Boolean = false,
     /**

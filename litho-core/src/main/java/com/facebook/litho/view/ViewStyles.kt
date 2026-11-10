@@ -172,6 +172,7 @@ internal data class BackgroundStyleItem(
 @DataClassGenerate
 internal data class ObjectStyleItem(override val field: ObjectField, override val value: Any?) :
     StyleItem<Any?> {
+  @Suppress("UNCHECKED_CAST")
   override fun applyCommonProps(context: ComponentContext, commonProps: CommonProps) {
     when (field) {
       ObjectField.BACKGROUND -> commonProps.background(value as Drawable?)
@@ -451,9 +452,12 @@ private object BackgroundBinder : RenderUnit.Binder<Any?, View, Any> {
   }
 }
 
-@DataClassGenerate private data class ColorBackground(@ColorInt val color: Int)
+@Suppress("ANNOTATION_WILL_BE_APPLIED_ALSO_TO_PROPERTY_OR_FIELD")
+@DataClassGenerate
+private data class ColorBackground(@ColorInt val color: Int)
 
 @DataClassGenerate
+@Suppress("ANNOTATION_WILL_BE_APPLIED_ALSO_TO_PROPERTY_OR_FIELD")
 private data class ShapeBackground(@ColorInt val color: Int, val shape: PaintableShape)
 
 /**
@@ -832,6 +836,7 @@ fun Style.onClick(enabled: Boolean, action: (ClickEvent) -> Unit): Style =
  *
  * See [android.view.View.OnKeyListener]
  */
+@Suppress("NOTHING_TO_INLINE")
 inline fun Style.onKeyEvent(noinline listener: (View, Int, KeyEvent) -> Boolean): Style =
     this +
         Style.onBindViewWithDescription({ "on-key-event-listener" }, listener) { content ->
@@ -1000,6 +1005,7 @@ fun Style.onInterceptTouch(
  * Sets a listener that will invoke the given lambda when this Component is hovered on. If the
  * component does not render a view then the framework will render it inside a View.
  */
+@Suppress("NOTHING_TO_INLINE")
 inline fun Style.onHover(noinline handler: (View, MotionEvent) -> Boolean): Style =
     this +
         Style.onBindViewWithDescription({ "hover-handler" }, handler) { content ->
@@ -1389,8 +1395,12 @@ enum class ShadowStyleField : StyleItemField {
 data class ShadowStyleItemParams(
     val elevation: Dimen,
     val outlineProvider: ViewOutlineProvider,
-    @ColorInt val ambientShadowColor: Int,
-    @ColorInt val spotShadowColor: Int,
+    @Suppress("ANNOTATION_WILL_BE_APPLIED_ALSO_TO_PROPERTY_OR_FIELD")
+    @ColorInt
+    val ambientShadowColor: Int,
+    @Suppress("ANNOTATION_WILL_BE_APPLIED_ALSO_TO_PROPERTY_OR_FIELD")
+    @ColorInt
+    val spotShadowColor: Int,
 )
 
 @PublishedApi
@@ -1398,8 +1408,12 @@ data class ShadowStyleItemParams(
 internal data class ShadowStyleItem(
     val elevation: Dimen,
     val outlineProvider: ViewOutlineProvider,
-    @ColorInt val ambientShadowColor: Int,
-    @ColorInt val spotShadowColor: Int,
+    @Suppress("ANNOTATION_WILL_BE_APPLIED_ALSO_TO_PROPERTY_OR_FIELD")
+    @ColorInt
+    val ambientShadowColor: Int,
+    @Suppress("ANNOTATION_WILL_BE_APPLIED_ALSO_TO_PROPERTY_OR_FIELD")
+    @ColorInt
+    val spotShadowColor: Int,
 ) : StyleItem<ShadowStyleItemParams> {
 
   override fun applyCommonProps(context: ComponentContext, commonProps: CommonProps) {
@@ -1507,6 +1521,7 @@ fun Style.keyboardNavigationCluster(isKeyboardNavigationCluster: Boolean): Style
  *
  * The bounds of the content's location in the layout is passed as passed as exclusion's parameter.
  */
+@Suppress("NOTHING_TO_INLINE")
 inline fun Style.addSystemGestureExclusionZone(noinline exclusion: (bounds: Rect) -> Rect): Style {
   return this + ObjectStyleItem(ObjectField.ADD_TOUCH_EXCLUSION_ZONE, exclusion)
 }
@@ -1796,7 +1811,7 @@ internal data class BackgroundShapeStyleItem(
 
 @DataClassGenerate
 internal data class BackgroundShapeStyleItemParams(
-    @ColorInt val color: Int,
+    @Suppress("ANNOTATION_WILL_BE_APPLIED_ALSO_TO_PROPERTY_OR_FIELD") @ColorInt val color: Int,
     val shape: PaintableShape,
 )
 

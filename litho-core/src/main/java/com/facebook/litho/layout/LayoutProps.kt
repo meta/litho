@@ -72,6 +72,7 @@ private class LayoutPropsField(private val type: Class<*>) : StyleItemField {
 }
 
 @DataClassGenerate
+@Suppress("OPT_IN_USAGE")
 internal data class LayoutPropsStyleItem<T : LayoutProps>(
     val type: Class<T>,
     override val value: T,
@@ -105,6 +106,7 @@ inline fun <reified T : LayoutProps> Style.layoutProps(value: T): Style =
  * Head first, so the outermost component that set one wins, as it does for a node's other layout
  * props, which are applied tail first, each overwriting the last.
  */
+@Suppress("OPT_IN_USAGE")
 internal fun <T : LayoutProps> LithoNode.readLayoutProps(type: Class<T>): T? {
   for (i in componentCount - 1 downTo 0) {
     getCommonPropsAt(i)?.getValueForParentLayout(type)?.let {

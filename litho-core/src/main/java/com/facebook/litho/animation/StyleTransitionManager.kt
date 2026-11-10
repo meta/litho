@@ -406,7 +406,9 @@ internal data class StyleTransitionAnimationKey(
 internal data class StyleTransitionAnimationPlan(
     val key: StyleTransitionAnimationKey,
     val renderUnitId: Long,
-    @OutputUnitType val outputType: Int,
+    @Suppress("ANNOTATION_WILL_BE_APPLIED_ALSO_TO_PROPERTY_OR_FIELD")
+    @OutputUnitType
+    val outputType: Int,
     val property: StyleTransitionProperty,
     val initialValue: Float,
     val targetValue: Float,

@@ -82,7 +82,7 @@ import com.facebook.yoga.YogaWrap
  * @param style Style to apply to the stack container.
  * @param children Lambda to add child components using [StackContainerScope.child].
  */
-@Suppress("FunctionName")
+@Suppress("FunctionName", "NOTHING_TO_INLINE")
 inline fun ResourcesScope.StackLayout(
     alignContent: YogaAlign? = null,
     alignItems: YogaAlign? = null,

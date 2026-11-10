@@ -76,6 +76,7 @@ internal sealed interface LithoLayoutBuilder {
  * - a leaf's, measured with no Yoga node;
  * - a Yoga tree, for anything else.
  */
+@Suppress("OPT_IN_USAGE")
 internal fun LithoNode.newLayoutBuilder(
     context: LayoutContext<LithoLayoutContext>,
     previousDiffNode: DiffNode?,

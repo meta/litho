@@ -48,6 +48,7 @@ import com.facebook.rendercore.primitives.binder
  * @param func the [RenderUnit.Binder] to be used to bind the model to the View content.
  * @param name the name of the binder. This is used for debugging purposes.
  */
+@Suppress("NOTHING_TO_INLINE")
 inline fun Style.onBindWithDescription(
     noinline description: () -> String,
     vararg deps: Any?,
@@ -113,6 +114,7 @@ fun Style.onBind(func: BindFunc<Any>): Style = throw IllegalArgumentException(ON
  * @param func the [RenderUnit.Binder] to be used to bind the model to the View content.
  * @param name the name of the binder. This is used for debugging purposes.
  */
+@Suppress("NOTHING_TO_INLINE")
 inline fun Style.onBindViewWithDescription(
     noinline description: () -> String,
     vararg deps: Any?,
@@ -183,6 +185,7 @@ fun Style.onBindView(func: BindFunc<View>): Style =
  * @param func the [RenderUnit.Binder] to be used to bind the model to the View content.
  * @param description the name of the binder. This is used for debugging purposes.
  */
+@Suppress("NOTHING_TO_INLINE")
 inline fun Style.onBindHostViewWithDescription(
     noinline description: () -> String,
     vararg deps: Any?,

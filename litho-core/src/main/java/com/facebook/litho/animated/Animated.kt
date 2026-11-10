@@ -188,6 +188,7 @@ private class AnimatedSpringAnimation(val springAnimation: SpringAnimation) : An
     springAnimation.cancel()
   }
 
+  @Suppress("PARAMETER_NAME_CHANGED_ON_OVERRIDE")
   override fun addListener(animationFinishListener: AnimationFinishListener) {
     springAnimation.addEndListener { _, cancelled, _, _ ->
       animationFinishListener.onFinish(cancelled)
@@ -213,6 +214,7 @@ internal class AnimatorAnimation(val animator: ValueAnimator) : AnimatedAnimatio
     animator.cancel()
   }
 
+  @Suppress("PARAMETER_NAME_CHANGED_ON_OVERRIDE")
   override fun addListener(animatorFinishListener: AnimationFinishListener) {
     animator.addListener(
         object : AnimatorListenerAdapter() {

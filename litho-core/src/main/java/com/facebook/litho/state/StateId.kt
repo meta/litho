@@ -32,6 +32,7 @@ data class StateId(
   val globalKey: GlobalKey
     get() = hookGlobalKey.globalKey
 
+  @Suppress("USELESS_CAST")
   val isSpecState: Boolean
     get() = hookGlobalKey.hookKey is Int && (hookGlobalKey.hookKey as Int) == SPEC_STATE_INDEX
 

@@ -29,4 +29,5 @@ import com.facebook.litho.ClickEvent
  * while pretending to be a value type — misleading. Reference equality from the default `Any`
  * `equals`/`hashCode` is honest.
  */
+@Suppress("ANNOTATION_WILL_BE_APPLIED_ALSO_TO_PROPERTY_OR_FIELD")
 internal class ClickListenerHolder(@IdRes val key: Int, val onClick: (ClickEvent) -> Unit)

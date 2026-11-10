@@ -176,8 +176,12 @@ private enum class AndroidStyleField : StyleItemField {
 
 @DataClassGenerate
 internal data class AndroidStyleItem(
-    @AttrRes val defStyleAttr: Int,
-    @StyleRes val defStyleRes: Int,
+    @Suppress("ANNOTATION_WILL_BE_APPLIED_ALSO_TO_PROPERTY_OR_FIELD")
+    @AttrRes
+    val defStyleAttr: Int,
+    @Suppress("ANNOTATION_WILL_BE_APPLIED_ALSO_TO_PROPERTY_OR_FIELD")
+    @StyleRes
+    val defStyleRes: Int,
 ) : StyleItem<Int> {
   override fun applyCommonProps(context: ComponentContext, commonProps: CommonProps) {
     commonProps.setStyle(defStyleAttr, defStyleRes)

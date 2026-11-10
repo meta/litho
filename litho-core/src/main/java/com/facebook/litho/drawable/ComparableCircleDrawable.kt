@@ -33,6 +33,7 @@ import androidx.annotation.ColorInt
  * A comparable drawable that fills the circle `Shape.Circle` clips to: the circle of diameter
  * `min(width, height)` centered in its bounds.
  */
+@Suppress("ANNOTATION_WILL_BE_APPLIED_ALSO_TO_PROPERTY_OR_FIELD")
 class ComparableCircleDrawable private constructor(@ColorInt val color: Int) :
     Drawable(), ComparableDrawable {
 

@@ -141,6 +141,7 @@ class AnimatedContent<T>(
     private val content: ComponentScope.(T) -> Component?,
 ) : KComponent() {
 
+  @Suppress("UNNECESSARY_SAFE_CALL")
   override fun ComponentScope.render(): Component {
     val targetKey = contentKey(targetState)
     val retainedContent = useState { AnimatedContentState.create(targetKey, targetState) }
@@ -234,6 +235,7 @@ class AnimatedContent<T>(
  */
 internal class AnimatedContentSlotIdentity(val key: String) {
   @get:MainThread
+  @Suppress("OPT_IN_USAGE")
   internal var animation: AnimationGroupState<EnterExitState>? = null
     private set
 
@@ -241,9 +243,10 @@ internal class AnimatedContentSlotIdentity(val key: String) {
   private var hasBeenTarget = false
 
   @get:MainThread
+  @Suppress("OPT_IN_USAGE")
   val hasEntered: Boolean
     get() {
-      val animation = animation ?: return false
+      @Suppress("OPT_IN_USAGE") val animation = animation ?: return false
       return animation.targetState == EnterExitState.Visible && !animation.hasAnimator
     }
 
@@ -253,14 +256,16 @@ internal class AnimatedContentSlotIdentity(val key: String) {
    * retain pending work, including delays.
    */
   @get:MainThread
+  @Suppress("OPT_IN_USAGE")
   val hasExited: Boolean
     get() {
-      val animation = animation ?: return false
+      @Suppress("OPT_IN_USAGE") val animation = animation ?: return false
       return animation.targetState == EnterExitState.AfterExit &&
           (!hasBeenTarget || !hasExitAnimation || !animation.hasAnimator)
     }
 
   @MainThread
+  @Suppress("OPT_IN_USAGE")
   fun bind(
       animation: AnimationGroupState<EnterExitState>,
       hasExitAnimation: Boolean,
@@ -271,6 +276,7 @@ internal class AnimatedContentSlotIdentity(val key: String) {
   }
 
   @MainThread
+  @Suppress("OPT_IN_USAGE")
   fun clear() {
     animation = null
   }
@@ -486,6 +492,7 @@ internal class AnimatedContentSlot<T>(
   }
 }
 
+@Suppress("OPT_IN_USAGE")
 private fun ContentPosition.toAlignItems(): YogaAlign =
     when (this) {
       ContentPosition.TopStart,
@@ -499,6 +506,7 @@ private fun ContentPosition.toAlignItems(): YogaAlign =
       ContentPosition.BottomEnd -> YogaAlign.FLEX_END
     }
 
+@Suppress("OPT_IN_USAGE")
 private fun ContentPosition.toJustifyContent(): YogaJustify =
     when (this) {
       ContentPosition.TopStart,
