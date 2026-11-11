@@ -179,13 +179,7 @@ object MountContentPools {
         mountContent.translationX = 0f
         mountContent.translationY = 0f
       }
-      if (mountContent is View && mountContent.parent != null) {
-        reportAttachedView(
-            ATTACHED_VIEW_RELEASED_CATEGORY,
-            "Released",
-            mountContent,
-            poolableMountContent.poolKeyTypeName,
-        )
+      if (reportIfAttached(mountContent, poolableMountContent)) {
         // Owned by whoever attached it, so it is neither pooled nor discarded; see
         // discardIfAttached.
         return
@@ -201,31 +195,51 @@ object MountContentPools {
           } else {
             null
           }
-
-      if (pool == null) {
-        // There is no pool, call onContentDiscarded to allow for releasing resources if needed.
-        poolableMountContent.onContentDiscarded?.invoke(mountContent)
-        return
-      }
-
-      if (mountItemPoolsReleaseValidator != null && mountContent is View) {
-        mountItemPoolsReleaseValidator?.assertValidRelease(
-            mountContent,
-            listOf(poolableMountContent.poolKeyTypeName),
-        )
-      }
-
-      val releasedToThePool = pool.release(mountContent)
-
-      if (!releasedToThePool) {
-        // Content was not released to the pool. Call onContentDiscarded to allow for releasing
-        // resources if needed.
-        poolableMountContent.onContentDiscarded?.invoke(mountContent)
-      }
+      releaseToPool(pool, poolableMountContent, mountContent)
     } finally {
       if (isTracing) {
         RenderCoreSystrace.endSection()
       }
+    }
+  }
+
+  private fun reportIfAttached(content: Any, allocator: ContentAllocator<*>): Boolean {
+    if (content !is View || content.parent == null) {
+      return false
+    }
+    reportAttachedView(
+        ATTACHED_VIEW_RELEASED_CATEGORY,
+        "Released",
+        content,
+        allocator.poolKeyTypeName,
+    )
+    return true
+  }
+
+  private fun releaseToPool(
+      pool: ContentPool?,
+      poolableMountContent: ContentAllocator<*>,
+      mountContent: Any,
+  ) {
+    if (pool == null) {
+      // There is no pool, call onContentDiscarded to allow for releasing resources if needed.
+      poolableMountContent.onContentDiscarded?.invoke(mountContent)
+      return
+    }
+
+    if (mountItemPoolsReleaseValidator != null && mountContent is View) {
+      mountItemPoolsReleaseValidator?.assertValidRelease(
+          mountContent,
+          listOf(poolableMountContent.poolKeyTypeName),
+      )
+    }
+
+    val releasedToThePool = pool.release(mountContent)
+
+    if (!releasedToThePool) {
+      // Content was not released to the pool. Call onContentDiscarded to allow for releasing
+      // resources if needed.
+      poolableMountContent.onContentDiscarded?.invoke(mountContent)
     }
   }
 
