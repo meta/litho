@@ -145,6 +145,25 @@ class LithoRenderer(
   // Whether [uiThreadLayoutState] was bound without attaching its effects. Main thread only.
   private var uiThreadLayoutStateEffectsSkipped: Boolean = false
 
+  /**
+   * Whether effects are being updated. Effect callbacks can call back into this renderer, but
+   * nothing may change its effects while the effect handler is still attaching an update's effects.
+   * Until the update is done, a newer layout waits in [deferredLayoutState]; only the newest one is
+   * kept.
+   *
+   * ```
+   * promote(L1)                          isUpdatingEffects = true
+   *   effect attaches -> renders L2      deferredLayoutState = L2
+   * promote(L1) done                     isUpdatingEffects = false
+   *   -> promote(L2)
+   * ```
+   *
+   * Main thread only.
+   */
+  private var isUpdatingEffects: Boolean = false
+  private var deferredLayoutState: LayoutState? = null
+  private var deferredLayoutStateRunsEffects: Boolean = false
+
   // region Public APIs
 
   /**
@@ -403,8 +422,35 @@ class LithoRenderer(
   @Synchronized
   private fun rebind(layoutState: LayoutState, runEffects: Boolean) {
     // A released renderer has no host (see [bindTo]), so nothing below is stored for it.
-    if (layoutState === uiThreadLayoutState) return
+    val host = rootHost as? LithoRenderTreeView ?: return
 
+    promote(layoutState, runEffects)
+    // The outer rebind sets the host once the update and any deferred layout are done.
+    if (isUpdatingEffects) {
+      return
+    }
+
+    val bound = uiThreadLayoutState
+    if (bound != null && bound !== host.layoutState) {
+      host.setLayoutState(bound, bound.treeState)
+    }
+  }
+
+  /** Makes [layoutState] the bound layout and updates its effects. */
+  @UiThread
+  @Synchronized
+  private fun promote(layoutState: LayoutState, runEffects: Boolean) {
+    if (isUpdatingEffects) {
+      val deferred = deferredLayoutState
+      if (deferred == null || layoutState.version > deferred.version) {
+        deferredLayoutState = layoutState
+        deferredLayoutStateRunsEffects = runEffects
+      }
+      return
+    }
+    if (layoutState === uiThreadLayoutState) {
+      return
+    }
     val previousUiThreadLayoutState = uiThreadLayoutState
     if (
         LayoutState.isNullOrEmpty(previousUiThreadLayoutState) &&
@@ -418,33 +464,50 @@ class LithoRenderer(
     ) {
       return
     }
-    if (rootHost is LithoRenderTreeView) {
-      uiThreadLayoutState = layoutState
-      uiThreadLayoutStateEffectsSkipped = !runEffects
+    uiThreadLayoutState = layoutState
+    uiThreadLayoutStateEffectsSkipped = !runEffects
+    isUpdatingEffects = true
+    try {
+      commitWithPromotedUpdates(layoutState, previousUiThreadLayoutState, runEffects)
+    } finally {
+      isUpdatingEffects = false
+    }
+    val deferred = deferredLayoutState
+    if (deferred != null) {
+      deferredLayoutState = null
+      promote(deferred, deferredLayoutStateRunsEffects)
+    }
+  }
 
-      // Compute effective updates
-      val mainState = treeState
-      val effectiveSnapshot = mainState?.getUpdatesForPromotion(layoutState.treeState) ?: emptyMap()
-      val updatedStates = effectiveSnapshot.keys
+  /**
+   * Commits [layoutState] and, if [runEffects], updates its effects. The state updates it applied
+   * move from the main tree state to it, so effects that read those states run again.
+   */
+  @UiThread
+  @Synchronized
+  private fun commitWithPromotedUpdates(
+      layoutState: LayoutState,
+      previousLayoutState: LayoutState?,
+      runEffects: Boolean,
+  ) {
+    // Compute effective updates
+    val mainState = treeState
+    val effectiveSnapshot = mainState?.getUpdatesForPromotion(layoutState.treeState) ?: emptyMap()
+    val updatedStates = effectiveSnapshot.keys
 
-      if (runEffects) {
-        commitAndRunEffects(layoutState, updatedStates)
-      } else {
-        layoutState.commit()
-      }
+    if (runEffects) {
+      commitAndRunEffects(layoutState, updatedStates)
+    } else {
+      layoutState.commit()
+    }
 
-      // Carry forward unconsumed mount updates from previous layout
-      val previousUnconsumed =
-          previousUiThreadLayoutState?.treeState?.consumeMountUpdates() ?: emptySet()
-      layoutState.treeState.addMountUpdates(updatedStates + previousUnconsumed)
+    // Carry forward unconsumed mount updates from previous layout
+    val previousUnconsumed = previousLayoutState?.treeState?.consumeMountUpdates() ?: emptySet()
+    layoutState.treeState.addMountUpdates(updatedStates + previousUnconsumed)
 
-      // Subtract from main TreeState
-      if (effectiveSnapshot.isNotEmpty()) {
-        mainState?.subtractPromotedUpdates(effectiveSnapshot)
-      }
-
-      // Ensure the layout state is bound to the view if rootHost is available.
-      (rootHost as LithoRenderTreeView).setLayoutState(layoutState, layoutState.treeState)
+    // Subtract from main TreeState
+    if (effectiveSnapshot.isNotEmpty()) {
+      mainState?.subtractPromotedUpdates(effectiveSnapshot)
     }
   }
 

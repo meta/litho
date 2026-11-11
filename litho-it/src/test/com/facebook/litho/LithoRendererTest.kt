@@ -544,6 +544,34 @@ class LithoRendererTest {
     assertThat(secondNotified).isEqualTo(1)
   }
 
+  @Test
+  fun `an effect that renders a newer layout while it attaches doesn't throw`() {
+    val events = mutableListOf<String>()
+    val view = LithoRenderTreeView(context)
+    renderer.bindTo(view)
+    renderer.renderSyncWithCompatibilityChecks(VersionedRow(events, version = 0), testConstraints)
+    var shownWhileAttaching: Int? = null
+    val renderVersion2 = {
+      renderer.renderSyncWithCompatibilityChecks(VersionedRow(events, version = 2), testConstraints)
+      shownWhileAttaching = (view.layoutState?.rootComponent as? VersionedRow)?.version
+    }
+
+    // scenario: version 1's effect renders version 2 on the same renderer while it attaches.
+    renderer.renderSyncWithCompatibilityChecks(
+        VersionedRow(events, version = 1, onAttach = renderVersion2),
+        testConstraints,
+    )
+    ShadowLooper.idleMainLooper()
+
+    // expectation: version 2 is applied once version 1's effects are attached, and the host gets
+    // it then, not version 1 from inside the attach callback.
+    assertThat(shownWhileAttaching).isEqualTo(0)
+    assertThat(events).containsExactly("attach:0", "cleanup:0", "attach:1", "cleanup:1", "attach:2")
+    assertThat((view.layoutState?.rootComponent as? VersionedRow)?.version).isEqualTo(2)
+    renderer.release()
+    assertThat(events.last()).isEqualTo("cleanup:2")
+  }
+
   private fun treeLifecycle(renderer: LithoRenderer): LithoTreeLifecycleProvider =
       checkNotNull(Whitebox.getInternalState<LithoTree>(renderer, "lithoTree")).treeLifecycle
 
@@ -658,6 +686,21 @@ class LithoRendererTest {
   }
 
   // ========== Test Components ==========
+
+  private class VersionedRow(
+      private val events: MutableList<String>,
+      val version: Int,
+      private val onAttach: () -> Unit = {},
+  ) : KComponent() {
+    override fun ComponentScope.render(): Component {
+      useEffect(version) {
+        events.add("attach:$version")
+        onAttach()
+        onCleanup { events.add("cleanup:$version") }
+      }
+      return Column(style = Style.width(100.px).height(100.px))
+    }
+  }
 
   private class RendererHeightReader(
       private val heightState: AtomicReference<State<Dimen>?>,
