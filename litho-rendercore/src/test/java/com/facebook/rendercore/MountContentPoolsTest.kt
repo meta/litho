@@ -19,6 +19,9 @@ package com.facebook.rendercore
 import android.app.Activity
 import android.app.Service
 import android.content.Context
+import android.os.Build
+import android.os.Looper
+import android.view.Choreographer
 import android.view.ContextThemeWrapper
 import android.view.View
 import android.widget.FrameLayout
@@ -32,6 +35,7 @@ import com.facebook.rendercore.MountContentPools.prefillMountContentPool
 import com.facebook.rendercore.MountContentPools.recycle
 import com.facebook.rendercore.MountContentPools.setMountContentPoolFactory
 import java.lang.Thread
+import java.time.Duration
 import org.assertj.core.api.Assertions
 import org.junit.After
 import org.junit.Before
@@ -40,8 +44,10 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.android.controller.ServiceController
+import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
 class MountContentPoolsTest {
@@ -70,6 +76,7 @@ class MountContentPoolsTest {
   fun cleanup() {
     setMountContentPoolFactory(null)
     RenderCoreConfig.resetHostTranslationOnRecycle = false
+    RenderCoreConfig.holdReleasedViewGroupsUntilDrawn = false
     ErrorReporter.provide(DefaultErrorReporter())
   }
 
@@ -336,6 +343,103 @@ class MountContentPoolsTest {
 
     Assertions.assertThat(reacquired).isSameAs(host)
     Assertions.assertThat(reacquired.translationY).isEqualTo(-861f)
+  }
+
+  @Test
+  @Config(sdk = [Build.VERSION_CODES.N_MR1])
+  fun testHeldViewGroupIsPooledOnlyAfterAFrameIsDrawn() {
+    RenderCoreConfig.holdReleasedViewGroupsUntilDrawn = true
+    val hostRenderUnit = TestHostRenderUnit(id = 0)
+    val host = acquireMountContent(context, hostRenderUnit)
+    val acquiredPerFrame = mutableListOf<Any>()
+
+    recycle(context, hostRenderUnit, host)
+    acquiredPerFrame.add(acquireMountContent(context, hostRenderUnit))
+    Choreographer.getInstance().postFrameCallback {
+      acquiredPerFrame.add(acquireMountContent(context, hostRenderUnit))
+      Choreographer.getInstance().postFrameCallback {
+        acquiredPerFrame.add(acquireMountContent(context, hostRenderUnit))
+      }
+    }
+    Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(100))
+
+    // The frame after the release still draws it, so only the frame after that may reuse it.
+    Assertions.assertThat(acquiredPerFrame).hasSize(3)
+    Assertions.assertThat(acquiredPerFrame[0]).isNotSameAs(host)
+    Assertions.assertThat(acquiredPerFrame[1]).isNotSameAs(host)
+    Assertions.assertThat(acquiredPerFrame[2]).isSameAs(host)
+  }
+
+  @Test
+  @Config(sdk = [Build.VERSION_CODES.N_MR1])
+  fun testHoldDoesNotDelayLeafViews() {
+    RenderCoreConfig.holdReleasedViewGroupsUntilDrawn = true
+    val testRenderUnit = TestRenderUnit(id = 0)
+    val view = acquireMountContent(context, testRenderUnit)
+
+    recycle(context, testRenderUnit, view)
+
+    Assertions.assertThat(acquireMountContent(context, testRenderUnit)).isSameAs(view)
+  }
+
+  @Test
+  @Config(sdk = [Build.VERSION_CODES.O])
+  fun testHoldDoesNotApplyFromO() {
+    RenderCoreConfig.holdReleasedViewGroupsUntilDrawn = true
+    val hostRenderUnit = TestHostRenderUnit(id = 0)
+    val host = acquireMountContent(context, hostRenderUnit)
+
+    recycle(context, hostRenderUnit, host)
+
+    Assertions.assertThat(acquireMountContent(context, hostRenderUnit)).isSameAs(host)
+  }
+
+  @Test
+  @Config(sdk = [Build.VERSION_CODES.N_MR1])
+  fun testViewGroupIsReusableInTheSameFrameWhenHoldIsOff() {
+    val hostRenderUnit = TestHostRenderUnit(id = 0)
+    val host = acquireMountContent(context, hostRenderUnit)
+
+    recycle(context, hostRenderUnit, host)
+
+    Assertions.assertThat(acquireMountContent(context, hostRenderUnit)).isSameAs(host)
+  }
+
+  @Test
+  @Config(sdk = [Build.VERSION_CODES.N_MR1])
+  fun testViewGroupAttachedDuringTheHoldIsReportedAndNotPooled() {
+    RenderCoreConfig.holdReleasedViewGroupsUntilDrawn = true
+    val reports = captureReports()
+    val hostRenderUnit = TestHostRenderUnit(id = 0)
+    val host = acquireMountContent(context, hostRenderUnit) as View
+
+    recycle(context, hostRenderUnit, host)
+    // Something outside the pool, e.g. a transition overlay, re-parents the held ViewGroup.
+    FrameLayout(context).addView(host)
+    Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(100))
+
+    Assertions.assertThat(getContentPoolItemCount(context, hostRenderUnit)).isZero
+    Assertions.assertThat(hostRenderUnit.contentDiscardedCount).isZero
+    Assertions.assertThat(reports).hasSize(1)
+    Assertions.assertThat(reports[0].second)
+        .isEqualTo(MountContentPools.ATTACHED_VIEW_RELEASED_CATEGORY)
+  }
+
+  @Test
+  @Config(sdk = [Build.VERSION_CODES.N_MR1])
+  fun testHeldViewGroupIsDiscardedIfItsPoolIsReleasedFirst() {
+    RenderCoreConfig.holdReleasedViewGroupsUntilDrawn = true
+    val poolScope = PoolScope.ManuallyManaged()
+    val hostRenderUnit = TestHostRenderUnit(id = 0)
+    val host = acquireMountContent(activity, hostRenderUnit, poolScope)
+
+    recycle(activity, hostRenderUnit, host, poolScope)
+    poolScope.releaseScope()
+    Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(100))
+
+    Assertions.assertThat(hostRenderUnit.contentDiscardedCount).isEqualTo(1)
+    Assertions.assertThat(acquireMountContent(activity, hostRenderUnit, poolScope))
+        .isNotSameAs(host)
   }
 
   @Test
@@ -850,11 +954,17 @@ class MountContentPoolsTest {
 
   class TestHostRenderUnit(override val id: Long) : RenderUnit<View>(), ContentAllocator<View> {
 
+    var contentDiscardedCount: Int = 0
+      private set
+
     override fun createContent(context: Context): View = HostView(context)
 
     override val contentAllocator: ContentAllocator<View>
       get() = this
 
     override val renderType: RenderType = RenderType.VIEW
+
+    override val onContentDiscarded: ((Any) -> Unit)?
+      get() = { content -> contentDiscardedCount++ }
   }
 }

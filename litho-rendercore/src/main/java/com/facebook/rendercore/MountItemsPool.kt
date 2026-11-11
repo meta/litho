@@ -21,8 +21,12 @@ import android.app.Application
 import android.app.Service
 import android.content.Context
 import android.content.ContextWrapper
+import android.os.Build
 import android.os.Bundle
+import android.os.Looper
+import android.view.Choreographer
 import android.view.View
+import android.view.ViewGroup
 import androidx.annotation.VisibleForTesting
 import androidx.core.util.Pools
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -195,7 +199,11 @@ object MountContentPools {
           } else {
             null
           }
-      releaseToPool(pool, poolableMountContent, mountContent)
+      if (pool != null && shouldHoldUntilDrawn(mountContent)) {
+        ReleasedViewGroups.hold(context, poolableMountContent, mountContent, poolScope)
+      } else {
+        releaseToPool(pool, poolableMountContent, mountContent)
+      }
     } finally {
       if (isTracing) {
         RenderCoreSystrace.endSection()
@@ -240,6 +248,100 @@ object MountContentPools {
       // Content was not released to the pool. Call onContentDiscarded to allow for releasing
       // resources if needed.
       poolableMountContent.onContentDiscarded?.invoke(mountContent)
+    }
+  }
+
+  private fun shouldHoldUntilDrawn(mountContent: Any): Boolean =
+      RenderCoreConfig.holdReleasedViewGroupsUntilDrawn &&
+          Build.VERSION.SDK_INT < Build.VERSION_CODES.O &&
+          mountContent is ViewGroup &&
+          Looper.myLooper() == Looper.getMainLooper()
+
+  /** Looks up the pool [recycle] released into, without creating one if it was cleared since. */
+  private fun findMountContentPool(
+      context: Context,
+      allocator: ContentAllocator<*>,
+      poolScope: PoolScope,
+  ): ContentPool? {
+    if (isPoolingDisabled) {
+      return null
+    }
+    synchronized(mountContentLock) {
+      val contextContentPools = mountContentPoolsByContext[context] ?: return null
+      val pools =
+          if (poolScope == PoolScope.None) {
+            contextContentPools.unscopedPools
+          } else {
+            contextContentPools.scopedPools[poolScope]
+          }
+      return pools?.get(allocator.getPoolKey())
+    }
+  }
+
+  /**
+   * ViewGroups kept out of their pools until a frame has been drawn since their release; see
+   * [RenderCoreConfig.holdReleasedViewGroupsUntilDrawn]. Main thread only.
+   */
+  private object ReleasedViewGroups : Choreographer.FrameCallback {
+
+    private class Held(
+        val context: Context,
+        val allocator: ContentAllocator<*>,
+        val content: Any,
+        val poolScope: PoolScope,
+    )
+
+    /** Released since the last frame callback, which can run before that frame's traversal. */
+    private var waiting = ArrayList<Held>()
+
+    /** Released before the last frame callback, so that frame's traversal has drawn since. */
+    private var drawn = ArrayList<Held>()
+
+    private var isScheduled = false
+
+    fun hold(context: Context, allocator: ContentAllocator<*>, content: Any, poolScope: PoolScope) {
+      waiting.add(Held(context, allocator, content, poolScope))
+      schedule()
+    }
+
+    override fun doFrame(frameTimeNanos: Long) {
+      isScheduled = false
+      val ready = drawn
+      drawn = waiting
+      waiting = ArrayList()
+      for (held in ready) {
+        // Re-parented during the hold, so it belongs to its new parent; see discardIfAttached.
+        if (reportIfAttached(held.content, held.allocator)) {
+          continue
+        }
+        releaseToPool(
+            findMountContentPool(held.context, held.allocator, held.poolScope),
+            held.allocator,
+            held.content,
+        )
+      }
+      if (drawn.isNotEmpty()) {
+        schedule()
+      }
+    }
+
+    fun clear() {
+      if (isScheduled) {
+        Choreographer.getInstance().removeFrameCallback(this)
+        isScheduled = false
+      }
+      for (held in waiting + drawn) {
+        held.allocator.onContentDiscarded?.invoke(held.content)
+      }
+      waiting.clear()
+      drawn.clear()
+    }
+
+    private fun schedule() {
+      if (!isScheduled) {
+        isScheduled = true
+        Choreographer.getInstance().postFrameCallback(this)
+      }
     }
   }
 
@@ -408,6 +510,9 @@ object MountContentPools {
   @JvmStatic
   @VisibleForTesting(otherwise = androidx.annotation.VisibleForTesting.PACKAGE_PRIVATE)
   fun clear() {
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+      ReleasedViewGroups.clear()
+    }
     synchronized(mountContentLock) {
       // Clear pools and dispatch OnClearedListeners before clearing the maps
       mountContentPoolsByContext.values.forEach { contextContentPool -> contextContentPool.clear() }

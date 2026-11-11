@@ -118,6 +118,18 @@ object RenderCoreConfig {
   @JvmField var disableDefaultPoolPreallocation: Boolean = false
 
   /**
+   * When true, on API 25 and lower a ViewGroup released by [MountContentPools.recycle] goes back to
+   * its pool only once a frame has been drawn since its release, so the mount that released it
+   * can't reuse it.
+   *
+   * Before Android 8, when a frame drops the last parent of a View, hwui frees that View's display
+   * list right away and walks its children, mixing lists recorded this frame with lists from the
+   * frame before. A mount that reuses a released host above one of its former ancestors, and drops
+   * the View between them, turns that walk into a loop that overflows RenderThread's stack.
+   */
+  @JvmField var holdReleasedViewGroupsUntilDrawn: Boolean = false
+
+  /**
    * Caches the reflected instance field list per class in
    * [com.facebook.rendercore.utils.hasEquivalentFields].
    *
