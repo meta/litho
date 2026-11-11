@@ -372,12 +372,6 @@ internal constructor(
     @JvmField var enableComponentHostViewMoveInvalidation: Boolean = false
 
     /**
-     * This flag enables the use of the main thread priority when raising the priority of a blocking
-     * thread on main
-     */
-    @JvmField var enableRaisePriorityToMain: Boolean = false
-
-    /**
      * When true, IMOs are created with hostOutput=null during reduce (skipping per-child
      * ensureHostBounds), and host bounds are finalized in a single bottom-up pass after reduce.
      * Eliminates N recursive ensureHostBounds calls, replacing with N flat comparisons.

@@ -24,7 +24,6 @@ import com.facebook.litho.ComponentsSystrace.endSection
 import com.facebook.litho.LayoutState.Companion.isFromSyncLayout
 import com.facebook.litho.ThreadUtils.isMainThread
 import com.facebook.litho.ThreadUtils.tryRaiseThreadPriority
-import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.debug.DebugInfoReporter
 import com.facebook.litho.debug.LithoDebugEvents.TreeFuture.beginWait
 import com.facebook.litho.debug.LithoDebugEvents.TreeFuture.endWait
@@ -298,13 +297,7 @@ abstract class TreeFuture<T : PotentiallyPartialResult>(
           interruptToken = WorkContinuationInstrumenter.onAskForWorkToContinue("interruptCalculate")
         }
       }
-      val desiredPriority =
-          if (ComponentsConfiguration.enableRaisePriorityToMain) {
-            min(Process.getThreadPriority(myTid), Process.THREAD_PRIORITY_DISPLAY)
-          } else {
-            Process.THREAD_PRIORITY_DISPLAY
-          }
-
+      val desiredPriority = min(Process.getThreadPriority(myTid), Process.THREAD_PRIORITY_DISPLAY)
       val threadPriorityPair = tryRaiseThreadPriority(runningThreadId, desiredPriority)
       originalThreadPriority = threadPriorityPair.first
       raisedThreadPriority = threadPriorityPair.second
