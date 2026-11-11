@@ -21,19 +21,22 @@ import android.graphics.Color
 import com.facebook.litho.Border
 import com.facebook.litho.Column
 import com.facebook.litho.Component
+import com.facebook.litho.ComponentContext
 import com.facebook.litho.DynamicValue
 import com.facebook.litho.EventDispatchInfo
 import com.facebook.litho.EventHandler
 import com.facebook.litho.Row
 import com.facebook.litho.Style
 import com.facebook.litho.annotations.EventHandlerRebindMode
+import com.facebook.litho.binders.onBindView
 import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.core.height
+import com.facebook.litho.core.heightAuto
 import com.facebook.litho.core.padding
 import com.facebook.litho.core.width
+import com.facebook.litho.core.widthAuto
 import com.facebook.litho.it.R
 import com.facebook.litho.kotlinStyle
-import com.facebook.litho.layout.flexbox.Column as KColumnDsl
 import com.facebook.litho.layout.flexbox.KColumn
 import com.facebook.litho.layout.flexbox.KRow
 import com.facebook.litho.layout.flexbox.Row as KRowDsl
@@ -54,8 +57,8 @@ import org.junit.runner.RunWith
 
 /**
  * Verifies the W2 wrapper: the legacy `Row.create(c)...build()` / `Column.create(c)...build()`
- * builders either accumulate a [Style] and produce a [KRow] / [KColumn] (flag ON), or retain their
- * original direct legacy-builder behaviour (flag OFF), as selected by
+ * builders either produce a [KRow] / [KColumn] carrying the builder's props (flag ON), or retain
+ * their original direct legacy-builder behaviour (flag OFF), as selected by
  * [ComponentsConfiguration.useKComponentForLegacyRowColumn].
  */
 @SuppressLint("DeprecatedClass", "DeprecatedMethod")
@@ -257,10 +260,12 @@ class FlexboxLegacyBuilderTest {
   }
 
   @Test
-  fun singleStyleProp_equivalentToDsl() {
-    val fromBuilder = Column.create(c).widthPx(100).build() as KColumn
-    val fromDsl = KColumnDsl(style = Style.width(100.px))
-    assertThat(fromBuilder.isEquivalentTo(fromDsl)).isTrue()
+  fun singleStyleProp_reachesNode_inBothFlagStates() {
+    for (enabled in listOf(true, false)) {
+      setFlag(enabled)
+      val view = lithoTestRule.render { Column.create(c).widthPx(100).heightPx(10).build() }
+      assertThat(view.currentRootNode?.width).describedAs("flag=$enabled").isEqualTo(100)
+    }
   }
 
   @Test
@@ -316,6 +321,29 @@ class FlexboxLegacyBuilderTest {
     assertThat(mismatches).isEmpty()
   }
 
+  /** Each production render builds from a new [ComponentContext], so nothing may hold on to it. */
+  @Test
+  fun reRenderFromFreshContext_isEquivalent_inBothFlagStates() {
+    val cases: List<Pair<String, (ComponentContext) -> Component>> = listOf(
+        "transitionKey" to { ctx -> Row.create(ctx).transitionKey("key").build() },
+        "clickHandler" to { ctx -> Row.create(ctx).clickHandler(rebindHandler(1)).build() },
+        "padding and background" to
+            { ctx ->
+              Column.create(ctx).paddingPx(YogaEdge.ALL, 8).backgroundColor(Color.RED).build()
+            },
+    )
+    val mismatches = mutableListOf<String>()
+    for (enabled in listOf(true, false)) {
+      setFlag(enabled)
+      for ((name, build) in cases) {
+        if (!build(ComponentContext(c)).isEquivalentTo(build(ComponentContext(c)))) {
+          mismatches.add("$name (flag=$enabled)")
+        }
+      }
+    }
+    assertThat(mismatches).isEmpty()
+  }
+
   @Test
   fun differentHandler_isNotEquivalent() {
     val first = Row.create(c).clickHandler(rebindHandler(1)).build()
@@ -330,6 +358,70 @@ class FlexboxLegacyBuilderTest {
     val second = Row.create(c).border(redBorder(Color.BLUE)).build()
 
     assertThat(first.isEquivalentTo(second)).isFalse()
+  }
+
+  /** `CommonProps` equivalence ignores binders, so the builder's `kotlinStyle` is compared too. */
+  @Test
+  fun changedBinderDep_isNotEquivalent() {
+    fun boundRow(dep: Int) =
+        Row.create(c)
+            .kotlinStyle(
+                Style.onBindView(dep) { view ->
+                  view.tag = dep
+                  onUnbind { view.tag = null }
+                },
+            )
+            .build()
+
+    assertThat(boundRow(1).isEquivalentTo(boundRow(2))).isFalse()
+  }
+
+  /**
+   * Spec builders return the same mutable component from every `build()`, so a setter called after
+   * `build()` changes the earlier output too. The flag-ON outputs share the builder's props and
+   * behave the same way.
+   */
+  @Test
+  fun setterAfterBuild_changesEarlierOutput_inBothFlagStates() {
+    for (enabled in listOf(true, false)) {
+      setFlag(enabled)
+      val builder = sizedRow()
+      val first = builder.build()
+      val second = builder.widthPx(20).build()
+
+      assertThat(first.isEquivalentTo(second)).describedAs("flag=$enabled").isTrue()
+      val view = lithoTestRule.render { first }
+      assertThat(view.currentRootNode?.width).describedAs("flag=$enabled").isEqualTo(20)
+    }
+  }
+
+  /**
+   * Renders [child] inside a `FLEX_START` column. Only a nested child shows the auto sizes: the
+   * root's dimensions are restored from the size specs.
+   */
+  private fun nestedSize(child: Component): Pair<Int, Int> {
+    val root =
+        lithoTestRule
+            .render { Column.create(c).alignItems(YogaAlign.FLEX_START).child(child).build() }
+            .currentRootNode!!
+    val node = root.getChildAt(0)
+    return node.width to node.height
+  }
+
+  @Test
+  fun autoSize_isNotEquivalentToExplicitSize_inBothFlagStates() {
+    for (enabled in listOf(true, false)) {
+      setFlag(enabled)
+      val sized = sizedRow().build()
+      val widthAuto = sizedRow().kotlinStyle(Style.widthAuto()).build()
+      val heightAuto = sizedRow().kotlinStyle(Style.heightAuto()).build()
+
+      assertThat(sized.isEquivalentTo(widthAuto)).describedAs("widthAuto flag=$enabled").isFalse()
+      assertThat(sized.isEquivalentTo(heightAuto)).describedAs("heightAuto flag=$enabled").isFalse()
+      assertThat(nestedSize(sized)).describedAs("sized flag=$enabled").isEqualTo(10 to 10)
+      assertThat(nestedSize(widthAuto)).describedAs("widthAuto flag=$enabled").isEqualTo(0 to 10)
+      assertThat(nestedSize(heightAuto)).describedAs("heightAuto flag=$enabled").isEqualTo(10 to 0)
+    }
   }
 
   // ===== flex shorthand =====
@@ -413,27 +505,17 @@ class FlexboxLegacyBuilderTest {
 
   private fun sizedRow() = Row.create(c).widthPx(10).heightPx(10)
 
+  /** The nulls are forwarded to `CommonProps` rather than dropped; the container still renders. */
   @Test
-  fun nullDynamicValues_flagOn_areIgnored() {
-    val withNulls = setEveryDynamicValueToNull(sizedRow()).build()
-
-    assertThat(withNulls.isEquivalentTo(sizedRow().build())).isTrue()
+  fun nullDynamicValues_stillRender_inBothFlagStates() {
+    for (enabled in listOf(true, false)) {
+      setFlag(enabled)
+      val view = lithoTestRule.render { setEveryDynamicValueToNull(sizedRow()).build() }
+      assertThat(view.currentRootNode?.width).describedAs("flag=$enabled").isEqualTo(10)
+    }
   }
 
-  /**
-   * The legacy path forwards the nulls to `CommonProps` rather than dropping them, so unlike the K
-   * path it is not equivalent to never having called the setters — only that it still renders.
-   */
-  @Test
-  fun nullDynamicValues_flagOff_stillRender() {
-    setFlag(false)
-
-    val view = lithoTestRule.render { setEveryDynamicValueToNull(sizedRow()).build() }
-
-    assertThat(view.currentRootNode?.width).isEqualTo(10)
-  }
-
-  // ===== No-Style-API sinks reach the node via the Style -> CommonProps path =====
+  // ===== Props without a Style API reach the node =====
 
   @Test
   fun visibilityOutputTag_reachesLithoNode() {
@@ -443,12 +525,14 @@ class FlexboxLegacyBuilderTest {
     assertThat(view.currentRootNode?.node?.visibilityOutputTag).isEqualTo("occlusion-tag")
   }
 
-  // ===== kotlinStyle merges into the Style instead of the dropped scratch CommonProps =====
-
   @Test
-  fun kotlinStyle_carriesStyle_equivalentToDsl() {
-    val fromBuilder = Column.create(c).kotlinStyle(Style.width(100.px)).build() as KColumn
-    val fromDsl = KColumnDsl(style = Style.width(100.px))
-    assertThat(fromBuilder.isEquivalentTo(fromDsl)).isTrue()
+  fun kotlinStyle_reachesNode_inBothFlagStates() {
+    for (enabled in listOf(true, false)) {
+      setFlag(enabled)
+      val view = lithoTestRule.render {
+        Column.create(c).kotlinStyle(Style.width(100.px)).heightPx(10).build()
+      }
+      assertThat(view.currentRootNode?.width).describedAs("flag=$enabled").isEqualTo(100)
+    }
   }
 }

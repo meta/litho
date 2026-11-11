@@ -82,6 +82,14 @@ sealed class FlexboxContainerComponent(
     private val customSimpleName: String? = null,
 ) : Component(typeIdClass) {
 
+  /**
+   * The [CommonProps] populated by a legacy `Row`/`Column` builder's setters, including its
+   * `kotlinStyle`, which is also kept as [style]. When set, resolution returns it instead of
+   * applying [style], and equivalence compares it the way the Spec-generated containers compare
+   * theirs, in addition to comparing [style].
+   */
+  internal var builderCommonProps: CommonProps? = null
+
   override fun getSimpleName(): String =
       customSimpleName
           ?: when (flexDirection) {
@@ -135,14 +143,7 @@ sealed class FlexboxContainerComponent(
       }
     }
 
-    val commonProps =
-        if (style !== Style) {
-          CommonProps().apply { style.applyCommonProps(c, this) }
-        } else {
-          null
-        }
-
-    return ComponentResolveResult(node, commonProps)
+    return ComponentResolveResult(node, resolveCommonProps(c))
   }
 
   override fun resolveDeferred(
@@ -155,14 +156,12 @@ sealed class FlexboxContainerComponent(
         calculationContext.cache.getCachedNode(this),
         parentContext,
     )
-    val commonProps =
-        if (style !== Style) {
-          CommonProps().apply { style.applyCommonProps(componentContext, this) }
-        } else {
-          null
-        }
-    return ComponentResolveResult(node, commonProps)
+    return ComponentResolveResult(node, resolveCommonProps(componentContext))
   }
+
+  private fun resolveCommonProps(c: ComponentContext): CommonProps? =
+      builderCommonProps
+          ?: if (style !== Style) CommonProps().apply { style.applyCommonProps(c, this) } else null
 
   override fun isEquivalentProps(other: Component?): Boolean {
     if (this === other) {
@@ -199,6 +198,16 @@ sealed class FlexboxContainerComponent(
     if (crossAxisGap != other.crossAxisGap) {
       return false
     }
+    val thisBuilderProps = builderCommonProps
+    val otherBuilderProps = other.builderCommonProps
+    if (thisBuilderProps !== otherBuilderProps) {
+      if (thisBuilderProps == null || !thisBuilderProps.isEquivalentTo(otherBuilderProps)) {
+        return false
+      }
+    }
+    if (style != other.style) {
+      return false
+    }
     val thisChildren = children
     val otherChildren = other.children
     if (thisChildren != null) {
@@ -211,9 +220,6 @@ sealed class FlexboxContainerComponent(
         }
       }
     } else if (otherChildren != null) {
-      return false
-    }
-    if (style != other.style) {
       return false
     }
     return true
