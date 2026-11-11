@@ -368,13 +368,18 @@ class VisibilityMountExtension<Input : VisibilityExtensionInput> private constru
       }
 
       val state = extensionState.state
-      val size = state.visibilityOutputs.size
+      // Snapshot the list reference together with its bound: app callbacks
+      // dispatched inside the loop can re-enter and replace
+      // state.visibilityOutputs via beforeMount, so the live field must not
+      // be re-read while iterating.
+      val visibilityOutputs = state.visibilityOutputs
+      val size = visibilityOutputs.size
 
       if (VisibilityExtensionConfigs.isDebugLoggingEnabled) {
         Log.d(DEBUG_TAG, "Visibility Outputs to process: $size")
       }
 
-      if (extensionState.state.visibilityOutputs.isNotEmpty()) {
+      if (visibilityOutputs.isNotEmpty()) {
         if (transformer != null && transformedLocalVisibleRect == null) {
           transformedLocalVisibleRect =
               transformRootHostVisibleRect(
@@ -408,7 +413,7 @@ class VisibilityMountExtension<Input : VisibilityExtensionInput> private constru
 
         val intersection = Rect()
         for (j in 0 until size) {
-          val visibilityOutput = state.visibilityOutputs[j]
+          val visibilityOutput = visibilityOutputs[j]
           val visibilityOutputBounds = visibilityOutput.bounds
 
           if (
