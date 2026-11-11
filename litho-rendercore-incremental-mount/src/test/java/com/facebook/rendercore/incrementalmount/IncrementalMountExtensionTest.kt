@@ -2452,6 +2452,35 @@ class IncrementalMountExtensionTest {
       }
 
   @Test
+  fun `whole-host pass while attached does not count as shown from its top`() =
+      withQueuedReleases(4) {
+        val (fixture, host, _, unseen) = premountedDrainTree()
+        val root = fixture.extensionState.rootHost as View
+        val parent = FrameLayout(ApplicationProvider.getApplicationContext())
+        parent.addView(root)
+        // scenario: only the bottom strip peeks in, then transient state sends the whole host.
+        scroll(fixture, Rect(0, 25, 10, 30))
+        fixture.extension.onVisibleBoundsChanged(
+            fixture.extensionState,
+            Rect(0, 0, 10, 30),
+            VisibilityChangeReason.UNKNOWN,
+        )
+        fixture.extension.onVisibleBoundsChanged(
+            fixture.extensionState,
+            Rect(0, 25, 10, 30),
+            VisibilityChangeReason.ANIMATION,
+        )
+        parent.removeView(root)
+
+        detach(fixture)
+
+        assertThat(fixture.extension.prepareOffscreenDrain(fixture.extensionState)).isFalse()
+        fixture.releaseQueued()
+        assertThat(fixture.extensionState.ownsReference(host.id)).isTrue()
+        assertThat(fixture.extensionState.ownsReference(unseen.id)).isTrue()
+      }
+
+  @Test
   fun `tree mounted in place on screen is drained after it scrolls past the top`() =
       withQueuedReleases(4) {
         val (fixture, host, child, unseen) = premountedDrainTree()
@@ -2607,6 +2636,30 @@ class IncrementalMountExtensionTest {
         assertThat(fixture.releaseQueued()).isFalse()
         assertThat(fixture.extensionState.ownsReference(host.id)).isTrue()
         assertThat(fixture.extensionState.ownsReference(unseen.id)).isTrue()
+      }
+
+  @Test
+  fun `stopping a drain keeps at most the queue cap`() =
+      withQueuedReleases(8) {
+        val first = output(id = 11, index = 1, top = 0)
+        val second = output(id = 12, index = 2, top = 10)
+        val third = output(id = 13, index = 3, top = 20)
+        val fixture = createCostAwareFixture(
+            listOf(first, second, third),
+            mode = COST_AWARE_PREMOUNT_WITH_OFFSCREEN_DRAIN,
+        )
+        scrollPastTop(fixture)
+        fixture.extension.onUnbind(fixture.extensionState)
+        assertThat(fixture.extension.prepareOffscreenDrain(fixture.extensionState)).isTrue()
+        assertThat(fixture.queuedReleases.toLongArrayList())
+            .containsExactlyInAnyOrder(first.id, second.id, third.id)
+
+        IncrementalMountExtensionConfigs.maxPendingOffscreenReleases = 1
+        FrameLayout(ApplicationProvider.getApplicationContext())
+            .addView(fixture.extensionState.rootHost as View)
+
+        assertThat(fixture.extension.prepareOffscreenDrain(fixture.extensionState)).isFalse()
+        assertThat(fixture.queuedReleases.size).isEqualTo(1)
       }
 
   @Test

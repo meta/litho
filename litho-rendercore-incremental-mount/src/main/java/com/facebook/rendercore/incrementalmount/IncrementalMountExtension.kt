@@ -1034,7 +1034,11 @@ class IncrementalMountExtension(
         if (state.offscreenDrain != OffscreenDrain.NONE && isRootInUse(extensionState)) {
           stopOffscreenDrain(extensionState)
         }
-        noteShownFromTop(extensionState, visibleRect, isMeasuredViewportReason(reason))
+        // An UNKNOWN pass can carry the whole host, e.g. when transient state is set for an
+        // animation.
+        if (reason != VisibilityChangeReason.UNKNOWN) {
+          noteShownFromTop(extensionState, visibleRect, isMeasuredViewportReason(reason))
+        }
         if (isMeasuredViewportReason(reason)) {
           state.scrolledPastTop = state.shownFromTop && visibleRect.top > 0
         }
