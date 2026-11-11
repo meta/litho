@@ -16,12 +16,16 @@
 
 package com.facebook.rendercore.text
 
+import android.graphics.Paint
 import android.graphics.Rect
+import android.graphics.Typeface
 import android.text.Layout
 import android.text.Spanned
 import android.text.TextPaint
 import android.text.style.MetricAffectingSpan
 import java.text.BreakIterator
+import java.text.StringCharacterIterator
+import java.util.Locale
 import java.util.PriorityQueue
 import kotlin.math.ceil
 
@@ -37,6 +41,54 @@ object TextLayoutIntrinsics {
 
   // Flat-topped capital whose glyph bounds sit at the cap line, used to measure cap height.
   private const val CAP_MEASUREMENT_TEXT = "T"
+
+  // Distinct typefaces a thread keeps a paint for before the cache is dropped and rebuilt.
+  private const val MAX_CACHED_PAINTS = 8
+
+  private val threadState =
+      object : ThreadLocal<ProbeState>() {
+        override fun initialValue(): ProbeState = ProbeState()
+      }
+
+  /**
+   * Returns a [TextPaint] for min-content measurement with [textSize], [typeface] and
+   * [letterSpacing] applied: of the properties the real text layout sets, the only ones that change
+   * glyph advances or font metrics (density and shadow don't).
+   *
+   * The paint is reused per thread and typeface, because building one (a native allocation plus
+   * locale setup) and setting its typeface (a class-locked font load on some OEMs) costs more than
+   * the measurement when the probe runs on the main thread. It is only valid until the next call on
+   * the same thread, which overwrites its text size and letter spacing: pass it straight to one of
+   * this object's measurements, and don't retain it, mutate it, or hold it across code that could
+   * lay out text on this thread.
+   */
+  @JvmStatic
+  fun intrinsicTextPaint(textSize: Float, typeface: Typeface?, letterSpacing: Float): TextPaint {
+    val state = threadState.get()!!
+    // A paint captures the default locale when built, as the real layout's paint does, so rebuild
+    // the cached ones if it changes.
+    val locale = Locale.getDefault()
+    if (state.paintLocale != locale) {
+      state.paints.clear()
+      state.paintLocale = locale
+    }
+    // A fresh paint already measures with the framework default, so it needs no setTypeface.
+    val key = typeface?.takeIf { it != Typeface.DEFAULT }
+    var paint = state.paints[key]
+    if (paint == null) {
+      if (state.paints.size >= MAX_CACHED_PAINTS) {
+        state.paints.clear()
+      }
+      paint = TextPaint(Paint.ANTI_ALIAS_FLAG)
+      if (key != null) {
+        paint.typeface = key
+      }
+      state.paints[key] = paint
+    }
+    paint.textSize = textSize
+    paint.letterSpacing = letterSpacing
+    return paint
+  }
 
   /**
    * Returns the min-content width of [text] in pixels: the width of its widest unbreakable run
@@ -61,7 +113,8 @@ object TextLayoutIntrinsics {
       return 0
     }
 
-    val iterator = BreakIterator.getLineInstance(paint.textLocale)
+    val state = threadState.get()!!
+    val iterator = state.lineBreakIterator(paint.textLocale)
     // Iterate the CharSequence directly rather than materializing it with toString().
     iterator.setText(CharSequenceCharacterIterator(text, 0, text.length))
 
@@ -69,19 +122,24 @@ object TextLayoutIntrinsics {
     // A primitive Int comparison keeps the key unboxed (vs. compareBy).
     val candidates =
         PriorityQueue<Run>(LONGEST_WORD_CANDIDATE_LIMIT) { a, b -> a.length.compareTo(b.length) }
-    var start = iterator.first()
-    var end = iterator.next()
-    while (end != BreakIterator.DONE) {
-      val run = Run(start, end)
-      val shortest = candidates.peek()
-      if (candidates.size < LONGEST_WORD_CANDIDATE_LIMIT) {
-        candidates.add(run)
-      } else if (shortest != null && shortest.length < run.length) {
-        candidates.poll()
-        candidates.add(run)
+    try {
+      var start = iterator.first()
+      var end = iterator.next()
+      while (end != BreakIterator.DONE) {
+        val run = Run(start, end)
+        val shortest = candidates.peek()
+        if (candidates.size < LONGEST_WORD_CANDIDATE_LIMIT) {
+          candidates.add(run)
+        } else if (shortest != null && shortest.length < run.length) {
+          candidates.poll()
+          candidates.add(run)
+        }
+        start = end
+        end = iterator.next()
       }
-      start = end
-      end = iterator.next()
+    } finally {
+      // The iterator outlives this call, so drop the text: its spans can hold a Context.
+      iterator.setText(state.emptyText)
     }
 
     // Fast path (no width-affecting span): paint.measureText avoids the per-run MeasuredParagraph +
@@ -160,5 +218,27 @@ object TextLayoutIntrinsics {
    */
   private class Run(val start: Int, val endExclusive: Int) {
     val length: Int = endExclusive - start
+  }
+
+  /** Per-thread scratch objects reused across probes; none of them are thread-safe. */
+  private class ProbeState {
+    var paintLocale: Locale? = null
+    val paints: HashMap<Typeface?, TextPaint> = HashMap()
+    val emptyText: StringCharacterIterator = StringCharacterIterator("")
+
+    private var lineBreakIterator: BreakIterator? = null
+    private var lineBreakLocale: Locale? = null
+
+    /** [BreakIterator.getLineInstance] clones an ICU iterator on every call, so keep one. */
+    fun lineBreakIterator(locale: Locale): BreakIterator {
+      val cached = lineBreakIterator
+      if (cached != null && lineBreakLocale == locale) {
+        return cached
+      }
+      return BreakIterator.getLineInstance(locale).also { iterator ->
+        lineBreakIterator = iterator
+        lineBreakLocale = locale
+      }
+    }
   }
 }

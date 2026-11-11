@@ -16,8 +16,6 @@
 
 package com.facebook.rendercore.text
 
-import android.content.Context
-import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.Typeface
 import android.text.Spanned
@@ -114,27 +112,16 @@ fun RichTextPrimitive(
 }
 
 /**
- * Builds a [TextPaint] with the advance-width-affecting properties
- * [TextMeasurementUtils.createTextLayout] applies, without building a Layout. Must stay in sync
- * with that method's setters; textSize is set unconditionally (UNSET(-1) -> -1f) and textLocale is
- * left at the default so [TextLayoutIntrinsics.longestWordWidth]'s BreakIterator matches.
+ * The per-thread [TextPaint] for the min-content probe, with the textSize/typeface/letterSpacing
+ * [TextMeasurementUtils.createTextLayout] applies. Must stay in sync with those setters; textSize
+ * is set unconditionally (UNSET(-1) -> -1f).
  */
-internal fun configuredTextPaint(context: Context, style: TextStyle): TextPaint {
-  val paint = TextPaint(Paint.ANTI_ALIAS_FLAG)
-  paint.density = context.resources.displayMetrics.density
-  paint.textSize = style.textSize.toFloat()
-  paint.letterSpacing = style.letterSpacing
-  // Skip Paint.setTypeface for the framework default: a fresh TextPaint already measures with it,
-  // and on some OEMs (e.g. MIUI) setTypeface triggers an expensive, class-locked variable-font load
-  // — costly when this min-content probe runs on the main thread during list scrolling. Only a
-  // non-default typeface (custom, or bold/italic default) needs to be set.
-  val resolvedTypeface = style.typeface ?: Typeface.defaultFromStyle(style.textStyle)
-  if (resolvedTypeface != null && resolvedTypeface != Typeface.DEFAULT) {
-    paint.typeface = resolvedTypeface
-  }
-  paint.setShadowLayer(style.shadowRadius, style.shadowDx, style.shadowDy, style.shadowColor)
-  return paint
-}
+internal fun configuredTextPaint(style: TextStyle): TextPaint =
+    TextLayoutIntrinsics.intrinsicTextPaint(
+        textSize = style.textSize.toFloat(),
+        typeface = style.typeface ?: Typeface.defaultFromStyle(style.textStyle),
+        letterSpacing = style.letterSpacing,
+    )
 
 internal class RichTextLayoutBehavior(
     val text: CharSequence,
@@ -241,7 +228,7 @@ internal class RichTextLayoutBehavior(
       return 0
     }
 
-    return TextLayoutIntrinsics.longestWordWidth(text, configuredTextPaint(androidContext, style))
+    return TextLayoutIntrinsics.longestWordWidth(text, configuredTextPaint(style))
   }
 
   /** Min-content height: the natural single-line height (measured unbounded). */
@@ -250,7 +237,7 @@ internal class RichTextLayoutBehavior(
       return 0
     }
 
-    val paint = configuredTextPaint(androidContext, style)
+    val paint = configuredTextPaint(style)
     // Manual cap/baseline spacing drives height off the cap height rather than font metrics.
     if (style.manualCapSpacing != Int.MIN_VALUE && style.manualBaselineSpacing != Int.MIN_VALUE) {
       var manualHeight =
