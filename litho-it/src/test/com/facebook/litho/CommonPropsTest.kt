@@ -407,6 +407,33 @@ class CommonPropsTest {
   }
 
   @Test
+  fun testAutoSizeEquivalence() {
+    val sized = CommonProps()
+    sized.widthPx(10)
+    sized.heightPx(10)
+
+    val widthAuto = CommonProps()
+    widthAuto.widthPx(10)
+    widthAuto.heightPx(10)
+    widthAuto.widthAuto()
+
+    val heightAuto = CommonProps()
+    heightAuto.widthPx(10)
+    heightAuto.heightPx(10)
+    heightAuto.heightAuto()
+
+    assertThat(sized.isEquivalentTo(widthAuto)).isFalse
+    assertThat(sized.isEquivalentTo(heightAuto)).isFalse
+    assertThat(widthAuto.isEquivalentTo(heightAuto)).isFalse
+
+    val widthAuto2 = CommonProps()
+    widthAuto2.widthPx(10)
+    widthAuto2.heightPx(10)
+    widthAuto2.widthAuto()
+    assertThat(widthAuto.isEquivalentTo(widthAuto2)).isTrue
+  }
+
+  @Test
   fun testDifferentObjectWithDifferentContentEquivalentTo() {
     commonProps = CommonProps()
     setCommonProps(commonProps, dispatchInfo)

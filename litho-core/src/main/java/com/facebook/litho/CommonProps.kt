@@ -1587,7 +1587,9 @@ class CommonProps : LayoutProps, Equivalence<CommonProps?> {
               equals(marginAutos, other.marginAutos) &&
               columnGap == other.columnGap &&
               rowGap == other.rowGap &&
-              allGap == other.allGap)
+              allGap == other.allGap &&
+              widthAuto == other.widthAuto &&
+              heightAuto == other.heightAuto)
     }
 
     companion object {
