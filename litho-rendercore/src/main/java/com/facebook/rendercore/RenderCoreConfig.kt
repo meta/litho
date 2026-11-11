@@ -84,6 +84,15 @@ object RenderCoreConfig {
   @JvmField var useTruncationCaching: Boolean = false
 
   /**
+   * Before Android 7, `InputMethodManager` can call `finishComposingText` on the previously focused
+   * text input from whichever thread calls into it. When this returns true, text inputs post those
+   * calls to their own thread (the main thread, in an Activity's window), as Android 7 does. It's
+   * read each time a text input creates its input connection, so an app can switch it within a
+   * session.
+   */
+  @JvmField var postFinishComposingTextToMainThread: () -> Boolean = { false }
+
+  /**
    * Master switch for debug-only tooling that is too costly to run in production. When enabled,
    * RenderCore:
    * - logs mount statistics ([MountState.mountStats]);
