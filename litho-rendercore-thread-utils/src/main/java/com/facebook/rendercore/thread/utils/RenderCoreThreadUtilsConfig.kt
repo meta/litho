@@ -29,5 +29,5 @@ object RenderCoreThreadUtilsConfig {
    * enforces main-thread assertions like production. Tests that drive main-thread-confined code
    * must run it on the UI thread, for example with `@UiThreadTest`.
    */
-  @JvmField var isEndToEndTestRun: Boolean = System.getProperty("IS_TESTING") != null
+  @Volatile @JvmField var isEndToEndTestRun: Boolean = System.getProperty("IS_TESTING") != null
 }
