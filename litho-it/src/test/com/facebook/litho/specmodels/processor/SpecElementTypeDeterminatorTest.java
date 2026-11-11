@@ -20,9 +20,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.facebook.litho.specmodels.model.SpecElementType;
 import com.google.testing.compile.CompilationRule;
-import javax.annotation.Nullable;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.util.Elements;
+import org.jetbrains.annotations.NotNull;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -38,7 +38,7 @@ public class SpecElementTypeDeterminatorTest {
    * for.
    */
   public static class FakeKotlinSingleton {
-    @Nullable public static final FakeKotlinSingleton INSTANCE = null;
+    @NotNull public static final FakeKotlinSingleton INSTANCE = null;
   }
 
   @Test
