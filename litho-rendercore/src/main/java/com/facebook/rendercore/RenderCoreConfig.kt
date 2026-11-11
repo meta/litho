@@ -71,12 +71,6 @@ object RenderCoreConfig {
   /** This flag is used to enable automatic removal of View listeners from ComponentHost. */
   @JvmField var removeComponentHostListeners: Boolean = false
 
-  /**
-   * This flag is used to clear translationX/Y left by X/Y transitions on a Host before it is
-   * released to the pool, so it isn't drawn offset after being mounted elsewhere.
-   */
-  @JvmField var resetHostTranslationOnRecycle: Boolean = false
-
   /** Flag to use getOffsetForAdvance in TextMeasurementUtils to prevent ANRs. */
   @JvmField var usePerformantTruncation: Boolean = false
 

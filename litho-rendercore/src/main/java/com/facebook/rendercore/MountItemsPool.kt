@@ -179,10 +179,6 @@ object MountContentPools {
           mountContent.removeViewListeners()
         }
       }
-      if (RenderCoreConfig.resetHostTranslationOnRecycle && mountContent is Host) {
-        mountContent.translationX = 0f
-        mountContent.translationY = 0f
-      }
       if (reportIfAttached(mountContent, poolableMountContent)) {
         // Owned by whoever attached it, so it is neither pooled nor discarded; see
         // discardIfAttached.

@@ -75,7 +75,6 @@ class MountContentPoolsTest {
   @After
   fun cleanup() {
     setMountContentPoolFactory(null)
-    RenderCoreConfig.resetHostTranslationOnRecycle = false
     RenderCoreConfig.holdReleasedViewGroupsUntilDrawn = false
     ErrorReporter.provide(DefaultErrorReporter())
   }
@@ -314,35 +313,6 @@ class MountContentPoolsTest {
 
     // it should be the same instance that was just released
     Assertions.assertThat(thirdContent).isSameAs(secondContent)
-  }
-
-  @Test
-  fun testRecyclingHostClearsTranslationWhenEnabled() {
-    RenderCoreConfig.resetHostTranslationOnRecycle = true
-    val hostRenderUnit = TestHostRenderUnit(id = 0)
-    val host = acquireMountContent(context, hostRenderUnit) as Host
-    host.translationX = 12f
-    host.translationY = -861f
-
-    recycle(context, hostRenderUnit, host)
-    val reacquired = acquireMountContent(context, hostRenderUnit) as Host
-
-    Assertions.assertThat(reacquired).isSameAs(host)
-    Assertions.assertThat(reacquired.translationX).isEqualTo(0f)
-    Assertions.assertThat(reacquired.translationY).isEqualTo(0f)
-  }
-
-  @Test
-  fun testRecyclingHostKeepsTranslationWhenDisabled() {
-    val hostRenderUnit = TestHostRenderUnit(id = 0)
-    val host = acquireMountContent(context, hostRenderUnit) as Host
-    host.translationY = -861f
-
-    recycle(context, hostRenderUnit, host)
-    val reacquired = acquireMountContent(context, hostRenderUnit) as Host
-
-    Assertions.assertThat(reacquired).isSameAs(host)
-    Assertions.assertThat(reacquired.translationY).isEqualTo(-861f)
   }
 
   @Test
