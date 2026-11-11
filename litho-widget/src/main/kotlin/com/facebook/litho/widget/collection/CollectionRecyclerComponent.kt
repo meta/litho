@@ -227,22 +227,23 @@ class CollectionRecyclerComponent(
         }
 
     val onNearEndCallbackLock = useRef { false }
-    val onNearEndCallback = useCallback { totalCount: Int, lastVisibleIndex: Int ->
-      onNearEnd?.let { block ->
-        val threshold = max(0, totalCount - 1 - block.offset)
-        if (onNearEndCallbackLock.value && lastVisibleIndex < threshold) {
-          // Reset the flag to allow onNearEnd callback when user scrolls back up after failed
-          // data loading, otherwise there would be no opportunity to retry loading when
-          // scrolling down again.
-          onNearEndCallbackLock.value = false
-        } else if (!onNearEndCallbackLock.value && lastVisibleIndex >= threshold) {
-          // Prevent duplicate onNearEnd callback invocations by setting a flag that persists
-          // until the next data update
-          onNearEndCallbackLock.value = true
-          block.callback()
+    val onNearEndCallback: (Int, Int) -> Unit =
+        useCallback { totalCount: Int, lastVisibleIndex: Int ->
+          onNearEnd?.let { block ->
+            val threshold = max(0, totalCount - 1 - block.offset)
+            if (onNearEndCallbackLock.value && lastVisibleIndex < threshold) {
+              // Reset the flag to allow onNearEnd callback when user scrolls back up after failed
+              // data loading, otherwise there would be no opportunity to retry loading when
+              // scrolling down again.
+              onNearEndCallbackLock.value = false
+            } else if (!onNearEndCallbackLock.value && lastVisibleIndex >= threshold) {
+              // Prevent duplicate onNearEnd callback invocations by setting a flag that persists
+              // until the next data update
+              onNearEndCallbackLock.value = true
+              block.callback()
+            }
+          }
         }
-      }
-    }
     val runnableHandlerProvider = useCached {
       ComponentsConfiguration.collectionLayoutHandlerProvider
     }
@@ -276,7 +277,7 @@ class CollectionRecyclerComponent(
       }
     }
 
-    val viewportChangedCallback =
+    val viewportChangedCallback: (Int, Int, Int, Int, Int) -> Unit =
         useCallback {
             firstVisibleIndex: Int,
             lastVisibleIndex: Int,
