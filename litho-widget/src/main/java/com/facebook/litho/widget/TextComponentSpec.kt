@@ -19,7 +19,6 @@ package com.facebook.litho.widget
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
-import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
@@ -499,17 +498,7 @@ object TextComponentSpec {
     if (text.isNullOrEmpty()) {
       return 0
     }
-    val paint = createIntrinsicTextPaint(
-        c,
-        textSize,
-        textStyle,
-        typeface,
-        letterSpacing,
-        shadowRadius,
-        shadowDx,
-        shadowDy,
-        shadowColor,
-    )
+    val paint = createIntrinsicTextPaint(c, textSize, textStyle, typeface, letterSpacing)
     return TextLayoutIntrinsics.longestWordWidth(text, paint)
   }
 
@@ -553,25 +542,15 @@ object TextComponentSpec {
     if (text.isNullOrEmpty()) {
       return 0
     }
-    val paint = createIntrinsicTextPaint(
-        c,
-        textSize,
-        textStyle,
-        typeface,
-        letterSpacing,
-        shadowRadius,
-        shadowDx,
-        shadowDy,
-        shadowColor,
-    )
+    val paint = createIntrinsicTextPaint(c, textSize, textStyle, typeface, letterSpacing)
     return TextLayoutIntrinsics.singleLineHeight(paint, shouldIncludeFontPadding)
   }
 
   /**
-   * Builds a [TextPaint] with the advance-width-affecting properties [createTextLayout] applies,
-   * without building a [Layout]. Must stay in sync with [createTextLayout]'s textSize/typeface
-   * setters; textLocale is left at the default so [TextLayoutIntrinsics.longestWordWidth]'s
-   * BreakIterator matches.
+   * The per-thread [TextPaint] for the min-content probe, with the textSize/typeface/letterSpacing
+   * [createTextLayout] applies. Must stay in sync with those setters. Reads resources through
+   * [ComponentContext.resourceResolver], which caches them: an Activity's `getResources()` can be
+   * instrumented and is too slow to call on every probe.
    */
   private fun createIntrinsicTextPaint(
       context: ComponentContext,
@@ -579,32 +558,18 @@ object TextComponentSpec {
       textStyle: Int,
       typeface: Typeface?,
       letterSpacing: Float,
-      shadowRadius: Float,
-      shadowDx: Float,
-      shadowDy: Float,
-      shadowColor: Int,
-  ): TextPaint {
-    val paint = TextPaint(Paint.ANTI_ALIAS_FLAG)
-    paint.density = context.androidContext.resources.displayMetrics.density
-    paint.textSize =
-        if (textSize != UNSET) {
-          textSize.toFloat()
-        } else {
-          context.resourceResolver.sipsToPixels(DEFAULT_TEXT_SIZE_SP.toFloat()).toFloat()
-        }
-    paint.letterSpacing = letterSpacing
-    // Skip Paint.setTypeface for the framework default: a fresh TextPaint already measures with it,
-    // and on some OEMs (e.g. MIUI) setTypeface triggers an expensive, class-locked variable-font
-    // load — costly when this min-content probe runs on the main thread during list scrolling. Only
-    // a non-default typeface (custom, or bold/italic default) needs to be set.
-    val resolvedTypeface =
-        if (DEFAULT_TYPEFACE != typeface) typeface else Typeface.defaultFromStyle(textStyle)
-    if (resolvedTypeface != null && resolvedTypeface != Typeface.DEFAULT) {
-      paint.typeface = resolvedTypeface
-    }
-    paint.setShadowLayer(shadowRadius, shadowDx, shadowDy, shadowColor)
-    return paint
-  }
+  ): TextPaint =
+      TextLayoutIntrinsics.intrinsicTextPaint(
+          textSize =
+              if (textSize != UNSET) {
+                textSize.toFloat()
+              } else {
+                context.resourceResolver.sipsToPixels(DEFAULT_TEXT_SIZE_SP.toFloat()).toFloat()
+              },
+          typeface =
+              if (DEFAULT_TYPEFACE != typeface) typeface else Typeface.defaultFromStyle(textStyle),
+          letterSpacing = letterSpacing,
+      )
 
   private fun createTextLayout(
       context: ComponentContext,
