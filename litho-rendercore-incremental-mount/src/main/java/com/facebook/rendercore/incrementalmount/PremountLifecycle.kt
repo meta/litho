@@ -179,14 +179,27 @@ internal class PremountLifecycle {
     return true
   }
 
-  /** An item whose reference is held left the screen. */
-  fun beginOffscreenRelease(session: PremountSession, id: Long): ReleaseDecision {
+  /**
+   * An item whose reference is held left the screen. [releasePremounted] releases a PREMOUNTED item
+   * too, recorded like a SEEN one, for a tree that is being emptied.
+   */
+  fun beginOffscreenRelease(
+      session: PremountSession,
+      id: Long,
+      releasePremounted: Boolean = false,
+  ): ReleaseDecision {
     if (!isCurrent(session)) {
       return ReleaseDecision.STALE
     }
     return when (stateOf(id)) {
       // Off screen until the user reaches it; teardown and layout changes still release it.
-      State.PREMOUNTED -> ReleaseDecision.RETAIN
+      State.PREMOUNTED ->
+          if (releasePremounted) {
+            stateByOutputId.remove(id)
+            ReleaseDecision.RELEASE_AND_RECORD
+          } else {
+            ReleaseDecision.RETAIN
+          }
       State.SEEN -> {
         // Absence lets a reentrant visible event publish a newer fact before completion.
         stateByOutputId.remove(id)

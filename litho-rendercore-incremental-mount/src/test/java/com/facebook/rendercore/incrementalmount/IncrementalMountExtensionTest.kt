@@ -34,9 +34,11 @@ import com.facebook.rendercore.RenderTreeNode
 import com.facebook.rendercore.RootHostView
 import com.facebook.rendercore.SizeConstraints
 import com.facebook.rendercore.extensions.ExtensionState
+import com.facebook.rendercore.extensions.MountExtension
 import com.facebook.rendercore.extensions.RenderCoreExtension
 import com.facebook.rendercore.extensions.VisibilityChangeReason
 import com.facebook.rendercore.incrementalmount.GapWorkerMode.COST_AWARE_PREMOUNT_WITH_INCREMENTAL_UNMOUNT
+import com.facebook.rendercore.incrementalmount.GapWorkerMode.COST_AWARE_PREMOUNT_WITH_OFFSCREEN_DRAIN
 import com.facebook.rendercore.incrementalmount.GapWorkerMode.PREMOUNT
 import com.facebook.rendercore.incrementalmount.IncrementalMountExtension.IncrementalMountExtensionState
 import com.facebook.rendercore.testing.LayoutResultWrappingNode
@@ -1410,7 +1412,7 @@ class IncrementalMountExtensionTest {
     assertThat(instances.values.toSet()).hasSize(GapWorkerMode.entries.size)
     GapWorkerMode.entries.forEach { mode ->
       val lifecycle = instances.getValue(mode).createState().premountLifecycle
-      if (mode == COST_AWARE_PREMOUNT_WITH_INCREMENTAL_UNMOUNT) {
+      if (mode.unmountsIncrementally) {
         assertThat(lifecycle).isNotNull()
       } else {
         assertThat(lifecycle).isNull()
@@ -2381,6 +2383,338 @@ class IncrementalMountExtensionTest {
         assertThat(fixture.extensionState.ownsReference(third.id)).isFalse()
       }
 
+  @Test
+  fun `tree scrolled up out of view and removed is drained, hosts and premounted items included`() =
+      withQueuedReleases(4) {
+        val (fixture, host, child, unseen) = premountedDrainTree()
+        scrollPastTop(fixture)
+
+        detach(fixture)
+
+        assertThat(fixture.extension.prepareOffscreenDrain(fixture.extensionState)).isTrue()
+        assertThat(fixture.queuedReleases.toLongArrayList())
+            .containsExactly(child.id, unseen.id, host.id)
+        assertThat(fixture.releaseQueued()).isFalse()
+        assertThat(fixture.extension.isDrainingOffscreen(fixture.extensionState)).isFalse()
+        val lifecycle = checkNotNull(fixture.extensionState.state.premountLifecycle)
+        for (output in listOf(host, child, unseen)) {
+          assertThat(fixture.extensionState.ownsReference(output.id)).isFalse()
+          assertThat(lifecycle.stateOf(output.id)).isEqualTo(PremountLifecycle.State.RELEASED)
+        }
+      }
+
+  @Test
+  fun `tree that left through the bottom keeps hosts and premounted items`() =
+      withQueuedReleases(4) {
+        val (fixture, host, _, unseen) = premountedDrainTree()
+        scroll(fixture, Rect(0, 0, 10, 25))
+
+        detach(fixture)
+
+        assertThat(fixture.extension.prepareOffscreenDrain(fixture.extensionState)).isFalse()
+        fixture.releaseQueued()
+        assertThat(fixture.extensionState.ownsReference(host.id)).isTrue()
+        assertThat(fixture.extensionState.ownsReference(unseen.id)).isTrue()
+      }
+
+  @Test
+  fun `tree that only peeked in from the top keeps hosts and premounted items`() =
+      withQueuedReleases(4) {
+        val (fixture, host, child, unseen) = premountedDrainTree()
+        scroll(fixture, Rect(0, 25, 10, 30))
+
+        detach(fixture)
+
+        assertThat(fixture.extension.prepareOffscreenDrain(fixture.extensionState)).isFalse()
+        fixture.releaseQueued()
+        assertThat(fixture.extensionState.ownsReference(child.id)).isFalse()
+        assertThat(fixture.extensionState.ownsReference(host.id)).isTrue()
+        assertThat(fixture.extensionState.ownsReference(unseen.id)).isTrue()
+      }
+
+  @Test
+  fun `full pass on a detached tree does not count as shown from its top`() =
+      withQueuedReleases(4) {
+        val (fixture, host, _, unseen) = premountedDrainTree()
+        fixture.extension.onVisibleBoundsChanged(
+            fixture.extensionState,
+            Rect(0, 0, 10, 30),
+            VisibilityChangeReason.MOUNT,
+        )
+        scroll(fixture, Rect(0, 25, 10, 30))
+
+        detach(fixture)
+
+        assertThat(fixture.extension.prepareOffscreenDrain(fixture.extensionState)).isFalse()
+        fixture.releaseQueued()
+        assertThat(fixture.extensionState.ownsReference(host.id)).isTrue()
+        assertThat(fixture.extensionState.ownsReference(unseen.id)).isTrue()
+      }
+
+  @Test
+  fun `tree mounted in place on screen is drained after it scrolls past the top`() =
+      withQueuedReleases(4) {
+        val (fixture, host, child, unseen) = premountedDrainTree()
+        val root = fixture.extensionState.rootHost as View
+        val parent = FrameLayout(ApplicationProvider.getApplicationContext())
+        parent.addView(root)
+        fixture.extension.beforeMount(
+            fixture.extensionState,
+            fixture.extensionState.state.input,
+            Rect(0, 0, 10, 30),
+        )
+        scroll(fixture, Rect(0, 5, 10, 30))
+        parent.removeView(root)
+
+        detach(fixture)
+
+        assertThat(fixture.extension.prepareOffscreenDrain(fixture.extensionState)).isTrue()
+        assertThat(fixture.releaseQueued()).isFalse()
+        for (output in listOf(host, child, unseen)) {
+          assertThat(fixture.extensionState.ownsReference(output.id)).isFalse()
+        }
+      }
+
+  @Test
+  fun `tree registered again on screen is still drained after it scrolls past the top`() =
+      withQueuedReleases(4) {
+        val (fixture, host, child, unseen) = premountedDrainTree()
+        scroll(fixture, Rect(0, 0, 10, 30))
+        fixture.extension.onRegisterForPremount(fixture.extensionState, null)
+        scroll(fixture, Rect(0, 5, 10, 30))
+
+        detach(fixture)
+
+        assertThat(fixture.extension.prepareOffscreenDrain(fixture.extensionState)).isTrue()
+        assertThat(fixture.releaseQueued()).isFalse()
+        for (output in listOf(host, child, unseen)) {
+          assertThat(fixture.extensionState.ownsReference(output.id)).isFalse()
+        }
+      }
+
+  @Test
+  fun `tree unbound without an empty pass is drained, its last visible slice included`() =
+      withQueuedReleases(4) {
+        val (fixture, host, child, unseen) = premountedDrainTree()
+        scrollPastTop(fixture)
+
+        fixture.extension.onUnbind(fixture.extensionState)
+
+        assertThat(fixture.extension.prepareOffscreenDrain(fixture.extensionState)).isTrue()
+        assertThat(fixture.releaseQueued()).isFalse()
+        for (output in listOf(host, child, unseen)) {
+          assertThat(fixture.extensionState.ownsReference(output.id)).isFalse()
+        }
+
+        FrameLayout(ApplicationProvider.getApplicationContext())
+            .addView(fixture.extensionState.rootHost as View)
+        scroll(fixture, Rect(0, 5, 10, 30))
+
+        assertThat(fixture.extensionState.ownsReference(host.id)).isTrue()
+        assertThat(fixture.extensionState.ownsReference(child.id)).isTrue()
+      }
+
+  @Test
+  fun `tree detached together with its parent keeps hosts and premounted items`() =
+      withQueuedReleases(4) {
+        val (fixture, host, child, unseen) = premountedDrainTree()
+        scrollPastTop(fixture)
+        FrameLayout(ApplicationProvider.getApplicationContext())
+            .addView(fixture.extensionState.rootHost as View)
+
+        detach(fixture)
+
+        assertThat(fixture.extension.prepareOffscreenDrain(fixture.extensionState)).isFalse()
+        fixture.releaseQueued()
+        assertThat(fixture.extensionState.ownsReference(child.id)).isFalse()
+        assertThat(fixture.extensionState.ownsReference(host.id)).isTrue()
+        assertThat(fixture.extensionState.ownsReference(unseen.id)).isTrue()
+      }
+
+  @Test
+  fun `tree attached again mid-drain stops draining and keeps what it still holds`() =
+      withQueuedReleases(4) {
+        val (fixture, host, child, unseen) = premountedDrainTree()
+        scrollPastTop(fixture)
+        detach(fixture)
+        assertThat(fixture.extension.prepareOffscreenDrain(fixture.extensionState)).isTrue()
+        var now = 0L
+        fixture.releaseQueued(deadlineNs = 1L) { now++ }
+        assertThat(fixture.extensionState.ownsReference(child.id)).isFalse()
+
+        FrameLayout(ApplicationProvider.getApplicationContext())
+            .addView(fixture.extensionState.rootHost as View)
+
+        assertThat(fixture.extension.prepareOffscreenDrain(fixture.extensionState)).isFalse()
+        assertThat(fixture.queuedReleases.isEmpty()).isTrue()
+        assertThat(fixture.extensionState.ownsReference(host.id)).isTrue()
+        assertThat(fixture.extensionState.ownsReference(unseen.id)).isTrue()
+      }
+
+  @Test
+  fun `tree shown again mid-drain keeps the releases the scroll path would queue`() =
+      withQueuedReleases(4) {
+        val host = output(id = 10, index = 1, top = 0, bottom = 30)
+        val above = output(id = 11, index = 2, top = 0, hostOutput = host, hostId = host.id)
+        val below = output(id = 12, index = 3, top = 20, hostOutput = host, hostId = host.id)
+        val unseen = output(id = 13, index = 4, top = 300)
+        val fixture = createCostAwareFixture(
+            listOf(host, above, below, unseen),
+            hostOutputIds = setOf(host.id),
+            mode = COST_AWARE_PREMOUNT_WITH_OFFSCREEN_DRAIN,
+        )
+        premountAll(fixture, host, above, below, unseen)
+        scrollPastTop(fixture)
+        detach(fixture)
+        assertThat(fixture.extension.prepareOffscreenDrain(fixture.extensionState)).isTrue()
+
+        FrameLayout(ApplicationProvider.getApplicationContext())
+            .addView(fixture.extensionState.rootHost as View)
+        scroll(fixture, Rect(0, 25, 10, 30))
+
+        assertThat(fixture.extension.isDrainingOffscreen(fixture.extensionState)).isFalse()
+        assertThat(fixture.queuedReleases.toLongArrayList()).containsExactly(above.id)
+        assertThat(fixture.extension.prepareOffscreenDrain(fixture.extensionState)).isFalse()
+        assertThat(fixture.releaseQueued()).isFalse()
+        assertThat(fixture.extensionState.ownsReference(above.id)).isFalse()
+        for (output in listOf(host, below, unseen)) {
+          assertThat(fixture.extensionState.ownsReference(output.id)).isTrue()
+        }
+      }
+
+  @Test
+  fun `tree registered again mid-drain keeps only the releases the scroll path would queue`() =
+      withQueuedReleases(4) {
+        val host = output(id = 10, index = 1, top = 0, bottom = 30)
+        val above = output(id = 11, index = 2, top = 0, hostOutput = host, hostId = host.id)
+        val below = output(id = 12, index = 3, top = 20, hostOutput = host, hostId = host.id)
+        val unseen = output(id = 13, index = 4, top = 300)
+        val fixture = createCostAwareFixture(
+            listOf(host, above, below, unseen),
+            hostOutputIds = setOf(host.id),
+            mode = COST_AWARE_PREMOUNT_WITH_OFFSCREEN_DRAIN,
+        )
+        premountAll(fixture, host, above, below, unseen)
+        scrollPastTop(fixture)
+        detach(fixture)
+        assertThat(fixture.extension.prepareOffscreenDrain(fixture.extensionState)).isTrue()
+
+        fixture.extension.onRegisterForPremount(fixture.extensionState, null)
+
+        assertThat(fixture.extension.isDrainingOffscreen(fixture.extensionState)).isFalse()
+        assertThat(fixture.queuedReleases.toLongArrayList())
+            .containsExactlyInAnyOrder(above.id, below.id)
+        assertThat(fixture.releaseQueued()).isFalse()
+        assertThat(fixture.extensionState.ownsReference(host.id)).isTrue()
+        assertThat(fixture.extensionState.ownsReference(unseen.id)).isTrue()
+      }
+
+  @Test
+  fun `tree that was never shown is not drained when unbound`() =
+      withQueuedReleases(4) {
+        val (fixture, host, child, unseen) = premountedDrainTree()
+
+        fixture.extension.onUnbind(fixture.extensionState)
+
+        assertThat(fixture.extension.prepareOffscreenDrain(fixture.extensionState)).isFalse()
+        for (output in listOf(host, child, unseen)) {
+          assertThat(fixture.extensionState.ownsReference(output.id)).isTrue()
+        }
+      }
+
+  @Test
+  fun `host whose child another extension keeps mounted is kept by the drain`() =
+      withQueuedReleases(4) {
+        val (fixture, host, child, unseen) = premountedDrainTree()
+        fixture.mountState
+            .registerExtension(HoldingExtension())
+            .acquireMountReference(child.id, isMounting = true)
+        scrollPastTop(fixture)
+        detach(fixture)
+
+        assertThat(fixture.extension.prepareOffscreenDrain(fixture.extensionState)).isTrue()
+        fixture.releaseQueued()
+
+        assertThat(fixture.extensionState.ownsReference(child.id)).isFalse()
+        assertThat(fixture.extensionState.ownsReference(unseen.id)).isFalse()
+        assertThat(fixture.extensionState.ownsReference(host.id)).isTrue()
+        assertThat(fixture.mountState.getContentById(host.id)).isNotNull()
+        assertThat(fixture.mountState.getContentById(child.id)).isNotNull()
+      }
+
+  @Test
+  fun `gap worker drains a removed tree without premounting into it and then drops it`() =
+      withQueuedReleases(4) {
+        val (fixture, host, child, unseen) = premountedDrainTree()
+        scrollPastTop(fixture)
+        val worker = fixture.startGapWorker()
+        detach(fixture)
+
+        worker.run()
+
+        assertThat(fixture.premountResults).isEmpty()
+        for (output in listOf(host, child, unseen)) {
+          assertThat(fixture.extensionState.ownsReference(output.id)).isFalse()
+        }
+
+        worker.run()
+
+        assertThat(fixture.premountResults).isEmpty()
+      }
+
+  @Test
+  fun `gap worker serves a tree on screen before a tree it is draining`() =
+      withQueuedReleases(4) {
+        val (drained, _, _, unseen) = premountedDrainTree()
+        val ahead = output(id = 20, index = 1, top = 300)
+        val onScreen =
+            createCostAwareFixture(listOf(ahead), mode = COST_AWARE_PREMOUNT_WITH_OFFSCREEN_DRAIN)
+        scroll(onScreen, Rect(0, 0, 10, 100))
+        IncrementalMountGapWorker.resetWorkerForTesting()
+        var now = 0L
+        // Each tree served ends the gap, so only the first tree in the worker's order is served.
+        val worker =
+            IncrementalMountGapWorker.get(
+                null,
+                drained.extensionState.tracer,
+                { now },
+                EwmaPremountCostEstimator(),
+            ) { extension, extensionState, deadlineNs, frameSequence, nanoTime, estimator ->
+              extension
+                  .premountNextForGapWorker(
+                      extensionState,
+                      deadlineNs,
+                      frameSequence,
+                      nanoTime,
+                      estimator,
+                  )
+                  .also { now = deadlineNs }
+            }
+        scrollPastTop(drained)
+        detach(drained)
+        worker.add(onScreen.extensionState.mountDelegate, null, costAware = true)
+
+        worker.run()
+
+        assertThat(onScreen.extensionState.ownsReference(ahead.id)).isTrue()
+        assertThat(drained.extension.isDrainingOffscreen(drained.extensionState)).isTrue()
+        assertThat(drained.queuedReleases.contains(unseen.id)).isTrue()
+        assertThat(drained.extensionState.ownsReference(unseen.id)).isTrue()
+      }
+
+  @Test
+  fun `unregistering clears a requested drain`() =
+      withQueuedReleases(4) {
+        val fixture = premountedDrainTree().fixture
+        scrollPastTop(fixture)
+        detach(fixture)
+
+        fixture.extension.onUnregisterForPremount(fixture.extensionState)
+
+        assertThat(fixture.extension.prepareOffscreenDrain(fixture.extensionState)).isFalse()
+        assertThat(fixture.queuedReleases.isEmpty()).isTrue()
+      }
+
   private fun nodeFor(output: IncrementalMountOutput): RenderTreeNode =
       RenderTreeNode(null, TestRenderUnit(output.id), null, output.bounds, null, 0)
 
@@ -2486,7 +2820,7 @@ class IncrementalMountExtensionTest {
           ),
       )
       val input = TestIncrementalMountExtensionInput(*inputOutputs.toTypedArray())
-      if (mode == COST_AWARE_PREMOUNT_WITH_INCREMENTAL_UNMOUNT) {
+      if (mode.unmountsIncrementally) {
         extensionState.state.isRegisteredWithGapWorker = true
         extensionState.state.premountLifecycle?.startSession()
         extension.beforeMount(extensionState, input, Rect())
@@ -2521,6 +2855,48 @@ class IncrementalMountExtensionTest {
           VisibilityChangeReason.SCROLL,
       )
     }
+
+    /** What a row gets as RecyclerView removes it: an empty measured pass, then unbind. */
+    private fun detach(fixture: CostAwarePremountFixture) {
+      scroll(fixture, Rect())
+      fixture.extension.onUnbind(fixture.extensionState)
+    }
+
+    /** Shows the tree from its top edge, then scrolls it up until its top is cut off. */
+    private fun scrollPastTop(fixture: CostAwarePremountFixture) {
+      scroll(fixture, Rect(0, 0, 10, 30))
+      scroll(fixture, Rect(0, 5, 10, 30))
+    }
+
+    private fun premountAll(
+        fixture: CostAwarePremountFixture,
+        vararg outputs: IncrementalMountOutput,
+    ) {
+      var frameSequence = 1L
+      while (outputs.any { !fixture.extensionState.ownsReference(it.id) } && frameSequence < 20) {
+        fixture.premount(frameSequence = frameSequence++)
+      }
+      for (output in outputs) {
+        assertThat(fixture.extensionState.ownsReference(output.id)).isTrue()
+      }
+    }
+
+    /** A host with a leaf, and a leaf further down that is premounted but never seen. */
+    private fun premountedDrainTree(): DrainTree {
+      val host = output(id = 10, index = 1, top = 0, bottom = 30)
+      val child = output(id = 11, index = 2, top = 20, hostOutput = host, hostId = host.id)
+      val unseen = output(id = 12, index = 3, top = 300)
+      val fixture = createCostAwareFixture(
+          listOf(host, child, unseen),
+          hostOutputIds = setOf(host.id),
+          mode = COST_AWARE_PREMOUNT_WITH_OFFSCREEN_DRAIN,
+      )
+      premountAll(fixture, host, child, unseen)
+      return DrainTree(fixture, host, child, unseen)
+    }
+
+    private fun MutableLongList.toLongArrayList(): List<Long> =
+        ArrayList<Long>(size).also { list -> forEach { list.add(it) } }
 
     private fun withQueuedReleases(maxPending: Int, block: () -> Unit) {
       val saved = IncrementalMountExtensionConfigs.maxPendingOffscreenReleases
@@ -2558,6 +2934,11 @@ class IncrementalMountExtensionTest {
     }
   }
 
+  /** Holds mount references for another extension on the same mount state. */
+  private class HoldingExtension : MountExtension<Unit, Unit>() {
+    override fun createState(): Unit = Unit
+  }
+
   private class CallbackTestRenderUnit(
       id: Long,
       private val onCreate: () -> Unit,
@@ -2578,6 +2959,13 @@ class IncrementalMountExtensionTest {
       super.unmountBinders(context, content, layoutData, bindData)
     }
   }
+
+  private data class DrainTree(
+      val fixture: CostAwarePremountFixture,
+      val host: IncrementalMountOutput,
+      val child: IncrementalMountOutput,
+      val unseen: IncrementalMountOutput,
+  )
 
   private class CostAwarePremountFixture(
       val extension: IncrementalMountExtension,

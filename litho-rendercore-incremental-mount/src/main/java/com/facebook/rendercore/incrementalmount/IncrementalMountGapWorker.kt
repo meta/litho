@@ -134,6 +134,8 @@ private constructor(
   private val delegates: MutableSet<MountDelegate> = mutableSetOf()
   // Trees whose gap worker mode asks for the cost-aware route.
   private val costAwareDelegates: MutableSet<MountDelegate> = mutableSetOf()
+  // Trees that may need emptying after they scrolled away; see [addDrainCandidate].
+  private val drainCandidates: MutableSet<MountDelegate> = mutableSetOf()
 
   private var latestFrameTimeNs: Long = 0
 
@@ -215,7 +217,9 @@ private constructor(
       // re-enters this worker's add/remove through onRegisterForPremount — a RecyclerBinder bound
       // or recycled inside a premount is enough. A live iterator sees that as concurrent
       // modification and throws on the UI thread.
-      for (delegate in delegates.toList()) {
+      val snapshot = delegates.toList()
+      val ordered = if (drainCandidates.isEmpty()) snapshot else drainingLast(snapshot)
+      for (delegate in ordered) {
         if (hasReachedDeadline(deadlineNs)) {
           break
         }
@@ -227,6 +231,7 @@ private constructor(
         if (!premountNext(delegate, deadlineNs, frameSequence)) {
           delegates.remove(delegate)
           costAwareDelegates.remove(delegate)
+          drainCandidates.remove(delegate)
         }
       }
     } finally {
@@ -234,6 +239,37 @@ private constructor(
         tracer.endSection()
       }
     }
+  }
+
+  /** Puts the trees being emptied after they scrolled away behind the trees on screen or ahead. */
+  private fun drainingLast(snapshot: List<MountDelegate>): List<MountDelegate> {
+    val ordered = ArrayList<MountDelegate>(snapshot.size)
+    val draining = ArrayList<MountDelegate>(drainCandidates.size)
+    for (delegate in snapshot) {
+      if (delegate in drainCandidates && isDrainingRemovedTree(delegate)) {
+        draining.add(delegate)
+      } else {
+        ordered.add(delegate)
+      }
+    }
+    ordered.addAll(draining)
+    return ordered
+  }
+
+  @Suppress("UNCHECKED_CAST")
+  private fun isDrainingRemovedTree(delegate: MountDelegate): Boolean {
+    val extensionState = delegate.getGapWorkerExtensionState()
+    val extension = extensionState?.extension as? IncrementalMountExtension
+    val draining =
+        extension != null &&
+            extension.prepareOffscreenDrain(
+                extensionState
+                    as ExtensionState<IncrementalMountExtension.IncrementalMountExtensionState>,
+            )
+    if (!draining) {
+      drainCandidates.remove(delegate)
+    }
+    return draining
   }
 
   /** returns `true` iff there are still items left to mount */
@@ -298,12 +334,16 @@ private constructor(
   ): Boolean {
     val incrementalMountState =
         extensionState as ExtensionState<IncrementalMountExtension.IncrementalMountExtensionState>
+    val draining = extension.isDrainingOffscreen(incrementalMountState)
     // Releases first: they are owed, while premounting is speculative.
     delegate.startNotifyVisibleBoundsChangedSection()
     try {
       extension.releaseQueuedOffscreenForGapWorker(incrementalMountState, deadlineNs, nanoTime)
     } finally {
       delegate.endNotifyVisibleBoundsChangedSection()
+    }
+    if (draining) {
+      return extension.hasQueuedOffscreenReleases(incrementalMountState)
     }
     while (!hasReachedDeadline(deadlineNs)) {
       // One catch for the whole body: any throw leaves the pending sample behind, and a stale one
@@ -415,6 +455,17 @@ private constructor(
   fun remove(root: MountDelegate) {
     delegates.remove(root)
     costAwareDelegates.remove(root)
+    drainCandidates.remove(root)
+  }
+
+  /**
+   * Registers a cost-aware tree that was just unbound and may need emptying; see
+   * [GapWorkerMode.COST_AWARE_PREMOUNT_WITH_OFFSCREEN_DRAIN]. Each pass checks it until it is
+   * drained or found to be still in use.
+   */
+  internal fun addDrainCandidate(root: MountDelegate) {
+    drainCandidates.add(root)
+    add(root, null, costAware = true)
   }
 
   companion object {

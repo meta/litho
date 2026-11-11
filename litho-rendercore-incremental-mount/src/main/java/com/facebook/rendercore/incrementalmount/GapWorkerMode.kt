@@ -32,8 +32,25 @@ enum class GapWorkerMode {
    * Always cost-aware: only that route lets premounted items be marked seen when they scroll in.
    */
   COST_AWARE_PREMOUNT_WITH_INCREMENTAL_UNMOUNT,
+  /**
+   * [COST_AWARE_PREMOUNT_WITH_INCREMENTAL_UNMOUNT], plus the gap worker empties a tree that
+   * scrolled up past the top of the viewport and was then removed from its parent, such as a
+   * RecyclerBinder row moved into the RecyclerView view cache: leaves first, then hosts once they
+   * are empty, including premounted items that were never seen. Recycling the row later then has
+   * almost nothing left to unmount inside a scroll frame. In lists that do not scroll content
+   * upward this behaves like [COST_AWARE_PREMOUNT_WITH_INCREMENTAL_UNMOUNT].
+   */
+  COST_AWARE_PREMOUNT_WITH_OFFSCREEN_DRAIN,
   ;
 
   internal val requestsCostAwareRoute: Boolean
-    get() = this == COST_AWARE_PREMOUNT || this == COST_AWARE_PREMOUNT_WITH_INCREMENTAL_UNMOUNT
+    get() = this == COST_AWARE_PREMOUNT || unmountsIncrementally
+
+  internal val unmountsIncrementally: Boolean
+    get() =
+        this == COST_AWARE_PREMOUNT_WITH_INCREMENTAL_UNMOUNT ||
+            this == COST_AWARE_PREMOUNT_WITH_OFFSCREEN_DRAIN
+
+  internal val drainsRemovedTrees: Boolean
+    get() = this == COST_AWARE_PREMOUNT_WITH_OFFSCREEN_DRAIN
 }

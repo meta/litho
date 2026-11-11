@@ -53,6 +53,7 @@ class IncrementalMountExtension(
     OnItemCallbacks<IncrementalMountExtensionState>,
     InformsMountCallback {
   private val useGapWorker: Boolean = gapWorkerMode != GapWorkerMode.OFF
+  private val drainsRemovedTrees: Boolean = gapWorkerMode.drainsRemovedTrees
 
   public override fun createState(): IncrementalMountExtensionState {
     return IncrementalMountExtensionState(gapWorkerMode)
@@ -66,11 +67,13 @@ class IncrementalMountExtension(
       val state = extensionState.state
       val lifecycle = state.premountLifecycle
       // A rebind of an attached row registers again without an unregister; keeping the active
-      // session keeps what is already SEEN or RELEASED.
+      // session keeps what is already SEEN or RELEASED, and the row stays shown from its top.
       if (lifecycle != null && lifecycle.currentSession() == null) {
         lifecycle.startSession()
       }
       state.isRegisteredWithGapWorker = true
+      stopOffscreenDrain(extensionState)
+      state.scrolledPastTop = false
       val worker: IncrementalMountGapWorker = getGapWorker(extensionState)
       worker.add(extensionState.mountDelegate, frameTimeMs, gapWorkerMode.requestsCostAwareRoute)
     }
@@ -83,6 +86,7 @@ class IncrementalMountExtension(
       val state = extensionState.state
       state.premountLifecycle?.stopSession()
       state.isRegisteredWithGapWorker = false
+      clearOffscreenDrain(state)
       val worker: IncrementalMountGapWorker = getGapWorker(extensionState)
       worker.remove(extensionState.mountDelegate)
     }
@@ -117,6 +121,9 @@ class IncrementalMountExtension(
     state.needsSeenSweep = true
 
     setVisibleRect(state, localVisibleRect)
+    if (localVisibleRect != null) {
+      noteShownFromTop(extensionState, localVisibleRect, isMeasured = false)
+    }
 
     state.currentReason = VisibilityChangeReason.UNKNOWN
 
@@ -399,7 +406,10 @@ class IncrementalMountExtension(
     scan.pendingMountStartNs = 0L
   }
 
-  /** Releases queued off-screen items, oldest first, until [deadlineNs]. */
+  /**
+   * Releases queued off-screen items, oldest first, until [deadlineNs]. While the tree is drained,
+   * empty hosts and never-seen premounted items are released too.
+   */
   internal fun releaseQueuedOffscreenForGapWorker(
       extensionState: ExtensionState<IncrementalMountExtensionState>,
       deadlineNs: Long,
@@ -418,12 +428,16 @@ class IncrementalMountExtension(
           .flush()
     }
     try {
+      val draining = state.offscreenDrain == OffscreenDrain.DRAINING
       while (pending.isNotEmpty() && nanoTime() < deadlineNs) {
         val id = pending.removeAt(0)
         val output = state.input?.getIncrementalMountOutputForId(id)
         if (output != null && !isVisibleInLatestLayout(state, id)) {
-          maybeReleaseOffscreenReference(extensionState, output, true)
+          maybeReleaseOffscreenReference(extensionState, output, true, draining)
         }
+      }
+      if (draining && pending.isEmpty()) {
+        state.offscreenDrain = OffscreenDrain.NONE
       }
     } finally {
       if (isTracing) {
@@ -435,6 +449,124 @@ class IncrementalMountExtension(
   internal fun hasQueuedOffscreenReleases(
       extensionState: ExtensionState<IncrementalMountExtensionState>,
   ): Boolean = extensionState.state.premountLifecycle?.pendingReleases?.isNotEmpty() == true
+
+  /**
+   * Called by the gap worker before it works on this tree. A requested drain starts once the tree's
+   * root is out of the window and has no parent, and stops if the root is attached again: a tree
+   * detached together with its parent, because the whole screen went away, keeps what it holds.
+   * Returns whether the tree is being drained, in which case it gets no premount work.
+   */
+  internal fun prepareOffscreenDrain(
+      extensionState: ExtensionState<IncrementalMountExtensionState>,
+  ): Boolean {
+    val state = extensionState.state
+    if (state.offscreenDrain == OffscreenDrain.NONE) {
+      return false
+    }
+    if (isRootInUse(extensionState)) {
+      stopOffscreenDrain(extensionState)
+      return false
+    }
+    if (state.offscreenDrain == OffscreenDrain.REQUESTED) {
+      // Without the empty pass at detach (UnmountOnDetach.Never) this still holds the last slice
+      // on screen, and the drain would skip its items. Empty, it also makes the next pass a full
+      // one.
+      state.previousLocalVisibleRect.setEmpty()
+      queueEverythingLeftForDrain(extensionState)
+      state.offscreenDrain = OffscreenDrain.DRAINING
+    }
+    return true
+  }
+
+  internal fun isDrainingOffscreen(
+      extensionState: ExtensionState<IncrementalMountExtensionState>,
+  ): Boolean = extensionState.state.offscreenDrain == OffscreenDrain.DRAINING
+
+  private fun isRootInUse(extensionState: ExtensionState<IncrementalMountExtensionState>): Boolean {
+    val root = extensionState.rootHost
+    return root.isAttachedToWindow || root.parent != null
+  }
+
+  /**
+   * A measured pass reflects the viewport. Other passes, including the one a mount starts with,
+   * count only while the root is in use, since a detached root can report its full bounds.
+   */
+  private fun noteShownFromTop(
+      extensionState: ExtensionState<IncrementalMountExtensionState>,
+      visibleRect: Rect,
+      isMeasured: Boolean,
+  ) {
+    if (
+        drainsRemovedTrees &&
+            !visibleRect.isEmpty &&
+            visibleRect.top == 0 &&
+            (isMeasured || isRootInUse(extensionState))
+    ) {
+      extensionState.state.shownFromTop = true
+    }
+  }
+
+  /**
+   * The tree is in use again, so it is no longer emptied. Queued releases the scroll path would
+   * also have queued stay queued, up to its cap; hosts and premounted items leave the queue and
+   * stay mounted.
+   */
+  private fun stopOffscreenDrain(extensionState: ExtensionState<IncrementalMountExtensionState>) {
+    val state = extensionState.state
+    val lifecycle = state.premountLifecycle
+    if (state.offscreenDrain == OffscreenDrain.DRAINING && lifecycle != null) {
+      val pending = lifecycle.pendingReleases
+      val queuedBefore = pending.size
+      val maxPending = IncrementalMountExtensionConfigs.maxPendingOffscreenReleases
+      var kept = 0
+      for (i in 0 until pending.size) {
+        val id = pending[i]
+        if (kept < maxPending && canQueueOffscreenRelease(extensionState, lifecycle, id)) {
+          pending[kept++] = id
+        }
+      }
+      pending.removeRange(kept, pending.size)
+      if (extensionState.tracer.isTracing()) {
+        extensionState.tracer
+            .beginSectionWithArgs(TRACE_OFFSCREEN_DRAIN_STOP)
+            .arg("queuedBefore", queuedBefore)
+            .arg("kept", kept)
+            .flush()
+        extensionState.tracer.endSection()
+      }
+    }
+    state.offscreenDrain = OffscreenDrain.NONE
+  }
+
+  /** Queues every item still held, deepest first, so children are released before their hosts. */
+  private fun queueEverythingLeftForDrain(
+      extensionState: ExtensionState<IncrementalMountExtensionState>,
+  ) {
+    val state = extensionState.state
+    val pending = state.premountLifecycle?.pendingReleases ?: return
+    val outputs = state.input?.getIncrementalMountOutputs() ?: return
+    val queuedBefore = pending.size
+    // Children follow their hosts in the outputs, so going backwards releases hosts last.
+    for (output in outputs.reversed()) {
+      val id = output.id
+      if (
+          !isRootItem(id) &&
+              !output.excludeFromIncrementalMount() &&
+              extensionState.ownsReference(id) &&
+              !pending.contains(id)
+      ) {
+        pending.add(id)
+      }
+    }
+    if (extensionState.tracer.isTracing()) {
+      extensionState.tracer
+          .beginSectionWithArgs(TRACE_OFFSCREEN_DRAIN_START)
+          .arg("queuedBefore", queuedBefore)
+          .arg("queued", pending.size)
+          .flush()
+      extensionState.tracer.endSection()
+    }
+  }
 
   private fun premountNextOutput(
       extensionState: ExtensionState<IncrementalMountExtensionState>,
@@ -896,6 +1028,17 @@ class IncrementalMountExtension(
         return
       }
       runSeenSweepIfNeeded(extensionState, visibleRect)
+      if (drainsRemovedTrees && !visibleRect.isEmpty) {
+        // Before this pass queues anything: a drain's queue can be far over the cap, and queueing
+        // onto it would run overflow releases inside this frame.
+        if (state.offscreenDrain != OffscreenDrain.NONE && isRootInUse(extensionState)) {
+          stopOffscreenDrain(extensionState)
+        }
+        noteShownFromTop(extensionState, visibleRect, isMeasuredViewportReason(reason))
+        if (isMeasuredViewportReason(reason)) {
+          state.scrolledPastTop = state.shownFromTop && visibleRect.top > 0
+        }
+      }
 
       // Horizontally scrolling or no visible rect. Can't incrementally mount.
       if (
@@ -918,7 +1061,21 @@ class IncrementalMountExtension(
     }
   }
 
-  override fun onUnbind(extensionState: ExtensionState<IncrementalMountExtensionState>): Unit = Unit
+  override fun onUnbind(extensionState: ExtensionState<IncrementalMountExtensionState>) {
+    val state = extensionState.state
+    if (!drainsRemovedTrees || !state.isRegisteredWithGapWorker || !state.scrolledPastTop) {
+      return
+    }
+    state.offscreenDrain = OffscreenDrain.REQUESTED
+    // Whether the tree was removed is only known once the detach that unbound it has finished.
+    getGapWorker(extensionState).addDrainCandidate(extensionState.mountDelegate)
+  }
+
+  private fun clearOffscreenDrain(state: IncrementalMountExtensionState) {
+    state.offscreenDrain = OffscreenDrain.NONE
+    state.shownFromTop = false
+    state.scrolledPastTop = false
+  }
 
   override fun onBindItem(
       extensionState: ExtensionState<IncrementalMountExtensionState>,
@@ -1005,6 +1162,7 @@ class IncrementalMountExtension(
     val state = extensionState.state
     val lifecycle = state.premountLifecycle ?: return
     lifecycle.stopSession()
+    clearOffscreenDrain(state)
     state.input = null
     resetCostAwareSchedulerState(state)
     if (state.isRegisteredWithGapWorker) {
@@ -1017,6 +1175,7 @@ class IncrementalMountExtension(
     extensionState.state.premountLifecycle?.stopSession()
     extensionState.releaseAllAcquiredReferences()
     val state: IncrementalMountExtensionState = extensionState.state
+    clearOffscreenDrain(state)
     state.input = null
     state.previousLocalVisibleRect.setEmpty()
     state.componentIdsMountedInThisFrameBitmap.clear()
@@ -1025,6 +1184,15 @@ class IncrementalMountExtension(
 
   override fun canPreventMount(): Boolean {
     return true
+  }
+
+  /** Where a tree is in being emptied by the gap worker after it scrolled away. */
+  internal enum class OffscreenDrain {
+    NONE,
+    /** Unbound after it scrolled up past the top; the gap worker checks whether it was removed. */
+    REQUESTED,
+    /** Removed: the gap worker releases everything it holds and premounts nothing until done. */
+    DRAINING,
   }
 
   @VisibleForTesting
@@ -1056,11 +1224,26 @@ class IncrementalMountExtension(
     internal var needsSeenSweep: Boolean = false
 
     internal val premountLifecycle: PremountLifecycle? =
-        if (gapWorkerMode == GapWorkerMode.COST_AWARE_PREMOUNT_WITH_INCREMENTAL_UNMOUNT) {
+        if (gapWorkerMode.unmountsIncrementally) {
           PremountLifecycle()
         } else {
           null
         }
+
+    /** Only moves off NONE in drain mode. */
+    internal var offscreenDrain: OffscreenDrain = OffscreenDrain.NONE
+
+    /** Whether this tree was shown from its top edge, so the user reached it. */
+    internal var shownFromTop: Boolean = false
+
+    /**
+     * Whether the last measured pass that showed part of this tree had its top cut off after the
+     * tree was shown from its top edge, so the user reached it and it is leaving through the top of
+     * the viewport. A tree never shown, shown last from its top edge, such as the next row the user
+     * only peeked at, or only ever shown below its top edge, such as the previous row peeking in
+     * during a back swipe that snapped back, is never drained.
+     */
+    internal var scrolledPastTop: Boolean = false
 
     internal val costAwareScan: CostAwarePremountScan = CostAwarePremountScan()
     internal val starvation: StarvationTracker = StarvationTracker()
@@ -1077,6 +1260,8 @@ class IncrementalMountExtension(
     private const val TRACE_PENDING_RELEASE_QUEUED = "IM.pendingRelease.QUEUED"
     private const val TRACE_PENDING_RELEASE_CANCELLED = "IM.pendingRelease.CANCELLED"
     private const val TRACE_PENDING_RELEASE_OVERFLOW = "IM.pendingRelease.OVERFLOW"
+    private const val TRACE_OFFSCREEN_DRAIN_START = "IM.offscreenDrain.START"
+    private const val TRACE_OFFSCREEN_DRAIN_STOP = "IM.offscreenDrain.STOP"
 
     val instance: IncrementalMountExtension = IncrementalMountExtension(GapWorkerMode.OFF)
     private val PremountInstance = IncrementalMountExtension(GapWorkerMode.PREMOUNT)
@@ -1084,6 +1269,8 @@ class IncrementalMountExtension(
         IncrementalMountExtension(GapWorkerMode.COST_AWARE_PREMOUNT)
     private val IncrementalUnmountInstance =
         IncrementalMountExtension(GapWorkerMode.COST_AWARE_PREMOUNT_WITH_INCREMENTAL_UNMOUNT)
+    private val OffscreenDrainInstance =
+        IncrementalMountExtension(GapWorkerMode.COST_AWARE_PREMOUNT_WITH_OFFSCREEN_DRAIN)
 
     @JvmStatic
     fun getInstance(mode: GapWorkerMode): IncrementalMountExtension =
@@ -1092,6 +1279,7 @@ class IncrementalMountExtension(
           GapWorkerMode.PREMOUNT -> PremountInstance
           GapWorkerMode.COST_AWARE_PREMOUNT -> CostAwarePremountInstance
           GapWorkerMode.COST_AWARE_PREMOUNT_WITH_INCREMENTAL_UNMOUNT -> IncrementalUnmountInstance
+          GapWorkerMode.COST_AWARE_PREMOUNT_WITH_OFFSCREEN_DRAIN -> OffscreenDrainInstance
         }
 
     fun recursivelyNotifyVisibleBoundsChanged(
@@ -1336,6 +1524,7 @@ class IncrementalMountExtension(
         extensionState: ExtensionState<IncrementalMountExtensionState>,
         output: IncrementalMountOutput,
         isMounting: Boolean,
+        draining: Boolean = false,
     ): Boolean {
       val id = output.id
       if (!extensionState.ownsReference(id)) {
@@ -1349,10 +1538,14 @@ class IncrementalMountExtension(
       }
       val lifecycle = state.premountLifecycle ?: return false
       val session = lifecycle.currentSession() ?: return false
-      if (getContentById(extensionState, id) is Host) {
+      val content = getContentById(extensionState, id)
+      // A drain queues children before their hosts, so a host that still holds items here holds
+      // ones the drain could not release, such as items another extension keeps mounted, and
+      // stays.
+      if (content is Host && (!draining || content.mountItemCount > 0)) {
         return false
       }
-      val decision = lifecycle.beginOffscreenRelease(session, id)
+      val decision = lifecycle.beginOffscreenRelease(session, id, releasePremounted = draining)
       if (
           decision == PremountLifecycle.ReleaseDecision.RETAIN ||
               decision == PremountLifecycle.ReleaseDecision.STALE
