@@ -319,7 +319,13 @@ internal constructor(
     componentSaveableStateRegistry = null
     val toRun = closeActions.toList()
     closeActions.clear()
-    toRun.forEach { runCatching { it() }.getOrDefault(Unit) }
+    toRun.forEach { action ->
+      try {
+        action()
+      } catch (t: Throwable) {
+        // Isolate failures so every remaining close action still runs.
+      }
+    }
   }
 
   // --------------------------- Internal binding ------------------------------
