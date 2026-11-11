@@ -105,17 +105,6 @@ class UiStateReadRecords(
   }
 
   override fun onBind(binderId: BinderId, func: () -> Unit) {
-    if (!config.isReadTrackingEnabled) {
-      if (binderEventListener != null) {
-        val start = System.nanoTime()
-        func()
-        binderEventListener.onBindComplete(binderId, System.nanoTime() - start)
-      } else {
-        func()
-      }
-      return
-    }
-
     val treeId = config.currentTreeId()
     val start = if (binderEventListener != null) System.nanoTime() else 0L
     val reads = StateReadRecorder.record(treeId, binderId.binderDebugDescription, scope = func)
@@ -132,7 +121,6 @@ class UiStateReadRecords(
 
   override fun onUnbind(binderId: BinderId, func: () -> Unit) {
     func()
-    if (!config.isReadTrackingEnabled) return
 
     val states = binderToStates.remove(binderId) ?: return
     states.forEach { stateId ->
@@ -143,8 +131,6 @@ class UiStateReadRecords(
   }
 
   fun recordOnDraw(hostId: Long, description: String?, func: () -> Unit) {
-    if (!config.isReadTrackingEnabled) return func()
-
     val treeId = config.currentTreeId()
     val reads = StateReadRecorder.record(treeId, description, scope = func)
 
@@ -157,8 +143,6 @@ class UiStateReadRecords(
   }
 
   fun removeDrawScope(hostId: Long) {
-    if (!config.isReadTrackingEnabled) return
-
     val states = drawHostToStates.remove(hostId) ?: return
     states.forEach { stateId ->
       val hosts = onDrawRecords[stateId] ?: return@forEach
@@ -196,8 +180,6 @@ class UiStateReadRecords(
   }
 
   interface Config {
-    val isReadTrackingEnabled: Boolean
-
     fun currentTreeId(): Int
   }
 }

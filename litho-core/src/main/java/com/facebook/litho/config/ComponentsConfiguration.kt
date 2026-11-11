@@ -153,8 +153,6 @@ internal constructor(
      * attributes that may have been added by non-litho code.
      */
     @JvmField val isHostViewAttributesCleanUpEnabled: Boolean = false,
-    /** This flag is used to enable the new state read tracking logic. */
-    @JvmField val enableStateReadTracking: Boolean = true,
     /** Determines the policy to use when measuring in resolve phase is detected. */
     @JvmField val measureInResolvePolicy: LogicViolationPolicy = LogicViolationPolicy.LOG,
     /** Determines the policy to use when state reads across tree boundaries is detected. */
@@ -696,10 +694,6 @@ internal constructor(
 
     fun enableHostViewAttributesCleanUp(enabled: Boolean): Builder = apply {
       config = config.copy(isHostViewAttributesCleanUpEnabled = enabled)
-    }
-
-    fun enableStateReadTracking(enabled: Boolean): Builder = apply {
-      config = config.copy(enableStateReadTracking = enabled)
     }
 
     fun useOptimizedContextualEffectHandler(enabled: Boolean): Builder = apply {

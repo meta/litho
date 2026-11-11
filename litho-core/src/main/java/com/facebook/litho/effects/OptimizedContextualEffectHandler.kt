@@ -317,7 +317,7 @@ internal class OptimizedContextualEffectHandler : EffectHandler {
   }
 
   private fun Attachable.runWithTracking(context: EffectContext, expectedReadRecordCount: Int) {
-    if (!context.isReadTrackingEnabled || useLegacyUpdateBehavior()) {
+    if (useLegacyUpdateBehavior()) {
       attach()
       return
     }

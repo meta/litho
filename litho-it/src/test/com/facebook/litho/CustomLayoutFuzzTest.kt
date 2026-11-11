@@ -88,12 +88,6 @@ class CustomLayoutFuzzTest {
 
   @JvmField @Rule val lithoTestRule = LithoTestRule()
 
-  /** For [Mode.READ_TRACKING_OFF]: a tree whose state reads are not tracked. */
-  @JvmField
-  @Rule
-  val untrackedTestRule =
-      LithoTestRule(ComponentsConfiguration.create().enableStateReadTracking(false).build())
-
   private var validationWas = false
 
   private val runTag: String = Integer.toHexString(System.identityHashCode(this))
@@ -103,9 +97,6 @@ class CustomLayoutFuzzTest {
 
   private var mode = Mode.CROSS_PASS_OFF
 
-  private val rule: LithoTestRule
-    get() = if (mode == Mode.READ_TRACKING_OFF) untrackedTestRule else lithoTestRule
-
   enum class Mode {
     CROSS_PASS_OFF,
     /**
@@ -113,7 +104,6 @@ class CustomLayoutFuzzTest {
      */
     CROSS_PASS_ON,
     RTL,
-    READ_TRACKING_OFF,
   }
 
   @Before
@@ -141,11 +131,6 @@ class CustomLayoutFuzzTest {
   @Test
   fun `incremental layout matches a fresh layout, right to left`() {
     fuzz(Mode.RTL)
-  }
-
-  @Test
-  fun `incremental layout matches a fresh layout, read tracking off`() {
-    fuzz(Mode.READ_TRACKING_OFF)
   }
 
   private fun fuzz(mode: Mode) {
@@ -203,7 +188,7 @@ class CustomLayoutFuzzTest {
     val steps = ArrayList<String>()
     val view: TestLithoView
     try {
-      view = rule.render(widthPx = width, heightPx = VIEWPORT) { top(model, world) }
+      view = lithoTestRule.render(widthPx = width, heightPx = VIEWPORT) { top(model, world) }
     } catch (e: Throwable) {
       return "seed=$seed|step=initial|exception=${describe(e)}|tree=${model.describe()}"
     }
@@ -230,8 +215,8 @@ class CustomLayoutFuzzTest {
         } else {
           val id = op.substringAfter('[').substringBefore(']').toInt()
           val value = world.values.getValue(id)
-          rule.act(view) { world.states.getValue(id).update(value) }
-          rule.idle()
+          lithoTestRule.act(view) { world.states.getValue(id).update(value) }
+          lithoTestRule.idle()
           view.measure().layout()
         }
       } catch (e: Throwable) {
@@ -244,7 +229,7 @@ class CustomLayoutFuzzTest {
           try {
             val freshWorld = World().also { it.values.putAll(world.values) }
             frames(
-                rule.render(widthPx = width, heightPx = VIEWPORT) {
+                lithoTestRule.render(widthPx = width, heightPx = VIEWPORT) {
                   top(model, freshWorld)
                 },
             )
@@ -462,7 +447,7 @@ class CustomLayoutFuzzTest {
         is FMeasureCall ->
             Row {
               child(
-                  ComponentWithMeasureCall.create(rule.context)
+                  ComponentWithMeasureCall.create(lithoTestRule.context)
                       .component(build(node.inner, world))
                       .widthSpec(SizeSpec.makeSizeSpec(node.size, SizeSpec.EXACTLY))
                       .heightSpec(SizeSpec.makeSizeSpec(node.size, SizeSpec.EXACTLY))
@@ -539,7 +524,6 @@ class CustomLayoutFuzzTest {
         Mode.CROSS_PASS_OFF to emptySet(),
         Mode.CROSS_PASS_ON to emptySet(),
         Mode.RTL to emptySet(),
-        Mode.READ_TRACKING_OFF to emptySet(),
     )
 
     const val SEEDS = 400

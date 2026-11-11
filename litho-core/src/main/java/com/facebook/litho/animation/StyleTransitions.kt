@@ -37,7 +37,6 @@ import com.facebook.litho.animation.StyleTransitionProperty.WIDTH
 import com.facebook.litho.animation.StyleTransitionProperty.X
 import com.facebook.litho.animation.StyleTransitionProperty.Y
 import com.facebook.litho.annotations.ExperimentalLithoApi
-import com.facebook.litho.isReadTrackingEnabled
 
 /**
  * Adds a diff-based transition to the host represented by this [Style].
@@ -317,11 +316,6 @@ private enum class TransitionStyleField : StyleItemField {
 internal data class TransitionStyleItem(val spec: StyleTransitionSpec) :
     StyleItem<TransitionStyleItemValue> {
   override fun applyCommonProps(context: ComponentContext, commonProps: CommonProps) {
-    // Reflow rides the read pipeline; fail fast rather than silently not animating.
-    check(!spec.shouldLayout || context.isReadTrackingEnabled) {
-      "Style.transition { size(reflow = true) / bounds(reflow = true) } requires state read tracking " +
-          "(ComponentsConfiguration.enableStateReadTracking) to be enabled."
-    }
     commonProps.styleTransition(StyleTransitionData(spec))
   }
 

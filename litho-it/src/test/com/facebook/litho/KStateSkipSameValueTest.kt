@@ -16,7 +16,6 @@
 
 package com.facebook.litho
 
-import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.kotlin.widget.Text
 import com.facebook.litho.layout.flexbox.Row
 import com.facebook.litho.testing.LithoTestRule
@@ -36,10 +35,7 @@ import org.robolectric.shadows.ShadowLooper
 @LooperMode(LooperMode.Mode.LEGACY)
 @RunWith(LithoTestRunner::class)
 class KStateSkipSameValueTest {
-  @Rule
-  @JvmField
-  val lithoTestRule =
-      LithoTestRule(ComponentsConfiguration.defaultInstance.copy(enableStateReadTracking = false))
+  @Rule @JvmField val lithoTestRule = LithoTestRule()
 
   @Test
   fun `skip state update if new value is the same as old value during layout`() {
@@ -55,7 +51,7 @@ class KStateSkipSameValueTest {
         // unconditional state update
         state.updateSync(true)
 
-        return Row { child(Text(text = "hello world")) }
+        return Row { child(Text(text = "State is ${state.value}")) }
       }
     }
 
@@ -82,7 +78,7 @@ class KStateSkipSameValueTest {
         // unconditional state update
         state.updateSync(null)
 
-        return Row { child(Text(text = "hello world")) }
+        return Row { child(Text(text = "State is ${state.value}")) }
       }
     }
 
@@ -108,7 +104,7 @@ class KStateSkipSameValueTest {
         // unconditional state update
         state.updateSync(Person("Joe"))
 
-        return Row { child(Text(text = "hello world")) }
+        return Row { child(Text(text = "State is ${state.value}")) }
       }
     }
 
@@ -132,7 +128,7 @@ class KStateSkipSameValueTest {
         // unconditional state update
         state.update(true)
 
-        return Row { child(Text(text = "hello world")) }
+        return Row { child(Text(text = "State is ${state.value}")) }
       }
     }
 
@@ -156,7 +152,7 @@ class KStateSkipSameValueTest {
         // unconditional state update
         state.update(null)
 
-        return Row { child(Text(text = "hello world")) }
+        return Row { child(Text(text = "State is ${state.value}")) }
       }
     }
 
@@ -178,7 +174,7 @@ class KStateSkipSameValueTest {
         // unconditional state update
         state.update(Person("Joe"))
 
-        return Row { child(Text(text = "hello world")) }
+        return Row { child(Text(text = "State is ${state.value}")) }
       }
     }
 
@@ -213,7 +209,7 @@ class KStateSkipSameValueTest {
           onCleanup { listeners.remove(listener1) }
         }
 
-        return Row { child(Text(text = "hello world")) }
+        return Row { child(Text(text = "State is ${state.value}")) }
       }
     }
 
@@ -307,7 +303,7 @@ class KStateSkipSameValueTest {
         // unconditional state update
         state.updateSync { true }
 
-        return Row { child(Text(text = "hello world")) }
+        return Row { child(Text(text = "State is ${state.value}")) }
       }
     }
 
@@ -334,7 +330,7 @@ class KStateSkipSameValueTest {
         // unconditional state update
         state.updateSync { null }
 
-        return Row { child(Text(text = "hello world")) }
+        return Row { child(Text(text = "State is ${state.value}")) }
       }
     }
 
@@ -360,7 +356,7 @@ class KStateSkipSameValueTest {
         // unconditional state update
         state.updateSync { Person("Joe") }
 
-        return Row { child(Text(text = "hello world")) }
+        return Row { child(Text(text = "State is ${state.value}")) }
       }
     }
 
@@ -384,7 +380,7 @@ class KStateSkipSameValueTest {
         // unconditional state update
         state.update { true }
 
-        return Row { child(Text(text = "hello world")) }
+        return Row { child(Text(text = "State is ${state.value}")) }
       }
     }
 
@@ -407,7 +403,7 @@ class KStateSkipSameValueTest {
         // unconditional state update
         state.update { null }
 
-        return Row { child(Text(text = "hello world")) }
+        return Row { child(Text(text = "State is ${state.value}")) }
       }
     }
 
@@ -429,7 +425,7 @@ class KStateSkipSameValueTest {
         // unconditional state update
         state.update { Person("Joe") }
 
-        return Row { child(Text(text = "hello world")) }
+        return Row { child(Text(text = "State is ${state.value}")) }
       }
     }
 
@@ -464,7 +460,7 @@ class KStateSkipSameValueTest {
           onCleanup { listeners.remove(listener1) }
         }
 
-        return Row { child(Text(text = "hello world")) }
+        return Row { child(Text(text = "State is ${state.value}")) }
       }
     }
 

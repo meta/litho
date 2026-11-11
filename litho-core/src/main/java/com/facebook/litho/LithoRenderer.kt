@@ -80,7 +80,6 @@ class LithoRenderer(
                 ?: error("Trying to get UI state read records without a set host")
         host.uiStateReadRecords
       },
-      isReadTrackingEnabled = componentsConfig.enableStateReadTracking,
   )
   private val errorComponentRef = AtomicReference<Component?>(null)
   private val renderHandler = runnableHandlerProvider.getRunnableHandler()
@@ -371,7 +370,7 @@ class LithoRenderer(
   @Synchronized
   private fun attachSkippedEffects(layoutState: LayoutState) {
     uiThreadLayoutStateEffectsSkipped = false
-    val effectContext = EffectContext(id, componentsConfig.enableStateReadTracking, emptySet())
+    val effectContext = EffectContext(id, emptySet())
     with(layoutState.treeState.effectsHandler) {
           effectContext.updateEffects(layoutState.attachables)
         }
@@ -379,7 +378,7 @@ class LithoRenderer(
   }
 
   private fun commitAndRunEffects(layoutState: LayoutState, updatedStates: Set<StateId>) {
-    val effectContext = EffectContext(id, componentsConfig.enableStateReadTracking, updatedStates)
+    val effectContext = EffectContext(id, updatedStates)
     var effectRunnable: Runnable? = null
     try {
       with(layoutState.treeState.effectsHandler) {
@@ -425,12 +424,7 @@ class LithoRenderer(
 
       // Compute effective updates
       val mainState = treeState
-      val effectiveSnapshot =
-          if (componentsConfig.enableStateReadTracking) {
-            mainState?.getUpdatesForPromotion(layoutState.treeState) ?: emptyMap()
-          } else {
-            emptyMap()
-          }
+      val effectiveSnapshot = mainState?.getUpdatesForPromotion(layoutState.treeState) ?: emptyMap()
       val updatedStates = effectiveSnapshot.keys
 
       if (runEffects) {
@@ -714,7 +708,7 @@ class LithoRenderer(
       currentResolveResult = resolveResult
       treeState?.commitResolveState(
           resolveResult.treeState,
-          trackForPromotion = componentsConfig.enableStateReadTracking,
+          trackForPromotion = true,
           resolveVersion = resolveResult.version,
       )
     }
@@ -797,7 +791,7 @@ class LithoRenderer(
       currentLayoutState = layoutState
       treeState?.commitLayoutState(
           layoutState.treeState,
-          trackForPromotion = componentsConfig.enableStateReadTracking,
+          trackForPromotion = true,
           resolveVersion = layoutState.resolveResult.version,
       )
       return true

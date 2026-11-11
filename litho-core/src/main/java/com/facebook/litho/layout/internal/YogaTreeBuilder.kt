@@ -29,7 +29,6 @@ import com.facebook.litho.LithoNode
 import com.facebook.litho.LithoYogaLayoutFunction
 import com.facebook.litho.Resolver
 import com.facebook.litho.YogaLayoutOutput.Companion.getYogaNode
-import com.facebook.litho.isReadTrackingEnabled
 import com.facebook.litho.layout.BoxConstraints
 import com.facebook.litho.layout.BoxLayoutProps
 import com.facebook.litho.state.StateId
@@ -71,8 +70,6 @@ internal class YogaTreeBuilder(
 
   private val holdsMeasuredContent: Boolean
     get() = deferredContent == LithoYogaLayoutFunction.DeferredContent.MEASURED
-
-  private val tracksReads = node.tailComponentContext.isReadTrackingEnabled
 
   // What its tree read before it was laid out again in another box, and what a dropped tree and the
   // `Layout`s in it read: what it measured to may depend on them.
@@ -123,7 +120,7 @@ internal class YogaTreeBuilder(
    */
   private fun drop(tree: LithoLayoutResult) {
     discardLayoutsIn(tree)
-    val readsState = tracksReads && addStateReadsOf(tree)
+    val readsState = addStateReadsOf(tree)
     if (holdsMeasuredContent && !readsState) {
       LithoYogaLayoutFunction.saveTreeIntoCache(context, tree)
     }
@@ -207,7 +204,7 @@ internal class YogaTreeBuilder(
    * box.
    */
   private fun releaseDeferredContentIn(tree: LithoLayoutResult) {
-    if (tracksReads) addStateReadsOf(tree)
+    addStateReadsOf(tree)
     forEachDeferredHolderIn(tree) { holder ->
       if (Component.isLayoutSpecWithSizeSpec(holder.node.tailComponent)) {
         holder.result?.releaseLayoutPhaseData()
@@ -255,7 +252,7 @@ internal class YogaTreeBuilder(
   }
 
   private fun addReads(reads: ScatterSet<StateId>?) {
-    if (tracksReads && reads != null && reads.isNotEmpty()) getOrCreateStateReads().addAll(reads)
+    if (reads != null && reads.isNotEmpty()) getOrCreateStateReads().addAll(reads)
   }
 
   private fun getOrCreateStateReads(): MutableScatterSet<StateId> =

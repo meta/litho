@@ -373,7 +373,7 @@ open class ComponentTree protected constructor(builder: Builder) :
             androidContext,
             null,
             config,
-            LithoTree.create(this, stateUpdater, builder.config.enableStateReadTracking),
+            LithoTree.create(this, stateUpdater),
             StringGlobalKey("root"),
             builder.lithoVisibilityEventsController,
             null,
@@ -846,17 +846,12 @@ open class ComponentTree protected constructor(builder: Builder) :
         requireNotNull(_mainThreadLayoutState) { "mainThreadLayoutState should not be null" }
 
     AnimationController.bindContext(layoutState.componentContext.androidContext)
-    val isReadTrackingEnabled = context.isReadTrackingEnabled
     val treeState: TreeState? = uiTreeState
     val committedState = getCommittedTreeStateSync()
     val effectiveSnapshot =
-        if (isReadTrackingEnabled) {
-          committedState?.getUpdatesForPromotion(layoutState.treeState) ?: emptyMap()
-        } else {
-          emptyMap()
-        }
+        committedState?.getUpdatesForPromotion(layoutState.treeState) ?: emptyMap()
     val updatedStates = effectiveSnapshot.keys
-    val effectContext = EffectContext(id, isReadTrackingEnabled, updatedStates)
+    val effectContext = EffectContext(id, updatedStates)
     var effectRunnable: Runnable? = null
     try {
       if (treeState != null) {
@@ -1248,15 +1243,9 @@ open class ComponentTree protected constructor(builder: Builder) :
 
     val lithoView = _lithoView
     val layoutState = mainThreadLayoutState
-    if (
-        lithoView == null ||
-            lithoView.isMounting ||
-            isMeasuring ||
-            layoutState == null ||
-            !context.isReadTrackingEnabled
-    ) {
-      // Fall back to the frame-deferred path: disabled, no mounted view, no committed layout, read
-      // tracking off, or re-entrant (mid-mount/measure) where both applyChanges and requestLayout
+    if (lithoView == null || lithoView.isMounting || isMeasuring || layoutState == null) {
+      // Fall back to the frame-deferred path: disabled, no mounted view, no committed layout, or
+      // re-entrant (mid-mount/measure) where both applyChanges and requestLayout
       // are unsafe. Re-entrancy is only reachable via snapTo from inside a mount/measure callback
       // (frame ticks run before traversal); such a value isn't frame-driven, so there is no next
       // frame to re-queue to and the deferred path is the correct behavior.
@@ -2373,7 +2362,7 @@ open class ComponentTree protected constructor(builder: Builder) :
       getCommittedTreeStateSync()
           ?.commitResolveState(
               resolveResult.treeState,
-              trackForPromotion = context.isReadTrackingEnabled,
+              trackForPromotion = true,
               resolveVersion = resolveResult.version,
           )
     }
@@ -2595,7 +2584,7 @@ open class ComponentTree protected constructor(builder: Builder) :
         getCommittedTreeStateSync()
             ?.commitLayoutState(
                 stateToCommit,
-                trackForPromotion = context.isReadTrackingEnabled,
+                trackForPromotion = true,
                 resolveVersion = layoutState.resolveResult.version,
             )
 

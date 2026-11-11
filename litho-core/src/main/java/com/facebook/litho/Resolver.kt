@@ -483,10 +483,8 @@ object Resolver {
 
   /** Runs [action] on each state a component of [node] read while it rendered, with its reader. */
   internal inline fun forEachStateReadOn(node: LithoNode, action: (StateId, GlobalKey) -> Unit) {
-    if (node.tailComponentContext.isReadTrackingEnabled) {
-      for (info in node.scopedComponentInfos) {
-        info.stateReads?.forEach { s -> action(s, info.context.globalKey) }
-      }
+    for (info in node.scopedComponentInfos) {
+      info.stateReads?.forEach { s -> action(s, info.context.globalKey) }
     }
   }
 

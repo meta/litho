@@ -47,9 +47,6 @@ interface StateProvider {
    */
   val treeId: Int
 
-  /** Whether read tracking is enabled for this state provider. */
-  val isReadTrackingEnabled: Boolean
-
   /**
    * Overrides the current scope with the given [source] and returns that (current) scope.
    *
@@ -69,9 +66,6 @@ interface StateProvider {
 @OptIn(ExperimentalContracts::class)
 inline fun StateProvider.withScope(source: TreeState, block: () -> Unit) {
   contract { callsInPlace(block, InvocationKind.EXACTLY_ONCE) }
-  if (!isReadTrackingEnabled) {
-    return block()
-  }
   val previous = getAndSet(source)
   if (previous != null && ComponentsConfiguration.defaultInstance.logRecursiveStateProviderScope) {
     // Log attempt to enter a new scope while we're already in one
@@ -127,7 +121,6 @@ internal interface TreeStateProvider {
 
 internal class StateProviderImpl(
     override val treeId: Int,
-    override val isReadTrackingEnabled: Boolean,
     private val treeStateProvider: TreeStateProvider,
 ) : StateProvider {
 

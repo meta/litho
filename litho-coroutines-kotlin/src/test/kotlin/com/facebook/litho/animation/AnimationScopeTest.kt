@@ -22,7 +22,6 @@ import com.facebook.litho.ComponentScope
 import com.facebook.litho.EmptyComponent
 import com.facebook.litho.KComponent
 import com.facebook.litho.annotations.ExperimentalLithoApi
-import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.lithoTreeScope
 import com.facebook.litho.testing.LithoAnimationTestRule
 import com.facebook.litho.testing.LithoTestRule
@@ -58,11 +57,7 @@ import org.robolectric.annotation.LooperMode
 @LooperMode(LooperMode.Mode.PAUSED)
 @RunWith(LithoTestRunner::class)
 class AnimationScopeTest {
-  @Rule
-  @JvmField
-  val lithoRule = LithoTestRule(
-      ComponentsConfiguration.defaultInstance.copy(enableStateReadTracking = true),
-  )
+  @Rule @JvmField val lithoRule = LithoTestRule()
   @Rule @JvmField val animationRule = LithoAnimationTestRule { shadowOf(getMainLooper()).idle() }
 
   private val dispatcher = UnconfinedTestDispatcher()

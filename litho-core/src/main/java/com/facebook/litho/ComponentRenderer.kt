@@ -36,17 +36,13 @@ internal inline fun <T> ScopedComponentInfo.runInRecorderScope(
     resolveContext: ResolveContext,
     crossinline render: () -> RenderResult<T>,
 ): RenderResult<T> {
-  return if (context.isReadTrackingEnabled) {
-    var result: RenderResult<T>? = null
-    val stateReads =
-        StateReadRecorder.record(resolveContext.treeId, attribution("resolve", component)) {
-          result = render()
-        }
-    context.scopedComponentInfo.stateReads = stateReads
-    checkNotNull(result)
-  } else {
-    render()
-  }
+  var result: RenderResult<T>? = null
+  val stateReads =
+      StateReadRecorder.record(resolveContext.treeId, attribution("resolve", component)) {
+        result = render()
+      }
+  context.scopedComponentInfo.stateReads = stateReads
+  return checkNotNull(result)
 }
 
 /**

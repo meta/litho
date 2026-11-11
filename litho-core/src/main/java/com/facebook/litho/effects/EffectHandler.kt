@@ -101,7 +101,6 @@ inline fun EffectHandler.updateAndRun(
 class EffectContext
 internal constructor(
     val treeId: Int,
-    val isReadTrackingEnabled: Boolean,
     val updatedState: Set<StateId>,
 )
 

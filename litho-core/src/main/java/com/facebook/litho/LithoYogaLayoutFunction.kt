@@ -1427,7 +1427,6 @@ internal object LithoYogaLayoutFunction {
     val node: LithoNode = lithoLayoutResult.node
     val component: Component = node.tailComponent
     val componentScopedContext: ComponentContext = node.tailComponentContext
-    val isReadTrackingEnabled = componentScopedContext.isReadTrackingEnabled
     val diffNode: DiffNode? =
         if (lithoLayoutResult.cachedMeasuresValid) lithoLayoutResult.diffNode else null
     val width: Int
@@ -1454,9 +1453,7 @@ internal object LithoYogaLayoutFunction {
       delegate = diffNode.delegate
       lithoLayoutResult.isDiffedLayout = true
       effects = diffNode.effects
-      if (isReadTrackingEnabled) {
-        diffNode.stateReads?.let { lithoLayoutResult.addStateReads(it) }
-      }
+      diffNode.stateReads?.let { lithoLayoutResult.addStateReads(it) }
 
       // Measure the component
     } else {
@@ -1486,9 +1483,7 @@ internal object LithoYogaLayoutFunction {
                 layoutData = lithoLayoutResult.layoutData
               }
             }
-        if (isReadTrackingEnabled) {
-          lithoLayoutResult.addStateReads(stateReads)
-        }
+        lithoLayoutResult.addStateReads(stateReads)
       }
     }
     lithoLayoutResult.delegate = delegate
@@ -1901,7 +1896,6 @@ internal object LithoYogaLayoutFunction {
       props: LayoutProps = writer,
   ) {
     val node: YogaNode = writer.node
-    val isReadTrackingEnabled = tailComponentContext.isReadTrackingEnabled
 
     // Apply the extra layout props
     layoutDirection.let { node.setDirection(it.toYogaDirection()) }
@@ -1928,10 +1922,7 @@ internal object LithoYogaLayoutFunction {
       node.setMinContentHeight(0f)
     }
 
-    val stateReads = copyLayoutPropsInto(context, props)
-    if (isReadTrackingEnabled) {
-      writer.addStateReads(stateReads)
-    }
+    writer.addStateReads(copyLayoutPropsInto(context, props))
     isPaddingSet = writer.isPaddingSet || (props is ContainerChildLayoutProps && props.isPaddingSet)
   }
 

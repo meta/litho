@@ -49,8 +49,7 @@ import com.facebook.rendercore.sp
  *   jumps.
  *
  * Tap the blue card to expand/collapse. The rows are keyed so the banner's insert/removal doesn't
- * shift their identity. `reflow = true` requires state read tracking
- * (`ComponentsConfiguration.enableStateReadTracking`, which the sample app enables).
+ * shift their identity.
  */
 @OptIn(ExperimentalLithoApi::class)
 class DiffReflowToggleComponent : KComponent() {

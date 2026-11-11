@@ -174,16 +174,11 @@ class LayoutTreeFuture(
       val node = resolveResult.node
 
       val dirtyStates =
-          if (c.isReadTrackingEnabled) {
-            withUpdatesNotLaidOut(resolveResult.updatedStates, treeState, currentLayoutState)
-          } else {
-            emptySet()
-          }
+          withUpdatesNotLaidOut(resolveResult.updatedStates, treeState, currentLayoutState)
       val scopesToUpdate =
           DirtyScopeIndex.of(getDirtyScopes(dirtyStates, currentLayoutState?.stateReads))
       val willSkipLayout =
-          c.isReadTrackingEnabled &&
-              scopesToUpdate.isEmpty() &&
+          scopesToUpdate.isEmpty() &&
               currentLayoutState != null &&
               resolveResult.node == currentLayoutState.resolveResult.node &&
               sizeConstraints == currentLayoutState.sizeConstraints
@@ -242,22 +237,20 @@ class LayoutTreeFuture(
         // update that moves a natural size; a bind-only value (an alpha fade) has no layout reader
         // and is ignored. Both main and background layouts read the published generation directly
         // (live leaves, no rebuild).
-        if (c.isReadTrackingEnabled) {
-          val reflowView = c.lithoTree?.reflowProvider?.reflowView ?: ReflowGeneration.EMPTY
-          lsc.reflowReadView = reflowView
-          if (
-              !reflowView.isEmpty &&
-                  currentLayoutState != null &&
-                  resolveResult.node === currentLayoutState.resolveResult.node &&
-                  sizeConstraints == currentLayoutState.sizeConstraints &&
-                  !hasDirtyScopes(
-                      updatedStates = dirtyStates,
-                      stateReads = currentLayoutState.stateReads,
-                      shouldSkip = StateId::isReflowStateId,
-                  )
-          ) {
-            lsc.reflowFrameUpdates = resolveResult.updatedStates
-          }
+        val reflowView = c.lithoTree?.reflowProvider?.reflowView ?: ReflowGeneration.EMPTY
+        lsc.reflowReadView = reflowView
+        if (
+            !reflowView.isEmpty &&
+                currentLayoutState != null &&
+                resolveResult.node === currentLayoutState.resolveResult.node &&
+                sizeConstraints == currentLayoutState.sizeConstraints &&
+                !hasDirtyScopes(
+                    updatedStates = dirtyStates,
+                    stateReads = currentLayoutState.stateReads,
+                    shouldSkip = StateId::isReflowStateId,
+                )
+        ) {
+          lsc.reflowFrameUpdates = resolveResult.updatedStates
         }
 
         val prevContext = c.calculationStateContext

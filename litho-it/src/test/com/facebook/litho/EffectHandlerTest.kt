@@ -16,7 +16,6 @@
 
 package com.facebook.litho
 
-import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.core.height
 import com.facebook.litho.core.width
 import com.facebook.litho.effects.ContextualEffectHandler
@@ -64,9 +63,6 @@ class EffectHandlerTest {
 
   @Test
   fun stateReadInEffectRunTriggersCleanupAndRun() {
-    // Strictly WITH read tracking and separate committed tree state
-    val defaultConfig = enableReadTrackingConfigsAndReturnDefault(true)
-
     val counter = mutableMapOf<EffectPhase, Int>()
     val testView = lithoTestRule.render {
       EffectTestComponent(counter, readStateInEffectRun = true)
@@ -75,8 +71,6 @@ class EffectHandlerTest {
 
     lithoTestRule.act(testView) { clickOnTag(TAG) }
     assertThat(counter).isEqualTo(phaseCount(run = 2, cleanup = 1))
-
-    resetConfigs(defaultConfig)
   }
 
   @Test
@@ -93,9 +87,6 @@ class EffectHandlerTest {
 
   @Test
   fun whenDepChanges_cleanupUsesPreviousValueWhileRunUsesNewValue() {
-    // Strictly WITHOUT read tracking and separate committed tree state
-    val defaultConfig = enableReadTrackingConfigsAndReturnDefault(false)
-
     val stateValues = mutableListOf<Int>()
     val testView = lithoTestRule.render {
       EffectTestComponent(
@@ -111,15 +102,10 @@ class EffectHandlerTest {
 
     lithoTestRule.act(testView) { clickOnTag(TAG) }
     assertThat(stateValues).isEqualTo(listOf(0, 1))
-
-    resetConfigs(defaultConfig)
   }
 
   @Test
   fun whenStateReadInEffectRunChanges_cleanupUsesPreviousValueWhileRunUsesNewValue() {
-    // Strictly WITH read tracking and separate committed tree state
-    val defaultConfig = enableReadTrackingConfigsAndReturnDefault(true)
-
     val stateValues = mutableListOf<Int>()
     val testView = lithoTestRule.render {
       EffectTestComponent(
@@ -134,8 +120,6 @@ class EffectHandlerTest {
 
     lithoTestRule.act(testView) { clickOnTag(TAG) }
     assertThat(stateValues).isEqualTo(listOf(0, 1))
-
-    resetConfigs(defaultConfig)
   }
 
   @Test
@@ -156,8 +140,8 @@ class EffectHandlerTest {
       val handler = OptimizedContextualEffectHandler()
       val state1 = testStateId(1)
       val state2 = testStateId(2)
-      val cleanContext = EffectContext(DIRECT_EFFECT_TREE_ID, true, emptySet())
-      val dirtyContext = EffectContext(DIRECT_EFFECT_TREE_ID, true, setOf(state1))
+      val cleanContext = EffectContext(DIRECT_EFFECT_TREE_ID, emptySet())
+      val dirtyContext = EffectContext(DIRECT_EFFECT_TREE_ID, setOf(state1))
       val retainedStats = DirectEffectStats()
       val removedStats = DirectEffectStats()
       val rerunStats = DirectEffectStats()
@@ -203,7 +187,7 @@ class EffectHandlerTest {
     try {
       val handler = OptimizedContextualEffectHandler()
       val state = testStateId(1)
-      val context = EffectContext(DIRECT_EFFECT_TREE_ID, true, emptySet())
+      val context = EffectContext(DIRECT_EFFECT_TREE_ID, emptySet())
       val stats = DirectEffectStats()
 
       with(handler) {
@@ -234,7 +218,7 @@ class EffectHandlerTest {
     ThreadUtils.setMainThreadOverride(ThreadUtils.OVERRIDE_MAIN_THREAD_TRUE)
     try {
       val handler = OptimizedContextualEffectHandler()
-      val context = EffectContext(DIRECT_EFFECT_TREE_ID, true, emptySet())
+      val context = EffectContext(DIRECT_EFFECT_TREE_ID, emptySet())
       val runnable =
           with(handler) {
             context.updateEffects(
@@ -258,7 +242,7 @@ class EffectHandlerTest {
     ThreadUtils.setMainThreadOverride(ThreadUtils.OVERRIDE_MAIN_THREAD_TRUE)
     try {
       val handler = OptimizedContextualEffectHandler()
-      val context = EffectContext(DIRECT_EFFECT_TREE_ID, false, emptySet())
+      val context = EffectContext(DIRECT_EFFECT_TREE_ID, emptySet())
       val currentStats = DirectEffectStats()
       val firstDuplicateStats = DirectEffectStats()
       val secondDuplicateStats = DirectEffectStats()
@@ -279,19 +263,6 @@ class EffectHandlerTest {
     } finally {
       ThreadUtils.setMainThreadOverride(ThreadUtils.OVERRIDE_DISABLED)
     }
-  }
-
-  private fun enableReadTrackingConfigsAndReturnDefault(enable: Boolean): ComponentsConfiguration {
-    val defaultConfig = ComponentsConfiguration.defaultInstance
-    val ruleContext = lithoTestRule.context
-    val modifiedConfig = defaultConfig.copy(enableStateReadTracking = enable)
-    ruleContext.lithoConfiguration = ruleContext.lithoConfiguration.copy(modifiedConfig)
-    ComponentsConfiguration.defaultInstance = modifiedConfig
-    return defaultConfig
-  }
-
-  private fun resetConfigs(defaultConfig: ComponentsConfiguration) {
-    ComponentsConfiguration.defaultInstance = defaultConfig
   }
 }
 

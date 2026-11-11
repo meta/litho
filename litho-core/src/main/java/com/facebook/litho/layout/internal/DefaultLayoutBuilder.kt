@@ -34,7 +34,6 @@ import com.facebook.litho.LithoYogaLayoutFunction
 import com.facebook.litho.NO_POSITIONS
 import com.facebook.litho.YogaLayoutOutput.Companion.yogaLayoutOutput
 import com.facebook.litho.annotations.ExperimentalLithoApi
-import com.facebook.litho.isReadTrackingEnabled
 import com.facebook.litho.layout.BoxConstraints
 import com.facebook.litho.layout.BoxLayoutProps
 import com.facebook.litho.layout.LayoutDirection
@@ -115,7 +114,6 @@ internal class DefaultLayoutBuilder(
 
   private var stateReads: MutableScatterSet<StateId>? = null
 
-  private val tracksReads = node.tailComponentContext.isReadTrackingEnabled
   private var stage = Stage.MEASURING
 
   private var recordedBoxProps: BoxLayoutProps? = null
@@ -568,9 +566,6 @@ internal class DefaultLayoutBuilder(
    * kept when it throws too: a failure that depends on state recovers when that state changes.
    */
   private inline fun recordingReads(description: String, block: () -> Unit): Exception? {
-    if (!tracksReads) {
-      return attempt(block)
-    }
     var failure: Exception? = null
     val reads =
         StateReadRecorder.record(requireNotNull(context.renderContext).treeId, description) {
@@ -601,7 +596,7 @@ internal class DefaultLayoutBuilder(
 
   /** Adds [reads] to its own: what it ran read, or what a child it didn't build made read. */
   private fun addReads(reads: ScatterSet<StateId>) {
-    if (!tracksReads || reads.isEmpty()) return
+    if (reads.isEmpty()) return
     (stateReads
             ?: mutableScatterSetOf<StateId>().also { stateReadSet -> stateReads = stateReadSet })
         .addAll(reads)

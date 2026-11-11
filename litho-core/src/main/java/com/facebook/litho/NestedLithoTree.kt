@@ -21,7 +21,6 @@ import androidx.annotation.UiThread
 import com.facebook.kotlin.compilerplugins.dataclassgenerate.annotation.DataClassGenerate
 import com.facebook.kotlin.compilerplugins.dataclassgenerate.annotation.Mode
 import com.facebook.litho.animation.AnimationController
-import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.state.StateId
 import com.facebook.litho.state.TreeStateProvider
 import com.facebook.rendercore.SizeConstraints
@@ -162,8 +161,6 @@ object NestedLithoTree {
       mountedViewReference: NestedMountedViewReference,
       errorComponentReceiver: ErrorComponentReceiver,
       treeLifecycleProvider: NestedLithoTreeLifecycleProvider,
-      isReadTrackingEnabled: Boolean =
-          ComponentsConfiguration.defaultInstance.enableStateReadTracking,
   ): LithoTree = LithoTree(
       id = id,
       treeStateProvider = stateUpdater,
@@ -178,7 +175,6 @@ object NestedLithoTree {
         }
         host.uiStateReadRecords
       },
-      isReadTrackingEnabled = isReadTrackingEnabled,
   )
 
   fun createComponentContext(

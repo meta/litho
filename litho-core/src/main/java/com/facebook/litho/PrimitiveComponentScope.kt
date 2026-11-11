@@ -298,7 +298,6 @@ fun PrimitiveComponentScope.useNestedTree(
                   }
                   host.uiStateReadRecords
                 },
-                isReadTrackingEnabled = config.enableStateReadTracking,
             )
           }
           .value
@@ -352,8 +351,7 @@ data class NestedLithoTreeState(
   fun commitAndRunEffects(layoutState: LayoutState): Boolean {
     val previousLayoutState = currentLayoutState
     val updatedStates = layoutState.resolveResult.updatedStates
-    val effectContext =
-        EffectContext(id, layoutState.componentContext.isReadTrackingEnabled, updatedStates)
+    val effectContext = EffectContext(id, updatedStates)
     var effectRunnable: Runnable? = null
     var commitSucceeded = false
     try {

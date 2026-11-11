@@ -196,7 +196,6 @@ internal fun <T> ComponentScope.hookState(
     HookGlobalKey(context.globalKey, hookKey, RenderScope.Resolve),
     context.isContextForLayout,
     context.componentScope,
-    lithoTree.isReadTrackingEnabled,
     context.lithoConfiguration.componentsConfig.detachStateIdFromValue,
     value,
 )
@@ -209,7 +208,6 @@ internal constructor(
     private val hookGlobalKey: HookGlobalKey,
     internal val isLayoutContext: Boolean,
     private val componentScope: Component?,
-    private val isReadTrackingEnabled: Boolean,
     private val detachStateIdFromValue: Boolean,
     internal val fallback: T,
 ) : Value<T> {
@@ -221,7 +219,6 @@ internal constructor(
 
   override val value: T
     get() {
-      if (!isReadTrackingEnabled) return fallback
       return when {
         StateReadRecorder.read(stateId) -> stateProvider.getValue(this)
         else -> fallback

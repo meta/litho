@@ -24,9 +24,6 @@ import com.facebook.litho.state.UiStateReadRecords
 val ComponentContext.componentsConfig: ComponentsConfiguration
   get() = lithoConfiguration.componentsConfig
 
-internal val ComponentContext.isReadTrackingEnabled: Boolean
-  get() = lithoTree?.isReadTrackingEnabled == true
-
 internal val ComponentContext.uiStateReadRecords: UiStateReadRecords
   get() =
       checkNotNull(lithoTree?.uiStateReadRecordsProvider?.getUiStateReadRecords()) {

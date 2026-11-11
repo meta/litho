@@ -179,18 +179,10 @@ class ResolveTreeFuture(
         future: TreeFuture<*>?,
         discardCallbacks: DiscardCallbacks? = null,
     ): ResolveResult {
-      val updatedStates =
-          when (context.isReadTrackingEnabled) {
-            true -> state.getStateIdsForPendingStateUpdates()
-            else -> emptySet()
-          }
+      val updatedStates = state.getStateIdsForPendingStateUpdates()
       val scopesToUpdate =
           DirtyScopeIndex.of(
-              if (context.isReadTrackingEnabled) {
-                getDirtyScopes(updatedStates, currentResolveResult?.outputs?.stateReads)
-              } else {
-                state.keysForPendingStateUpdates
-              },
+              getDirtyScopes(updatedStates, currentResolveResult?.outputs?.stateReads),
           )
       val currentAccessibilityEnabled =
           AccessibilityUtils.isAccessibilityEnabled(
@@ -198,8 +190,7 @@ class ResolveTreeFuture(
                   as AccessibilityManager,
           )
       val willSkipResolve =
-          context.isReadTrackingEnabled &&
-              scopesToUpdate.isEmpty() &&
+          scopesToUpdate.isEmpty() &&
               currentResolveResult != null &&
               Resolver.isReconcilable(
                   context,

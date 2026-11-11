@@ -43,7 +43,6 @@ import com.facebook.rendercore.IntSize
 import com.facebook.rendercore.dp
 import com.facebook.rendercore.ms
 import org.assertj.core.api.Assertions.assertThat
-import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -81,13 +80,6 @@ class StyleReflowTest {
           enableAnimationFrameInvalidation = true,
       ),
   )
-
-  // Read tracking off: a reflow declaration must fail fast (it can't drive without the read
-  // pipeline).
-  @JvmField
-  @Rule
-  val noReadTrackingRule =
-      LithoTestRule(ComponentsConfiguration.defaultInstance.copy(enableStateReadTracking = false))
 
   private lateinit var activityController: ActivityController<Activity>
 
@@ -362,16 +354,6 @@ class StyleReflowTest {
     assertThat(checkNotNull(lithoTree.reflowProvider.reflowView).targetSize(reflowKey))
         .isEqualTo(IntSize(100, 100))
     assertThat(grow.height).isEqualTo(100)
-  }
-
-  @Test
-  fun reflowBounds_withoutReadTracking_failsFast() {
-    // Reflow depends on the read pipeline; declaring it without read tracking must fail loudly at
-    // declaration rather than silently not animating.
-    assertThatThrownBy {
-          noReadTrackingRule.render { growComponent(StateCaller(), 100, 250) }
-        }
-        .hasStackTraceContaining("state read tracking")
   }
 
   @Test

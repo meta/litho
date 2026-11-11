@@ -17,7 +17,6 @@
 package com.facebook.litho.effects
 
 import androidx.collection.MutableScatterSet
-import androidx.collection.emptyScatterSet
 import androidx.collection.mutableScatterSetOf
 import com.facebook.litho.Attachable
 import com.facebook.litho.ThreadUtils
@@ -161,13 +160,7 @@ internal class ContextualEffectHandler : EffectHandler {
   }
 
   private fun Attachable.runWithTracking(context: EffectContext) {
-    val stateReads =
-        if (context.isReadTrackingEnabled) {
-          StateReadRecorder.record(context.treeId, attribution()) { attach() }
-        } else {
-          attach()
-          emptyScatterSet()
-        }
+    val stateReads = StateReadRecorder.record(context.treeId, attribution()) { attach() }
 
     stateReads.forEach { stateId ->
       stateReadRecords.getOrPut(stateId) { mutableScatterSetOf() }.add(uniqueId)

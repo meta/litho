@@ -170,9 +170,6 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
       return layoutState?.rootName ?: ""
     }
 
-  override val isReadTrackingEnabled: Boolean
-    get() = configuration?.enableStateReadTracking == true
-
   private var onDirtyMountListener: OnDirtyMountListener? = null
 
   @get:JvmName("getUiStateReadRecords")

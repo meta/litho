@@ -292,29 +292,6 @@ class LithoSaveableStateTest {
   }
 
   @Test
-  fun `a value updated after the first commit is saved when read tracking is off`() {
-    val state = AtomicReference<State<Int>>()
-    val registry = LithoSaveableStateRegistry()
-    val config =
-        ComponentsConfiguration.defaultInstance.copy(
-            enableStateReadTracking = false,
-            detachStateIdFromValue = true,
-        )
-    val tree =
-        ComponentTree.create(lithoTestRule.context, CapturingStateComponent(onState = state::set))
-            .componentsConfiguration(config)
-            .withRetainedSaveableStateRegistryForTreeReplacement(registry)
-            .build()
-    val view = render(tree)
-
-    state.get().updateSync(7)
-
-    assertThat(registry.restoredValueForTest()).isEqualTo(7)
-    view.release()
-    registry.close()
-  }
-
-  @Test
   fun `retained nested registry survives tree replacement`() {
     val state = AtomicReference<State<Int>>()
     val registry = LithoSaveableStateRegistry()

@@ -25,7 +25,6 @@ import com.facebook.litho.LithoLayoutResult
 import com.facebook.litho.LithoNode
 import com.facebook.litho.LithoYogaMeasureFunction
 import com.facebook.litho.NullNode
-import com.facebook.litho.isReadTrackingEnabled
 import com.facebook.litho.layout.BoxConstraints
 import com.facebook.litho.layout.BoxLayoutProps
 import com.facebook.litho.state.StateId
@@ -111,7 +110,7 @@ internal inline fun recordBoxPropsOf(
   val props = BoxLayoutProps()
   val recorder = BoxLayoutPropsRecorder(props, recordsOwnEdges = true)
   val reads = node.copyLayoutPropsInto(context, recorder)
-  if (node.tailComponentContext.isReadTrackingEnabled && reads.isNotEmpty()) {
+  if (reads.isNotEmpty()) {
     onReads(reads)
   }
   node.isPaddingSet = recorder.isPaddingSet
