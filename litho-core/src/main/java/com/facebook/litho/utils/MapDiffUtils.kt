@@ -31,6 +31,6 @@ object MapDiffUtils {
     if (prev.size != next.size) {
       return false
     }
-    return prev.none { (key, value) -> !equals(value, next[key]) }
+    return prev.all { (key, value) -> next.containsKey(key) && equals(value, next[key]) }
   }
 }
