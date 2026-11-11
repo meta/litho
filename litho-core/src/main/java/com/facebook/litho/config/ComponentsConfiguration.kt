@@ -153,6 +153,13 @@ internal constructor(
      * attributes that may have been added by non-litho code.
      */
     @JvmField val isHostViewAttributesCleanUpEnabled: Boolean = false,
+    /**
+     * When true, the host cleanup binder also resets translationX/Y, so a recycled host isn't drawn
+     * offset by an earlier X/Y transition. Set it through
+     * [Builder.enableHostViewAttributesCleanUp], which keeps it false while
+     * [isHostViewAttributesCleanUpEnabled] is false.
+     */
+    @JvmField val resetHostTranslationOnCleanUp: Boolean = false,
     /** Determines the policy to use when measuring in resolve phase is detected. */
     @JvmField val measureInResolvePolicy: LogicViolationPolicy = LogicViolationPolicy.LOG,
     /** Determines the policy to use when state reads across tree boundaries is detected. */
@@ -692,8 +699,16 @@ internal constructor(
       config = config.copy(useStableIdsInRecyclerBinder = enabled)
     }
 
-    fun enableHostViewAttributesCleanUp(enabled: Boolean): Builder = apply {
-      config = config.copy(isHostViewAttributesCleanUpEnabled = enabled)
+    @JvmOverloads
+    fun enableHostViewAttributesCleanUp(
+        enabled: Boolean,
+        resetTranslation: Boolean = false,
+    ): Builder = apply {
+      config =
+          config.copy(
+              isHostViewAttributesCleanUpEnabled = enabled,
+              resetHostTranslationOnCleanUp = enabled && resetTranslation,
+          )
     }
 
     fun useOptimizedContextualEffectHandler(enabled: Boolean): Builder = apply {

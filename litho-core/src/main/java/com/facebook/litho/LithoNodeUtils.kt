@@ -433,7 +433,10 @@ object LithoNodeUtils {
       renderUnit.addOptionalMountBinder(
           RenderUnit.DelegateBinder.createDelegateBinder(
               model = null,
-              binder = HostViewAttributesCleanupBinder(),
+              binder =
+                  HostViewAttributesCleanupBinder(
+                      resetTranslation = config.resetHostTranslationOnCleanUp,
+                  ),
           ) as RenderUnit.DelegateBinder<Any?, Any, Any>,
       )
     }

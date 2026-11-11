@@ -156,4 +156,24 @@ class ComponentsConfigurationTest {
       ComponentsConfiguration.enableInputConnectionFix = originalValue
     }
   }
+
+  @Test
+  fun `translation reset is dropped when host cleanup is off`() {
+    val config =
+        ComponentsConfiguration.create()
+            .enableHostViewAttributesCleanUp(false, resetTranslation = true)
+            .build()
+
+    assertThat(config.resetHostTranslationOnCleanUp).isFalse
+  }
+
+  @Test
+  fun `translation reset is kept when host cleanup is on`() {
+    val config =
+        ComponentsConfiguration.create()
+            .enableHostViewAttributesCleanUp(true, resetTranslation = true)
+            .build()
+
+    assertThat(config.resetHostTranslationOnCleanUp).isTrue
+  }
 }

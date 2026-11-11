@@ -42,7 +42,8 @@ import com.facebook.litho.ViewAttributes.Companion.unsetViewTags
 import com.facebook.rendercore.Host
 import com.facebook.rendercore.RenderUnit
 
-class HostViewAttributesCleanupBinder : RenderUnit.Binder<Any?, Host, Any> {
+class HostViewAttributesCleanupBinder(private val resetTranslation: Boolean = false) :
+    RenderUnit.Binder<Any?, Host, Any> {
 
   override fun shouldUpdate(
       currentModel: Any?,
@@ -62,14 +63,14 @@ class HostViewAttributesCleanupBinder : RenderUnit.Binder<Any?, Host, Any> {
       layoutData: Any?,
       bindData: Any?,
   ) {
-    unsetAllViewAttributes(content)
+    unsetAllViewAttributes(content, resetTranslation)
     if (content is ComponentHost) {
       content.cleanup()
     }
   }
 }
 
-private fun unsetAllViewAttributes(content: Host) {
+private fun unsetAllViewAttributes(content: Host, resetTranslation: Boolean) {
 
   if (content is ComponentHost) {
     content.setSafeViewModificationsEnabled(true)
@@ -99,6 +100,10 @@ private fun unsetAllViewAttributes(content: Host) {
   content.rotation = 0f
   content.rotationX = 0f
   content.rotationY = 0f
+  if (resetTranslation) {
+    content.translationX = 0f
+    content.translationY = 0f
+  }
   content.isClickable = true
   content.isLongClickable = true
   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
