@@ -148,14 +148,16 @@ class LithoRenderer(
   /**
    * Whether effects are being updated. Effect callbacks can call back into this renderer, but
    * nothing may change its effects while the effect handler is still attaching an update's effects.
-   * Until the update is done, a newer layout waits in [deferredLayoutState]; only the newest one is
-   * kept.
+   * Until the update is done:
+   * - a newer layout waits in [deferredLayoutState]; only the newest one is kept;
+   * - a cleanup waits in [isCleanupDeferred], and runs after that layout.
    *
    * ```
-   * promote(L1)                          isUpdatingEffects = true
-   *   effect attaches -> renders L2      deferredLayoutState = L2
-   * promote(L1) done                     isUpdatingEffects = false
-   *   -> promote(L2)
+   * promote(L1)                                         isUpdatingEffects = true
+   *   effect attaches -> renders L2                     deferredLayoutState = L2
+   *   effect attaches -> scrolls -> cleanupDetachedEffects()   isCleanupDeferred = true
+   * promote(L1) done                                    isUpdatingEffects = false
+   *   -> promote(L2), then cleanupDetachedEffects()
    * ```
    *
    * Main thread only.
@@ -163,6 +165,7 @@ class LithoRenderer(
   private var isUpdatingEffects: Boolean = false
   private var deferredLayoutState: LayoutState? = null
   private var deferredLayoutStateRunsEffects: Boolean = false
+  private var isCleanupDeferred: Boolean = false
 
   // region Public APIs
 
@@ -372,15 +375,47 @@ class LithoRenderer(
     synchronized(this) { currentLifecycle = LithoRendererLifecycle.STARTED }
   }
 
+  /** Unbinds from the host and cleans up the effects of the bound layout. */
   @UiThread
   fun unbind() {
+    detachFromHost()
+    synchronized(this) { currentLifecycle = LithoRendererLifecycle.PAUSED }
+    cleanupDetachedEffects()
+  }
+
+  /**
+   * Unbinds from the host but keeps the effects of the bound layout attached, and keeps applying
+   * state updates, as a tree does while its view is recycled. The bound layout stays the one whose
+   * effects are attached: layouts committed without a host update them as with one, and the next
+   * host gets it. [cleanupDetachedEffects] or [unbind] cleans them up.
+   */
+  @UiThread
+  fun detachFromHost() {
     rootHost = null
+  }
+
+  /**
+   * Cleans up the effects of the bound layout and stops applying state updates, if no host is
+   * bound. Does nothing while a host is bound, or when no layout is bound. Requested while effects
+   * are being updated, it runs once that update is done.
+   */
+  @UiThread
+  fun cleanupDetachedEffects() {
+    if (rootHost != null) {
+      return
+    }
+    if (isUpdatingEffects) {
+      isCleanupDeferred = true
+      return
+    }
+    val bound = uiThreadLayoutState ?: return
     synchronized(this) {
       currentLifecycle = LithoRendererLifecycle.PAUSED
-      uiThreadLayoutState?.cleanup()
+      // Released before the cleanup callbacks run, so a layout they bind isn't dropped here.
       uiThreadLayoutState = null
       uiThreadLayoutStateEffectsSkipped = false
     }
+    bound.cleanup()
   }
 
   // endregion
@@ -421,8 +456,15 @@ class LithoRenderer(
   @UiThread
   @Synchronized
   private fun rebind(layoutState: LayoutState, runEffects: Boolean) {
-    // A released renderer has no host (see [bindTo]), so nothing below is stored for it.
-    val host = rootHost as? LithoRenderTreeView ?: return
+    val host = rootHost
+    if (host != null && host !is LithoRenderTreeView) {
+      return
+    }
+    // Without a host, only a tree that was bound keeps its effects up to date: one that was never
+    // shown has none attached yet. A released renderer has neither.
+    if (host == null && uiThreadLayoutState == null) {
+      return
+    }
 
     promote(layoutState, runEffects)
     // The outer rebind sets the host once the update and any deferred layout are done.
@@ -430,13 +472,14 @@ class LithoRenderer(
       return
     }
 
+    // Sets the bound layout on a host that doesn't have it yet, e.g. one bound after a recycle.
     val bound = uiThreadLayoutState
-    if (bound != null && bound !== host.layoutState) {
+    if (host is LithoRenderTreeView && bound != null && bound !== host.layoutState) {
       host.setLayoutState(bound, bound.treeState)
     }
   }
 
-  /** Makes [layoutState] the bound layout and updates its effects. */
+  /** Makes [layoutState] the bound layout and updates the effects, with or without a host. */
   @UiThread
   @Synchronized
   private fun promote(layoutState: LayoutState, runEffects: Boolean) {
@@ -476,6 +519,10 @@ class LithoRenderer(
     if (deferred != null) {
       deferredLayoutState = null
       promote(deferred, deferredLayoutStateRunsEffects)
+    }
+    if (isCleanupDeferred) {
+      isCleanupDeferred = false
+      cleanupDetachedEffects()
     }
   }
 

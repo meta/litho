@@ -264,6 +264,52 @@ class EffectHandlerTest {
       ThreadUtils.setMainThreadOverride(ThreadUtils.OVERRIDE_DISABLED)
     }
   }
+
+  @Test
+  fun contextualEffectHandler_onCleanupKeepsEffectsAttachedFromACleanupCallback() {
+    assertOnCleanupKeepsEffectsAttachedFromACleanupCallback(ContextualEffectHandler())
+  }
+
+  @Test
+  fun optimizedContextualEffectHandler_onCleanupKeepsEffectsAttachedFromACleanupCallback() {
+    assertOnCleanupKeepsEffectsAttachedFromACleanupCallback(OptimizedContextualEffectHandler())
+  }
+
+  /**
+   * A cleanup callback that attaches effects to the same handler, e.g. by committing a newer
+   * layout, leaves them attached, tracked and cleaned up by the next cleanup.
+   */
+  private fun assertOnCleanupKeepsEffectsAttachedFromACleanupCallback(handler: EffectHandler) {
+    ThreadUtils.setMainThreadOverride(ThreadUtils.OVERRIDE_MAIN_THREAD_TRUE)
+    try {
+      val state = testStateId(1)
+      val context = EffectContext(DIRECT_EFFECT_TREE_ID, emptySet())
+      val outgoingStats = DirectEffectStats()
+      val incomingStats = DirectEffectStats()
+      val incoming = DirectEffectAttachable("incoming", incomingStats, stateToRead = state)
+      val outgoing = DirectEffectAttachable(
+          "outgoing",
+          outgoingStats,
+          onFirstDetach = { with(handler) { context.updateEffects(listOf(incoming)).run() } },
+      )
+      with(handler) { context.updateEffects(listOf(outgoing)).run() }
+
+      handler.onCleanup()
+
+      assertThat(outgoingStats.detachCount).isEqualTo(1)
+      assertThat(incomingStats.attachCount).isEqualTo(1)
+      assertThat(handler.effects.orEmpty()).containsExactly(incoming)
+      assertThat(handler.hasReadsFor(setOf(state))).isTrue()
+
+      handler.onCleanup()
+
+      assertThat(incomingStats.detachCount).isEqualTo(1)
+      assertThat(handler.effects.orEmpty()).isEmpty()
+      assertThat(handler.hasReadsFor(setOf(state))).isFalse()
+    } finally {
+      ThreadUtils.setMainThreadOverride(ThreadUtils.OVERRIDE_DISABLED)
+    }
+  }
 }
 
 private const val DIRECT_EFFECT_TREE_ID = 7
@@ -291,6 +337,7 @@ private class DirectEffectAttachable(
     private val useLegacyUpdateBehavior: Boolean = false,
     private val throwOnAttach: Boolean = false,
     private val shouldUpdate: Boolean = false,
+    private var onFirstDetach: (() -> Unit)? = null,
 ) : Attachable {
 
   override fun attach() {
@@ -303,6 +350,9 @@ private class DirectEffectAttachable(
 
   override fun detach() {
     stats.detachCount++
+    val callback = onFirstDetach
+    onFirstDetach = null
+    callback?.invoke()
   }
 
   override fun shouldUpdate(nextAttachable: Attachable): Boolean = shouldUpdate

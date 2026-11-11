@@ -244,11 +244,14 @@ internal class OptimizedContextualEffectHandler : EffectHandler {
 
   override fun onCleanup() {
     ThreadUtils.assertMainThread()
-    effectOrder?.let { cleanup(it) }
-    stateReadRecords?.clear()
-    effectToStateReadRecords?.clear()
+    // Emptied before the cleanup callbacks run, so effects they attach, e.g. by committing a new
+    // layout, are kept and cleaned up later instead of being dropped here.
+    val effects = effectOrder
     effectsById = null
     effectOrder = null
+    stateReadRecords?.clear()
+    effectToStateReadRecords?.clear()
+    effects?.let { cleanup(it) }
   }
 
   private fun EffectContext.run(effects: Collection<Attachable>) {

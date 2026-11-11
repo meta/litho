@@ -19,6 +19,7 @@ package com.facebook.litho.widget.collection
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.facebook.litho.Component
 import com.facebook.litho.ComponentScope
+import com.facebook.litho.EmptyComponent
 import com.facebook.litho.KComponent
 import com.facebook.litho.LithoRenderTreeView
 import com.facebook.litho.Style
@@ -248,7 +249,7 @@ class LithoCollectionItemContentUpdateOnBindTest {
   }
 
   @Test
-  fun `bind after recycle does not attach the outdated component's effects`() {
+  fun `bind after recycle keeps the effects whose deps didn't change while the row updates`() {
     ComponentsConfiguration.useCommittedLayoutOnCollectionBind = true
     val log = mutableListOf<String>()
     val (item, scope, oldView) = boundItemShowingA(effectLog = log)
@@ -261,11 +262,12 @@ class LithoCollectionItemContentUpdateOnBindTest {
     drainAndIdle()
 
     assertThat(newView.layoutState?.height).isEqualTo(HEIGHT_B)
-    assertThat(log).containsExactly("attach:A", "detach:A", "attach:B")
+    // A recycled view doesn't detach the row's effects, and B's effect has A's deps.
+    assertThat(log).containsExactly("attach:A")
   }
 
   @Test
-  fun `bind after a rolled-back change attaches the effects again`() {
+  fun `bind after a rolled-back change keeps the effects attached`() {
     ComponentsConfiguration.useCommittedLayoutOnCollectionBind = true
     val log = mutableListOf<String>()
     val (item, scope, oldView) = boundItemShowingA(effectLog = log)
@@ -273,7 +275,7 @@ class LithoCollectionItemContentUpdateOnBindTest {
     item.renderInfo = renderInfoOf(CountingRow(LABEL_B, HEIGHT_B, counter, log))
     item.prepareAsync(childConstraints(scope, item))
     val newView = newView()
-    // Scrolls back in: shows A's layout without its effects while B is queued.
+    // Scrolls back in: shows A's layout while B is queued.
     with(item) { scope.onBindView(newView) }
 
     // Rolled back to A before the background work runs, then rebound for the update.
@@ -284,12 +286,12 @@ class LithoCollectionItemContentUpdateOnBindTest {
 
     assertThat(newView.layoutState?.height).isEqualTo(HEIGHT_A)
     assertThat(log)
-        .describedAs("A is on screen, so its effects must be attached")
-        .containsExactly("attach:A", "detach:A", "attach:A")
+        .describedAs("A is on screen and its effect never left")
+        .containsExactly("attach:A")
   }
 
   @Test
-  fun `bind after recycle attaches the effects of an unchanged row`() {
+  fun `bind after recycle keeps the effects of an unchanged row`() {
     ComponentsConfiguration.useCommittedLayoutOnCollectionBind = true
     val log = mutableListOf<String>()
     val (item, scope, oldView) = boundItemShowingA(effectLog = log)
@@ -300,7 +302,37 @@ class LithoCollectionItemContentUpdateOnBindTest {
     drainAndIdle()
 
     assertThat(newView.layoutState?.height).isEqualTo(HEIGHT_A)
-    assertThat(log).containsExactly("attach:A", "detach:A", "attach:A")
+    assertThat(log).containsExactly("attach:A")
+  }
+
+  @Test
+  fun `a range pass cleans up the effects of a recycled row outside the range`() {
+    val log = mutableListOf<String>()
+    val (item, scope, view) = boundItemShowingA(effectLog = log)
+    // scenario: the row is outside the prepared range while its view is still bound, e.g. kept in
+    // RecyclerView's view cache.
+    with(item) { scope.unprepare() }
+    assertThat(log).describedAs("the view is still bound").containsExactly("attach:A")
+
+    // scenario: its view is recycled, then the next range pass finds it outside the range.
+    item.onViewRecycled(view)
+    assertThat(log).describedAs("recycling keeps the effects").containsExactly("attach:A")
+    with(item) { scope.unprepare() }
+
+    assertThat(log).containsExactly("attach:A", "detach:A")
+  }
+
+  @Test
+  fun `binding a recycled row that became empty cleans up its effects`() {
+    val log = mutableListOf<String>()
+    val (item, scope, oldView) = boundItemShowingA(effectLog = log)
+    item.onViewRecycled(oldView)
+    // scenario: the row is emptied, then bound before any render of the new component runs.
+    item.renderInfo = renderInfoOf(EmptyComponent())
+
+    with(item) { scope.onBindView(newView()) }
+
+    assertThat(log).containsExactly("attach:A", "detach:A")
   }
 
   @Test

@@ -133,18 +133,18 @@ class CollectionReleasedRowRetentionTest {
   }
 
   /**
-   * The cleanup that releases a list's rows also runs when the row holding a nested list is
-   * recycled. When that row comes back, its inner rows render again from scratch: saveable state is
+   * The cleanup that releases a list's rows also runs when the row holding a nested list scrolls
+   * far away. When that row comes back, its inner rows render again from scratch: saveable state is
    * kept, plain state is not.
    */
   @Test
-  fun `legacy - inner rows render again after the row holding them is recycled`() {
-    assertInnerRowsRenderAgainAfterOuterRecycle(legacy)
+  fun `legacy - inner rows render again after the row holding them scrolls far away`() {
+    assertInnerRowsRenderAgainAfterOuterRowScrollsFarAway(legacy)
   }
 
   @Test
-  fun `new - inner rows render again after the row holding them is recycled`() {
-    assertInnerRowsRenderAgainAfterOuterRecycle(new)
+  fun `new - inner rows render again after the row holding them scrolls far away`() {
+    assertInnerRowsRenderAgainAfterOuterRowScrollsFarAway(new)
   }
 
   private fun closingTheSheetReleasesItsRows(rule: LithoTestRule) {
@@ -193,7 +193,7 @@ class CollectionReleasedRowRetentionTest {
     sheet.assertFragmentCollected()
   }
 
-  private fun assertInnerRowsRenderAgainAfterOuterRecycle(rule: LithoTestRule) {
+  private fun assertInnerRowsRenderAgainAfterOuterRowScrollsFarAway(rule: LithoTestRule) {
     val inner = InnerRecorder()
     val view = rule.render(widthPx = 1080, heightPx = 1920) { OuterList(inner) }
     idle(rule)
@@ -202,7 +202,7 @@ class CollectionReleasedRowRetentionTest {
     assertThat(inner.states.last().value).isEqualTo(5)
 
     scrollBy(rule, view, FILLER_HEIGHT_PX * FILLER_COUNT)
-    assertThat(inner.outerRowCleanups).describedAs("the outer row was recycled").isPositive()
+    assertThat(inner.outerRowCleanups).describedAs("the outer row was cleaned up").isPositive()
     scrollBy(rule, view, -FILLER_HEIGHT_PX * FILLER_COUNT)
 
     assertThat(inner.states.last().value).isEqualTo(0)

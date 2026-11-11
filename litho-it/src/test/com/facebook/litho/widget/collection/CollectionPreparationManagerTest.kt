@@ -27,6 +27,8 @@ import com.facebook.litho.widget.LayoutInfo
 import com.facebook.rendercore.IntSize
 import com.facebook.rendercore.SizeConstraints
 import com.meta.rangemanager.PrepareScope
+import java.util.Collections
+import java.util.IdentityHashMap
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.Before
 import org.junit.Rule
@@ -61,6 +63,7 @@ class CollectionPreparationManagerTest {
   fun setup() {
     MockitoAnnotations.initMocks(this)
 
+    whenever(mockAdapter.enteredItems).thenReturn(Collections.newSetFromMap(IdentityHashMap()))
     whenever(mockLayoutInfo.getLayoutManager()).thenReturn(mockLayoutManager)
     whenever(mockLayoutManager.stackFromEnd).thenReturn(false)
     whenever(mockLayoutInfo.findFirstVisibleItemPosition()).thenReturn(0)
@@ -139,20 +142,125 @@ class CollectionPreparationManagerTest {
     preparationManager.bind(mockRecyclerView, 2.0f, onEnterRange, onExitRange)
   }
 
-  /**
-   * Tests for the preparedIndices tracking optimization introduced in the performance improvement.
-   * These tests verify that the optimization correctly:
-   * 1. Tracks which items are already prepared using preparedIndices
-   * 2. Only calls onEnterRange for items newly entering the range (new enterAt() method)
-   * 3. Only calls onExitRange for items leaving the range (new exitAt() method)
-   * 4. Clears preparedIndices when items change
-   */
+  @Test
+  fun `items that a data change moves out of the range exit it`() {
+    setupItemsAndCallbacks(itemCount = 30)
+    val exited = mutableListOf<CollectionItem<*>>()
+    val onExitRange: (CollectionLayoutScope.(CollectionItem<*>) -> Unit) = { item ->
+      exited.add(item)
+    }
+    preparationManager.bind(mockRecyclerView, 2.0f, { _ -> }, onExitRange)
+    preparationManager.estimateItemsInViewPort(IntSize(1000, 2000), IntSize(100, 100))
+    preparationManager.maybePostUpdateViewportAndComputeRange(0, 4)
+    val prepared = mockAdapter.getItems().take(5)
+
+    // Viewport stays at 0..4; 40 inserted rows move the prepared objects past the range.
+    val newItems = (100 until 140).map { index -> createTestItem(index) } + mockAdapter.getItems()
+    whenever(mockAdapter.getItems()).thenReturn(newItems)
+    whenever(mockLatestCommittedData.createLayoutScope().collectionItems).thenReturn(newItems)
+    preparationManager.onItemsChanged()
+    assertThat(exited).isEmpty()
+    preparationManager.maybePostUpdateViewportAndComputeRange(0, 4)
+
+    assertThat(exited).containsAll(prepared)
+  }
+
+  @Test
+  fun `an exit that brings other items back into range does not exit them`() {
+    setupItemsAndCallbacks(itemCount = 60)
+    val previouslyPrepared = mockAdapter.getItems().take(16)
+    val exited = mutableListOf<CollectionItem<*>>()
+    val onExitRange: (CollectionLayoutScope.(CollectionItem<*>) -> Unit) = { item ->
+      if (item in previouslyPrepared) {
+        exited.add(item)
+        if (exited.size == 1) {
+          preparationManager.maybePostUpdateViewportAndComputeRange(0, 4)
+        }
+      }
+    }
+    preparationManager.bind(mockRecyclerView, 2.0f, { _ -> }, onExitRange)
+    preparationManager.estimateItemsInViewPort(IntSize(1000, 2000), IntSize(100, 100))
+    preparationManager.maybePostUpdateViewportAndComputeRange(0, 4)
+
+    // The first exit scrolls back before the remaining items' exit callbacks run.
+    preparationManager.maybePostUpdateViewportAndComputeRange(35, 39)
+
+    assertThat(exited).hasSize(1)
+  }
+
+  @Test
+  fun `a replacement manager finishes exits interrupted by an unbind`() {
+    setupItemsAndCallbacks(itemCount = 60)
+    val previouslyPrepared = mockAdapter.getItems().take(16)
+    val exited = mutableListOf<CollectionItem<*>>()
+    val onExitRange: (CollectionLayoutScope.(CollectionItem<*>) -> Unit) = { item ->
+      exited.add(item)
+      preparationManager.unbind(mockRecyclerView)
+    }
+    preparationManager.bind(mockRecyclerView, 2.0f, { _ -> }, onExitRange)
+    preparationManager.estimateItemsInViewPort(IntSize(1000, 2000), IntSize(100, 100))
+    preparationManager.maybePostUpdateViewportAndComputeRange(0, 4)
+
+    // An inner row's cleanup can recycle its outer row and unbind the inner manager.
+    preparationManager.maybePostUpdateViewportAndComputeRange(35, 39)
+    assertThat(exited).hasSize(1)
+    val replacement = CollectionPreparationManager(mockLayoutInfo, mockAdapter)
+    val finishExit: (CollectionLayoutScope.(CollectionItem<*>) -> Unit) = { item ->
+      exited.add(item)
+    }
+    replacement.bind(mockRecyclerView, 2.0f, { _ -> }, finishExit)
+    replacement.estimateItemsInViewPort(IntSize(1000, 2000), IntSize(100, 100))
+
+    replacement.maybePostUpdateViewportAndComputeRange(35, 39)
+
+    assertThat(exited).containsExactlyInAnyOrderElementsOf(previouslyPrepared)
+  }
+
+  @Test
+  fun `a replacement manager prepares the tracked items for its layout`() {
+    setupItemsAndCallbacks(itemCount = 30)
+    preparationManager.estimateItemsInViewPort(IntSize(1000, 2000), IntSize(100, 100))
+    preparationManager.maybePostUpdateViewportAndComputeRange(0, 4)
+    val prepared = mockAdapter.getItems().take(5)
+    val entered = mutableListOf<CollectionItem<*>>()
+    val onEnterRange: (CollectionLayoutScope.(CollectionItem<*>) -> Unit) = { item ->
+      entered.add(item)
+    }
+    preparationManager.unbind(mockRecyclerView)
+    val replacement = CollectionPreparationManager(mockLayoutInfo, mockAdapter)
+    replacement.bind(mockRecyclerView, 2.0f, onEnterRange, { _ -> })
+    replacement.estimateItemsInViewPort(IntSize(2000, 1000), IntSize(100, 100))
+
+    replacement.maybePostUpdateViewportAndComputeRange(0, 4)
+
+    assertThat(entered).containsAll(prepared)
+  }
+
+  @Test
+  fun `a data change prepares an existing item with new render info`() {
+    setupItemsAndCallbacks(itemCount = 30)
+    val entered = mutableListOf<CollectionItem<*>>()
+    val onEnterRange: (CollectionLayoutScope.(CollectionItem<*>) -> Unit) = { item ->
+      entered.add(item)
+    }
+    preparationManager.bind(mockRecyclerView, 2.0f, onEnterRange, { _ -> })
+    preparationManager.estimateItemsInViewPort(IntSize(1000, 2000), IntSize(100, 100))
+    preparationManager.maybePostUpdateViewportAndComputeRange(0, 4)
+    val updated = mockAdapter.getItems().first()
+    updated.renderInfo = createTestItem(index = 100).renderInfo
+    entered.clear()
+
+    preparationManager.onItemsChanged()
+
+    assertThat(entered).contains(updated)
+  }
+
   @Test
   fun `test second range computation with same range does not call onEnterRange again`() {
     // This is the KEY optimization test!
     // First computation: items enter
     // Second computation with SAME range: NO items should enter (they're already prepared)
-    // This verifies the preparedIndices optimization is working
+    // This verifies entered items are not prepared again
 
     setupItemsAndCallbacks(20)
     preparationManager.estimateItemsInViewPort(IntSize(1000, 2000), IntSize(100, 100))
@@ -249,7 +357,7 @@ class CollectionPreparationManagerTest {
 
   @Test
   fun `test onEnter is called for correct specific items in calculated range`() {
-    // Verify that enterAt() is called for the CORRECT items based on range formula
+    // Verify that onEnterRange is called for the CORRECT items based on range formula
     // This ensures the optimization didn't break which items get prepared
     //
     // Given: visible 5-9, estimatedItems=5, rangeRatio=2.0
@@ -295,7 +403,7 @@ class CollectionPreparationManagerTest {
 
   @Test
   fun `test onExit is called for correct specific items leaving range`() {
-    // Verify that exitAt() is called for the CORRECT items when they leave the range
+    // Verify that onExitRange is called for the CORRECT items when they leave the range
     // This ensures the optimization tracks exits properly
     //
     // First call: visible 10-14 -> should prepare roughly 0-24
@@ -330,7 +438,7 @@ class CollectionPreparationManagerTest {
   @Test
   fun `test only new items enter when ranges partially overlap`() {
     // Verify that when ranges overlap, only NEWLY entering items call onEnter
-    // This directly tests the preparedIndices optimization
+    // This directly tests tracking items already in the prepared range
     //
     // First: visible 5-9 -> prepares some range
     // Second: visible 7-11 -> overlaps with first, should only enter NEW items

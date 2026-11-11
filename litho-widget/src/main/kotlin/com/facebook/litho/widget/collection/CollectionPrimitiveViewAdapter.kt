@@ -28,6 +28,8 @@ import com.facebook.litho.widget.RecyclerViewLayoutManagerOverrideParams
 import com.facebook.rendercore.thread.utils.ThreadUtils
 import com.facebook.rendercore.toHeightSpec
 import com.facebook.rendercore.toWidthSpec
+import java.util.Collections
+import java.util.IdentityHashMap
 
 /**
  * RecyclerView adapter that can be used to render a list of [CollectionItem]s. The adapter will
@@ -155,8 +157,19 @@ class CollectionPrimitiveViewAdapter @PublishedApi internal constructor() :
     }
   }
 
+  /**
+   * Items entered into preparation, plus recycled items awaiting a range pass, by identity. Kept
+   * across data changes and [CollectionPreparationManager] replacement. Main thread only.
+   */
+  internal val enteredItems: MutableSet<CollectionItem<*>> =
+      Collections.newSetFromMap(IdentityHashMap())
+
   override fun onViewRecycled(viewHolder: PrimitiveRecyclerViewHolder) {
-    viewHolder.delegate.data?.onViewRecycled(viewHolder.delegate.view)
+    viewHolder.delegate.data?.let { item ->
+      item.onViewRecycled(viewHolder.delegate.view)
+      // A row may have exited while its view was still cached; retry cleanup on the next pass.
+      enteredItems.add(item)
+    }
     viewHolder.delegate.data = null
     if (viewHolder.itemView is LithoRenderTreeView) {
       (viewHolder.itemView as LithoRenderTreeView).onMeasured = null

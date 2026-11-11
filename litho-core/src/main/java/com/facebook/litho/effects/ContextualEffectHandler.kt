@@ -129,9 +129,12 @@ internal class ContextualEffectHandler : EffectHandler {
 
   override fun onCleanup() {
     ThreadUtils.assertMainThread()
-    _effects?.let { cleanup(it) }
-    stateReadRecords.clear()
+    // Emptied before the cleanup callbacks run, so effects they attach, e.g. by committing a new
+    // layout, are kept and cleaned up later instead of being dropped here.
+    val effects = _effects
     _effects = null
+    stateReadRecords.clear()
+    effects?.let { cleanup(it) }
   }
 
   private fun EffectContext.run(effects: Map<Any, Attachable>) {

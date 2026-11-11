@@ -182,10 +182,11 @@ class LithoCollectionItem(
     // Bound again before it was recycled, so it is still in use.
     releaseWhenRecycled = false
 
-    // If we're binding to a different view (RecyclerView change animation scenario),
-    // we must clean up the old view first since onViewRecycled will skip it
+    // A change animation binds this item to a new view while the old one is still animating out.
+    // onViewRecycled skips the old view later, as it is no longer the bound one, so the old view is
+    // cleaned here. The effects stay attached: the item is still in the list and binds right below.
     if (previousView != null && previousView !== view) {
-      rendererOrNull?.unbind()
+      rendererOrNull?.detachFromHost()
       previousView.clean()
     }
 
@@ -237,8 +238,16 @@ class LithoCollectionItem(
 
     // This is the view we're currently managing - clean it up. An unbound item is no longer saved,
     // so its values are retained until it binds again.
+    //
+    // Its effects stay attached: the item is still in the list, usually near the screen. They are
+    // cleaned when a range pass finds it outside the range with no view (unprepare), or when
+    // it is released. A sticky item is the exception: its floating header is a separate item that
+    // renders the same component, so it would run the same effects a second time.
     saveableStateRegistry?.retainActiveValues()
-    rendererOrNull?.unbind()
+    rendererOrNull?.detachFromHost()
+    if (renderInfo.isSticky) {
+      rendererOrNull?.cleanupDetachedEffects()
+    }
     view.clean()
     currentBoundView = null
     saveableStateRegistry?.let(saveableStateRegistries::onItemUnbound)
@@ -249,6 +258,8 @@ class LithoCollectionItem(
 
   override fun PrepareScope.unprepare() {
     rendererOrNull?.cleanup()
+    // A cached view keeps the effects until it is recycled and another range pass exits the item.
+    rendererOrNull?.cleanupDetachedEffects()
   }
 
   /**

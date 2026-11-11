@@ -341,8 +341,8 @@ class CollectionRecyclerComponent(
         latestCommittedData.saveableStateRegistries.detach()
         // A row's state handle can outlive the list, e.g. held by a pooled view, so the rows are
         // released here or that handle would keep them, and all they reference, alive. This also
-        // runs when the row holding a nested list is recycled: the inner rows then render again
-        // from scratch when it is bound again, keeping only their saveable state.
+        // runs when the row holding a nested list leaves its list's prepared range: the inner rows
+        // then render again from scratch when it comes back, keeping only their saveable state.
         latestCommittedData.items.forEach { item ->
           (item as? LithoCollectionItem)?.releaseRenderer()
         }
@@ -578,8 +578,12 @@ internal class LatestCommittedData(
 
   private val lock = Any()
 
+  /**
+   * Commits [changeset] and returns the items it removed. The caller releases them once the adapter
+   * has the new data too.
+   */
   @UiThread
-  fun commit(changeset: Changeset) {
+  fun commit(changeset: Changeset): List<CollectionItem<*>> {
     ThreadUtils.assertMainThread()
     val removedItems =
         synchronized(lock) {
@@ -593,9 +597,7 @@ internal class LatestCommittedData(
           removed
         }
     changeset.rowKeys?.let(saveableStateRegistries::onCommit)
-    // A removed row's state handle can outlive it, e.g. held by a pooled view, so the row is
-    // released or that handle would keep it alive.
-    removedItems.forEach { item -> (item as? LithoCollectionItem)?.releaseRenderer() }
+    return removedItems
   }
 
   /** The items in [from] that are not in [to], compared by identity. */
@@ -1267,7 +1269,7 @@ private class CollectionPrimitiveViewLayoutBehavior(
         return
       }
 
-      latestCommittedData.commit(changeset)
+      val removedItems = latestCommittedData.commit(changeset)
       // Range preparation relies on layout data to determine which items need to be prepared for
       // rendering. We must commit the layout data before notifying the adapter of changes.
       layoutData.items = latestCommittedData.items
@@ -1281,6 +1283,10 @@ private class CollectionPrimitiveViewLayoutBehavior(
             onDataRendered = onDataRendered,
         )
       }
+      // A removed row's state handle can outlive it, e.g. held by a pooled view, so the row is
+      // released or that handle would keep it alive. Released once the adapter has the new data,
+      // so a cleanup that scrolls the list sees one list, not the old and the new one.
+      removedItems.forEach { item -> (item as? LithoCollectionItem)?.releaseRenderer() }
       val changesetDurationNs = System.nanoTime() - changesetStartNs
 
       if (changeset.operation.hasChanges) {

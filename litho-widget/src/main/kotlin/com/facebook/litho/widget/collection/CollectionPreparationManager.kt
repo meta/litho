@@ -17,7 +17,6 @@
 package com.facebook.litho.widget.collection
 
 import androidx.annotation.UiThread
-import androidx.collection.MutableIntSet
 import androidx.core.view.isGone
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -61,12 +60,8 @@ internal constructor(
   private var onExitRange: (CollectionLayoutScope.(CollectionItem<*>) -> Unit)? = null
   private var postUpdateViewportAttempts = 0
 
-  /**
-   * Tracks the indices of items currently in the prepared range. This set is used to avoid
-   * redundant preparation calls for items that are already prepared, significantly reducing
-   * unnecessary render operations during scrolling.
-   */
-  private val preparedIndices = MutableIntSet()
+  // A new binding may have different layout constraints for items the adapter already tracks.
+  private var prepareAllInRange = true
 
   @Volatile private var lastEmittedRangeStart: Int = Int.MIN_VALUE
   @Volatile private var lastEmittedRangeEnd: Int = Int.MIN_VALUE
@@ -166,6 +161,7 @@ internal constructor(
     this.rangeRatio = rangeRatio
     this.onEnterRange = onEnterRange
     this.onExitRange = onExitRange
+    prepareAllInRange = true
 
     view.addOnScrollListener(viewportManager.scrollListener)
     viewportManager.addViewportChangedListener(viewportChangedListener)
@@ -214,18 +210,7 @@ internal constructor(
     computeRange(firstVisibleIndex, lastVisibleIndex, trigger = trigger)
   }
 
-  /**
-   * Computes the range of items that should be prepared for rendering based on the currently
-   * visible items. This method determines which items should enter or exit the preparation range
-   * based on their position relative to the visible viewport.
-   *
-   * Optimization: This method now tracks which items are already prepared and only calls
-   * onEnterRange for items newly entering the range, avoiding redundant render operations.
-   *
-   * @param firstVisibleIndex The index of the first visible item in the viewport
-   * @param lastVisibleIndex The index of the last visible item in the viewport
-   * @param traverser The traverser that defines the order in which items are processed
-   */
+  /** Prepares new or updated in-range items and exits tracked items no longer in range. */
   @UiThread
   private fun computeRange(
       firstVisibleIndex: Int,
@@ -233,7 +218,9 @@ internal constructor(
       traverser: RecyclerRangeTraverser = rangeTraverser,
       trigger: CollectionRangeTrigger = CollectionRangeTrigger.SCROLL,
   ) {
-    if (!isBound) return
+    if (!isBound) {
+      return
+    }
 
     if (estimatedItemsInViewPort == UNSET) {
       return
@@ -258,22 +245,41 @@ internal constructor(
     val layoutScope = adapter.latestCommittedData?.createLayoutScope() ?: return
 
     ComponentsSystrace.trace({ "computeRange[$rangeStart-$rangeEnd]" }) {
+      val enteredItems = adapter.enteredItems
+      val refreshItems = prepareAllInRange || trigger == CollectionRangeTrigger.DATA_CHANGE
+      prepareAllInRange = false
+      val endExclusive = min(rangeEnd + 1, totalSize)
+      val itemsInRange =
+          layoutScope.collectionItems.subList(min(rangeStart, totalSize), endExclusive)
       val processor =
           object : RecyclerRangeTraverser.Processor {
             override fun process(index: Int): Boolean {
-              if (index >= rangeStart && index <= rangeEnd) {
-                if (preparedIndices.add(index)) {
-                  // Process indices in the new range that aren't already prepared
-                  return layoutScope.enterAt(index)
-                }
-              } else if (preparedIndices.remove(index)) {
-                // Process indices in the old range that were previously prepared
-                return layoutScope.exitAt(index)
+              val item = layoutScope.collectionItems[index]
+              val newlyEntered = enteredItems.add(item)
+              return if (newlyEntered || refreshItems) {
+                layoutScope.enter(item)
+              } else {
+                isBound
               }
-              return true
             }
           }
-      traverser.traverse(0, totalSize, firstVisibleToUse, lastVisibleToUse, processor)
+      traverser.traverse(rangeStart, endExclusive, firstVisibleToUse, lastVisibleToUse, processor)
+      // A data change runs this pass before RecyclerView hears of the change: its visible positions
+      // are the old ones, so after a large removal a row next to the viewport looks out of range,
+      // and a cleanup that scrolls would scroll the old item count. The pass posted for the change,
+      // once RecyclerView has applied it, cleans them.
+      if (trigger != CollectionRangeTrigger.DATA_CHANGE && isBound) {
+        val outsideRange = enteredItems.filter { item -> itemsInRange.none { it === item } }
+        outsideRange.forEach { item -> enteredItems.remove(item) }
+        for ((index, item) in outsideRange.withIndex()) {
+          // An earlier cleanup may scroll back and enter this item in another range pass.
+          if (item !in enteredItems && !layoutScope.exit(item)) {
+            // Unbinding interrupts exits; the adapter must keep them for the next manager.
+            enteredItems.addAll(outsideRange.subList(index, outsideRange.size))
+            break
+          }
+        }
+      }
     }
 
     dispatchRangeComputed(
@@ -286,27 +292,19 @@ internal constructor(
     )
   }
 
-  /**
-   * Handles an item entering the preparation range. Only called for items newly entering the range.
-   *
-   * @param index The index of the item entering the range
-   * @return true if processing should continue, false otherwise
-   */
-  private fun CollectionLayoutScope.enterAt(index: Int): Boolean {
-    if (!isBound) return false
-    checkNotNull(onEnterRange).invoke(this, collectionItems[index])
+  private fun CollectionLayoutScope.enter(item: CollectionItem<*>): Boolean {
+    if (!isBound) {
+      return false
+    }
+    checkNotNull(onEnterRange).invoke(this, item)
     return true
   }
 
-  /**
-   * Handles an item exiting the preparation range.
-   *
-   * @param index The index of the item exiting the range
-   * @return true if processing should continue, false otherwise
-   */
-  private fun CollectionLayoutScope.exitAt(index: Int): Boolean {
-    if (!isBound) return false
-    checkNotNull(onExitRange).invoke(this, collectionItems[index])
+  private fun CollectionLayoutScope.exit(item: CollectionItem<*>): Boolean {
+    if (!isBound) {
+      return false
+    }
+    checkNotNull(onExitRange).invoke(this, item)
     return true
   }
 
@@ -376,8 +374,6 @@ internal constructor(
     // Notify the viewport manager that the adapter data has changed so it can recalculate visible
     // ranges
     viewportManager.setShouldUpdate(true)
-    // Clear prepared indices since data has changed - all items need to be re-prepared
-    preparedIndices.clear()
     maybePostUpdateViewportAndComputeRange(trigger = CollectionRangeTrigger.DATA_CHANGE)
   }
 
