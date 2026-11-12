@@ -1174,7 +1174,7 @@ constructor(
    */
   class DelegateBinder<MODEL, CONTENT, BIND_DATA : Any>
   private constructor(
-      internal val model: MODEL,
+      val model: MODEL,
       val binder: Binder<MODEL, CONTENT, BIND_DATA>,
   ) {
 
