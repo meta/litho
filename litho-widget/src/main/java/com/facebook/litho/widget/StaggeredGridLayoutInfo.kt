@@ -28,6 +28,7 @@ import com.facebook.litho.SizeSpec.EXACTLY
 import com.facebook.litho.SizeSpec.UNSPECIFIED
 import com.facebook.litho.SizeSpec.getSize
 import com.facebook.litho.SizeSpec.makeSizeSpec
+import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.widget.LayoutInfo.RenderInfoCollection
 import com.facebook.litho.widget.StaggeredGridLayoutHelper.findFirstFullyVisibleItemPosition
 import com.facebook.litho.widget.StaggeredGridLayoutHelper.findFirstVisibleItemPosition
@@ -86,14 +87,12 @@ constructor(
     val spanCount = staggeredGridLayoutManager.spanCount
     when (staggeredGridLayoutManager.orientation) {
       StaggeredGridLayoutManager.HORIZONTAL -> {
-        val colCount =
-            ceil(recyclerMeasuredWidth.toDouble() / firstMeasuredItemWidth.toDouble()).toInt()
+        val colCount = linesPerViewport(recyclerMeasuredWidth, firstMeasuredItemWidth)
 
         return colCount * spanCount
       }
       else -> {
-        val rowCount =
-            ceil(recyclerMeasuredHeight.toDouble() / firstMeasuredItemHeight.toDouble()).toInt()
+        val rowCount = linesPerViewport(recyclerMeasuredHeight, firstMeasuredItemHeight)
 
         return rowCount * spanCount
       }
@@ -412,5 +411,15 @@ constructor(
     // are
     // taken into account.
     const val OVERRIDE_SIZE: String = "OVERRIDE_SIZE"
+
+    // Same as LinearLayoutInfo's upper bound; 0 px divides to infinity and overflows the span math.
+    private const val ZERO_SIZE_ITEM_LINES: Int = 10
+
+    private fun linesPerViewport(viewportSize: Int, itemSize: Int): Int {
+      if (itemSize <= 0 && ComponentsConfiguration.saneGridRangeEstimateForZeroSizeItems) {
+        return ZERO_SIZE_ITEM_LINES
+      }
+      return ceil(viewportSize.toDouble() / itemSize.toDouble()).toInt()
+    }
   }
 }

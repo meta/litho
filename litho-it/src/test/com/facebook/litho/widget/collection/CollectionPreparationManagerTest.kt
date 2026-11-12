@@ -18,19 +18,24 @@ package com.facebook.litho.widget.collection
 
 import android.view.View
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.OrientationHelper
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.StaggeredGridLayoutManager
 import com.facebook.litho.Component
+import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.testing.LithoTestRule
 import com.facebook.litho.testing.testrunner.LithoTestRunner
 import com.facebook.litho.widget.ComponentRenderInfo
 import com.facebook.litho.widget.GridLayoutInfo
 import com.facebook.litho.widget.LayoutInfo
+import com.facebook.litho.widget.StaggeredGridLayoutInfo
 import com.facebook.rendercore.IntSize
 import com.facebook.rendercore.SizeConstraints
 import com.meta.rangemanager.PrepareScope
 import java.util.Collections
 import java.util.IdentityHashMap
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatCode
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -147,20 +152,95 @@ class CollectionPreparationManagerTest {
   fun `a grid whose first item is 0 px tall does not crash the range pass`() {
     // A 0 px first item makes the grid estimate wrap near Int.MAX_VALUE rows per viewport, and the
     // range end overflows to -5.
-    val gridLayoutInfo = GridLayoutInfo(lithoTestRule.context.androidContext, spanCount = 5)
-    preparationManager = CollectionPreparationManager(gridLayoutInfo, mockAdapter)
-    setupItemsAndCallbacks(itemCount = 30)
-    preparationManager.estimateItemsInViewPort(
-        collectionSize = IntSize(1080, 1920),
-        childSize = IntSize(216, 0),
-    )
+    val previousValue = ComponentsConfiguration.saneGridRangeEstimateForZeroSizeItems
+    ComponentsConfiguration.saneGridRangeEstimateForZeroSizeItems = false
+    try {
+      val gridLayoutInfo = GridLayoutInfo(lithoTestRule.context.androidContext, spanCount = 5)
+      preparationManager = CollectionPreparationManager(gridLayoutInfo, mockAdapter)
+      setupItemsAndCallbacks(itemCount = 30)
+      preparationManager.estimateItemsInViewPort(
+          collectionSize = IntSize(1080, 1920),
+          childSize = IntSize(216, 0),
+      )
 
-    preparationManager.maybePostUpdateViewportAndComputeRange(
-        firstVisibleIndex = 1,
-        lastVisibleIndex = 5,
-    )
+      assertThatCode {
+        preparationManager.maybePostUpdateViewportAndComputeRange(
+            firstVisibleIndex = 1,
+            lastVisibleIndex = 5,
+        )
+      }
+          .doesNotThrowAnyException()
+    } finally {
+      ComponentsConfiguration.saneGridRangeEstimateForZeroSizeItems = previousValue
+    }
+  }
 
-    assertThat(enteredItems).isEmpty()
+  @Test
+  fun `the visible items stay in range when the estimate is near Int MAX_VALUE`() {
+    val previousValue = ComponentsConfiguration.saneGridRangeEstimateForZeroSizeItems
+    ComponentsConfiguration.saneGridRangeEstimateForZeroSizeItems = true
+    try {
+      // What a 5-column grid estimates for a 0 px item without the clamp.
+      whenever(mockLayoutInfo.approximateRangeSize(any(), any(), any(), any()))
+          .thenReturn(Int.MAX_VALUE - 4)
+      setupItemsAndCallbacks(itemCount = 60)
+      preparationManager.estimateItemsInViewPort(
+          collectionSize = IntSize(1080, 1920),
+          childSize = IntSize(216, 0),
+      )
+
+      preparationManager.maybePostUpdateViewportAndComputeRange(
+          firstVisibleIndex = 1,
+          lastVisibleIndex = 5,
+      )
+      assertThat(enteredItems).containsAll((1..5).toList())
+
+      preparationManager.maybePostUpdateViewportAndComputeRange(
+          firstVisibleIndex = 20,
+          lastVisibleIndex = 34,
+      )
+      assertThat(enteredItems).containsAll((20..34).toList())
+      assertThat(exitedItems).doesNotContainAnyElementsOf((20..34).toList())
+    } finally {
+      ComponentsConfiguration.saneGridRangeEstimateForZeroSizeItems = previousValue
+    }
+  }
+
+  @Test
+  fun `grids whose first item is 0 px tall prepare the items on screen`() {
+    val previousValue = ComponentsConfiguration.saneGridRangeEstimateForZeroSizeItems
+    ComponentsConfiguration.saneGridRangeEstimateForZeroSizeItems = true
+    try {
+      val context = lithoTestRule.context.androidContext
+      val grids = listOf(
+          GridLayoutInfo(context, spanCount = 5),
+          StaggeredGridLayoutInfo(
+              spanCount = 5,
+              orientation = OrientationHelper.VERTICAL,
+              reverseLayout = false,
+              gapStrategy = StaggeredGridLayoutManager.GAP_HANDLING_NONE,
+          ),
+      )
+      for (grid in grids) {
+        enteredItems.clear()
+        preparationManager = CollectionPreparationManager(grid, mockAdapter)
+        setupItemsAndCallbacks(itemCount = 300)
+        preparationManager.estimateItemsInViewPort(
+            collectionSize = IntSize(1080, 1920),
+            childSize = IntSize(216, 0),
+        )
+
+        preparationManager.maybePostUpdateViewportAndComputeRange(
+            firstVisibleIndex = 20,
+            lastVisibleIndex = 24,
+        )
+
+        assertThat(enteredItems).describedAs(grid.javaClass.simpleName).contains(20, 21, 22, 23, 24)
+        assertThat(enteredItems).describedAs(grid.javaClass.simpleName).doesNotContain(299)
+      }
+    } finally {
+      ComponentsConfiguration.saneGridRangeEstimateForZeroSizeItems = previousValue
+    }
   }
 
   @Test

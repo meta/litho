@@ -23,6 +23,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.facebook.litho.ComponentsSystrace
 import com.facebook.litho.ThreadUtils
 import com.facebook.litho.annotations.ExperimentalLithoApi
+import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.debug.CollectionRangeTrigger
 import com.facebook.litho.debug.LithoDebugEvent
 import com.facebook.litho.debug.LithoDebugEventAttributes
@@ -236,6 +237,11 @@ internal constructor(
     if (adapter.isCircular) {
       rangeStart = 0
       rangeEnd = totalSize
+    } else if (ComponentsConfiguration.saneGridRangeEstimateForZeroSizeItems) {
+      // Long math so that an estimate near Int.MAX_VALUE can't wrap the visible items out of range.
+      val extent = (rangeSize * rangeRatio).toLong()
+      rangeStart = max(0L, firstVisibleToUse - extent).toInt()
+      rangeEnd = min(totalSize - 1L, firstVisibleToUse.toLong() + rangeSize + extent).toInt()
     } else {
       rangeStart = max(0, firstVisibleToUse - (rangeSize * rangeRatio).toInt())
       rangeEnd =

@@ -26,6 +26,7 @@ import com.facebook.litho.SizeSpec.EXACTLY
 import com.facebook.litho.SizeSpec.UNSPECIFIED
 import com.facebook.litho.SizeSpec.getSize
 import com.facebook.litho.SizeSpec.makeSizeSpec
+import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.widget.LayoutInfo.RenderInfoCollection
 import com.facebook.rendercore.SizeConstraints
 import kotlin.math.ceil
@@ -87,14 +88,12 @@ class GridLayoutInfo(private val gridLayoutManager: GridLayoutManager) : LayoutI
     val spanCount = gridLayoutManager.spanCount
     when (gridLayoutManager.orientation) {
       GridLayoutManager.HORIZONTAL -> {
-        val colCount =
-            ceil(recyclerMeasuredWidth.toDouble() / firstMeasuredItemWidth.toDouble()).toInt()
+        val colCount = linesPerViewport(recyclerMeasuredWidth, firstMeasuredItemWidth)
 
         return colCount * spanCount
       }
       else -> {
-        val rowCount =
-            ceil(recyclerMeasuredHeight.toDouble() / firstMeasuredItemHeight.toDouble()).toInt()
+        val rowCount = linesPerViewport(recyclerMeasuredHeight, firstMeasuredItemHeight)
 
         return rowCount * spanCount
       }
@@ -266,5 +265,15 @@ class GridLayoutInfo(private val gridLayoutManager: GridLayoutManager) : LayoutI
     // this can be useful to manually compute the size of an item after such decorations are taken
     // into account.
     const val OVERRIDE_SIZE: String = "OVERRIDE_SIZE"
+
+    // Same as LinearLayoutInfo's upper bound; 0 px divides to infinity and overflows the span math.
+    private const val ZERO_SIZE_ITEM_LINES: Int = 10
+
+    private fun linesPerViewport(viewportSize: Int, itemSize: Int): Int {
+      if (itemSize <= 0 && ComponentsConfiguration.saneGridRangeEstimateForZeroSizeItems) {
+        return ZERO_SIZE_ITEM_LINES
+      }
+      return ceil(viewportSize.toDouble() / itemSize.toDouble()).toInt()
+    }
   }
 }

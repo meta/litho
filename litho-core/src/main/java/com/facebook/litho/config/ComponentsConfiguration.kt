@@ -518,6 +518,13 @@ internal constructor(
     @JvmField var disablePreparationOnUiThread: Boolean = true
 
     /**
+     * When enabled, grid and staggered grid layouts estimate 10 rows per viewport for an item that
+     * measures 0 px in the scroll direction, as linear layouts do, and the collection's range keeps
+     * the visible items for any estimate.
+     */
+    @JvmField var saneGridRangeEstimateForZeroSizeItems: Boolean = false
+
+    /**
      * When enabled, a layout-only pass (same resolve, new size specs) takes its `RenderState` from
      * the resolve snapshot instead of the last committed layout. The committed layout's render data
      * is written on the main thread at mount, so copying it on a layout thread can throw a
