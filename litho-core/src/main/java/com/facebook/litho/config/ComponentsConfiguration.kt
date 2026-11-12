@@ -268,6 +268,17 @@ internal constructor(
      * of in the Context's pool, which lives as long as the Activity.
      */
     @JvmField val usePoolScopes: Boolean = false,
+    /**
+     * When true, a [com.facebook.litho.BaseMountingView] does not mount while it or one of its
+     * ancestors is not [android.view.View.VISIBLE] and the window's root view is, for example
+     * inside a Fragment hidden with `FragmentTransaction.hide()`, and mounts the latest layout once
+     * the view becomes visible again, before it is drawn. The hide is checked at each mount pass
+     * and not stored, so a hidden root view, as in a stopped Activity, never pauses mounting. The
+     * visibility hint is not changed and visibility items are kept: content that stays visible gets
+     * no new `onVisible`, and replaced content gets `onInvisible` when the view is shown again.
+     * Mounted content is kept, and passes that can only unmount still run.
+     */
+    @JvmField val pauseMountingWhileHidden: Boolean = false,
 ) {
 
   companion object {
@@ -717,6 +728,10 @@ internal constructor(
 
     fun resetVisibilityHintOnTreeDetach(enabled: Boolean): Builder = apply {
       config = config.copy(resetVisibilityHintOnTreeDetach = enabled)
+    }
+
+    fun pauseMountingWhileHidden(enabled: Boolean): Builder = apply {
+      config = config.copy(pauseMountingWhileHidden = enabled)
     }
 
     fun visibilityBoundsTransformer(transformer: VisibilityBoundsTransformer?): Builder = apply {

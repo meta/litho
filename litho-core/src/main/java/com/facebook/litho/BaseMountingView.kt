@@ -21,6 +21,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.graphics.Rect
 import android.graphics.drawable.Drawable
+import android.os.Build
 import android.util.AttributeSet
 import android.util.Log
 import android.view.View
@@ -191,6 +192,10 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
   private var visibilityHintIsVisible = false
 
   private var skipMountingIfNotVisible = false
+
+  private var hasPendingPremountRegistration = false
+
+  private var hasPendingCatchUp = false
 
   /**
    * Tracks the most recent non-UNKNOWN visibility change reason. Used to propagate the correct
@@ -518,7 +523,7 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
   ) {
     val layoutState = currentLayoutState ?: return
 
-    if (shouldPauseMountingWithVisibilityHintFalse()) {
+    if (isMountingPaused(actualVisibleRect)) {
       return
     }
 
@@ -568,7 +573,7 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
       isProbe: Boolean = false,
   ) {
     val layoutState = currentLayoutState ?: return
-    if (shouldPauseMountingWithVisibilityHintFalse()) {
+    if (isMountingPaused(visibleRect)) {
       return
     }
 
@@ -700,6 +705,54 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
   }
 
   /**
+   * Whether a mount pass for [visibleRect] waits: while the visibility hint is false, or while
+   * [isHiddenUnderShownRoot] unless the pass can only unmount. A pass skipped while hidden is run
+   * once by [onVisibilityAggregated] when the view is shown; any pass that runs with a non-empty
+   * rect makes that catch-up unnecessary.
+   */
+  private fun isMountingPaused(visibleRect: Rect?): Boolean {
+    if (shouldPauseMountingWithVisibilityHintFalse()) {
+      return true
+    }
+    if (!isHiddenUnderShownRoot()) {
+      if (visibleRect?.isEmpty != true) {
+        hasPendingCatchUp = false
+      }
+      return false
+    }
+    if (canOnlyUnmount(visibleRect)) {
+      return false
+    }
+    hasPendingCatchUp = true
+    return true
+  }
+
+  /**
+   * With the per-tree [ComponentsConfiguration.pauseMountingWhileHidden], whether this attached
+   * view or an ancestor is not visible while the window's root view is. It is computed at each pass
+   * and not stored, so a hidden root view, as in a stopped Activity, never pauses mounting, and a
+   * view shown again mounts at its next pass even without [onVisibilityAggregated]. The visibility
+   * hint and the visibility items are left as they are: content that stays visible gets no new
+   * `onVisible`, and replaced content gets `onInvisible` at the catch-up mount. Before API 24
+   * nothing reports the view shown again, so it never counts as hidden there.
+   */
+  private fun isHiddenUnderShownRoot(): Boolean =
+      configuration?.pauseMountingWhileHidden == true &&
+          Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
+          isAttachedToWindow &&
+          !isShown &&
+          rootView.isShown
+
+  /**
+   * Whether a pass for [visibleRect] can only unmount: an empty rect, with incremental mount on and
+   * no output excluded from it.
+   */
+  private fun canOnlyUnmount(visibleRect: Rect?): Boolean =
+      visibleRect?.isEmpty == true &&
+          isIncrementalMountEnabled &&
+          currentLayoutState?.hasComponentsExcludedFromIncrementalMount != true
+
+  /**
    * Dispatch a visibility events to all the components hosted in this BaseMountingView.
    *
    * Marked as @Deprecated to indicate this method is experimental and should not be widely used.
@@ -819,6 +872,12 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
   override fun onRegisterForPremount(frameTimeMs: Long?) {
     val config = configuration
     if (config != null && config.gapWorkerMode != GapWorkerMode.OFF) {
+      // Premounting mounts outside the paused passes, so it waits until the view is shown.
+      if (isHiddenUnderShownRoot()) {
+        hasPendingPremountRegistration = true
+        hasPendingCatchUp = true
+        return
+      }
       trace(
           {
             "mount.onRegisterForPremount[${currentLayoutState?.rootComponent?.simpleName ?: "Unknown"}]"
@@ -833,6 +892,7 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
   override fun onUnregisterForPremount() {
     val config = configuration
     if (config != null && config.gapWorkerMode != GapWorkerMode.OFF) {
+      hasPendingPremountRegistration = false
       trace(
           {
             "mount.onUnregisterForPremount[${currentLayoutState?.rootComponent?.simpleName ?: "Unknown"}]"
@@ -1538,6 +1598,16 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
             reason = VisibilityChangeReason.VISIBILITY_HINT,
         )
       }
+    }
+    if (isVisible && hasPendingCatchUp && !shouldPauseMountingWithVisibilityHintFalse()) {
+      hasPendingCatchUp = false
+      if (!mountComponentIfNeeded()) {
+        notifyVisibleBoundsChanged(VisibilityChangeReason.VISIBILITY_HINT)
+      }
+    }
+    if (isVisible && hasPendingPremountRegistration && !isHiddenUnderShownRoot()) {
+      hasPendingPremountRegistration = false
+      onRegisterForPremount(drawingTime)
     }
   }
 
