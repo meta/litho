@@ -107,8 +107,9 @@ class MountConfigurationScope<ContentType : Any> internal constructor() {
     val customDescription: String? = binderDescription
     _fixedBinders.add(
         binder({ "${customDescription ?: fixedBinderIndex}" }, this) { content ->
-          setter(content, this@bindTo)
-          onUnbind { setter(content, defaultValue) }
+          // Setter references may be fluent; their results are deliberately discarded.
+          @Suppress("RETURN_VALUE_NOT_USED") setter(content, this@bindTo)
+          onUnbind { @Suppress("RETURN_VALUE_NOT_USED_COERCION") setter(content, defaultValue) }
         },
     )
   }

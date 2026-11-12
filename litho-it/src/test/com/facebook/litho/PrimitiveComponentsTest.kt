@@ -132,6 +132,29 @@ class PrimitiveComponentsTest {
   }
 
   @Test
+  fun `fluent setter results are ignored on bind and unbind`() {
+    val values = mutableListOf<Int>()
+    val content = FluentView(mLithoTestRule.context.androidContext, values)
+    val component =
+        object : PrimitiveComponent() {
+          override fun PrimitiveComponentScope.render(): LithoPrimitive = LithoPrimitive(
+              Primitive(
+                  FixedSizeLayoutBehavior(100.px, 100.px),
+                  MountBehavior(ViewAllocator { content }) {
+                    42.bindTo(FluentView::setValue, 0)
+                  },
+              ),
+              null,
+          )
+        }
+
+    val testView = mLithoTestRule.render { component }
+    assertThat(values).containsExactly(42)
+    testView.lithoView.unmountAllItems()
+    assertThat(values).containsExactly(42, 0)
+  }
+
+  @Test
   fun `width, height, focusable, viewTag styles respected when set`() {
     val testComponent = TestViewPrimitiveComponent(
         view = TextView(mLithoTestRule.context.androidContext),
@@ -1776,6 +1799,13 @@ class TestPrimitiveWithTwoBindersComponent(
 }
 
 @DataClassGenerate data class TestPrimitiveLayoutData(val width: Int, val height: Int)
+
+private class FluentView(context: Context, private val values: MutableList<Int>) : View(context) {
+  fun setValue(value: Int): FluentView {
+    values.add(value)
+    return this
+  }
+}
 
 private fun PrimitiveComponentScope.fixedSizeView(
     allocator: ViewAllocator<TextView>,
