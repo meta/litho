@@ -248,9 +248,10 @@ internal constructor(
       val enteredItems = adapter.enteredItems
       val refreshItems = prepareAllInRange || trigger == CollectionRangeTrigger.DATA_CHANGE
       prepareAllInRange = false
-      val endExclusive = min(rangeEnd + 1, totalSize)
-      val itemsInRange =
-          layoutScope.collectionItems.subList(min(rangeStart, totalSize), endExclusive)
+      // An overflowing viewport estimate (a grid item measured 0 px) can make rangeEnd negative.
+      val startInclusive = min(rangeStart, totalSize)
+      val endExclusive = min(rangeEnd + 1, totalSize).coerceAtLeast(startInclusive)
+      val itemsInRange = layoutScope.collectionItems.subList(startInclusive, endExclusive)
       val processor =
           object : RecyclerRangeTraverser.Processor {
             override fun process(index: Int): Boolean {
@@ -263,7 +264,13 @@ internal constructor(
               }
             }
           }
-      traverser.traverse(rangeStart, endExclusive, firstVisibleToUse, lastVisibleToUse, processor)
+      traverser.traverse(
+          startInclusive,
+          endExclusive,
+          firstVisibleToUse,
+          lastVisibleToUse,
+          processor,
+      )
       // A data change runs this pass before RecyclerView hears of the change: its visible positions
       // are the old ones, so after a large removal a row next to the viewport looks out of range,
       // and a cleanup that scrolls would scroll the old item count. The pass posted for the change,

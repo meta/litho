@@ -23,6 +23,7 @@ import com.facebook.litho.Component
 import com.facebook.litho.testing.LithoTestRule
 import com.facebook.litho.testing.testrunner.LithoTestRunner
 import com.facebook.litho.widget.ComponentRenderInfo
+import com.facebook.litho.widget.GridLayoutInfo
 import com.facebook.litho.widget.LayoutInfo
 import com.facebook.rendercore.IntSize
 import com.facebook.rendercore.SizeConstraints
@@ -140,6 +141,26 @@ class CollectionPreparationManagerTest {
     }
 
     preparationManager.bind(mockRecyclerView, 2.0f, onEnterRange, onExitRange)
+  }
+
+  @Test
+  fun `a grid whose first item is 0 px tall does not crash the range pass`() {
+    // A 0 px first item makes the grid estimate wrap near Int.MAX_VALUE rows per viewport, and the
+    // range end overflows to -5.
+    val gridLayoutInfo = GridLayoutInfo(lithoTestRule.context.androidContext, spanCount = 5)
+    preparationManager = CollectionPreparationManager(gridLayoutInfo, mockAdapter)
+    setupItemsAndCallbacks(itemCount = 30)
+    preparationManager.estimateItemsInViewPort(
+        collectionSize = IntSize(1080, 1920),
+        childSize = IntSize(216, 0),
+    )
+
+    preparationManager.maybePostUpdateViewportAndComputeRange(
+        firstVisibleIndex = 1,
+        lastVisibleIndex = 5,
+    )
+
+    assertThat(enteredItems).isEmpty()
   }
 
   @Test
