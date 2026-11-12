@@ -34,6 +34,7 @@ import com.facebook.litho.TreePropContainer
 import com.facebook.litho.TreeState
 import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.debug.DebugInfoReporter
+import com.facebook.rendercore.ErrorReporter
 import com.facebook.rendercore.LogLevel
 import com.facebook.rendercore.extensions.VisibilityChangeReason
 
@@ -279,7 +280,9 @@ internal constructor(
    *
    * Use for paired side resources whose lifetime should match the surface — e.g.
    * `GraphQLDataSource.close()`, coroutine `Job.cancel()`, listener removal. Actions run in
-   * registration order; exceptions thrown from one do not prevent the others from running.
+   * registration order, and every action runs even if an earlier one throws. After all actions have
+   * run, the first exception is reported as an error through [ErrorReporter] under
+   * [CLOSE_ACTION_FAILED_CATEGORY], with later ones attached as suppressed.
    */
   fun onSurfaceClose(action: () -> Unit) {
     checkNotCleared("onSurfaceClose")
@@ -319,12 +322,22 @@ internal constructor(
     componentSaveableStateRegistry = null
     val toRun = closeActions.toList()
     closeActions.clear()
-    toRun.forEach { action ->
+    var failure: Throwable? = null
+    for (action in toRun) {
       try {
         action()
       } catch (t: Throwable) {
-        // Isolate failures so every remaining close action still runs.
+        val first = failure
+        if (first == null) failure = t else first.addSuppressed(t)
       }
+    }
+    failure?.let { cause ->
+      ErrorReporter.report(
+          LogLevel.ERROR,
+          CLOSE_ACTION_FAILED_CATEGORY,
+          "[$key] onSurfaceClose action threw during onCleared",
+          cause,
+      )
     }
   }
 
@@ -533,8 +546,11 @@ internal constructor(
     savedStateRegistryOwner = null
   }
 
-  private companion object {
-    const val SAVEABLE_STATE_KEY_PREFIX: String = "litho_saveable_state"
+  companion object {
+    private const val SAVEABLE_STATE_KEY_PREFIX: String = "litho_saveable_state"
+
+    /** [ErrorReporter] category for a failed [onSurfaceClose] action. */
+    const val CLOSE_ACTION_FAILED_CATEGORY: String = "LITHO:SURFACE:CLOSE_ACTION_FAILED"
   }
 }
 

@@ -39,10 +39,13 @@ import com.facebook.litho.State
 import com.facebook.litho.annotations.ExperimentalLithoApi
 import com.facebook.litho.testing.testrunner.LithoTestRunner
 import com.facebook.litho.useSaveableState
+import com.facebook.rendercore.ErrorReporter
+import com.facebook.rendercore.LogLevel
 import java.util.concurrent.atomic.AtomicReference
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.After
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -53,31 +56,90 @@ import org.robolectric.shadows.ShadowLooper
 @RunWith(LithoTestRunner::class)
 class LithoViewModelRetentionTest {
 
+  private val reports = mutableListOf<Report>()
+  private val previousErrorReporter = ErrorReporter.instance
+
+  @Before
+  fun setUp() {
+    ErrorReporter.provide { level, categoryKey, message, cause, _, _ ->
+      reports += Report(level, categoryKey, message, cause)
+    }
+  }
+
   @After
   fun tearDown() {
+    ErrorReporter.provide(previousErrorReporter)
     SaveableStateActivity.state.set(null)
   }
 
   @Test
-  fun `close actions continue in registration order after a Throwable and run once`() {
+  fun `close actions all run once in registration order and the first failure is reported`() {
     val ownerStore = ViewModelStore()
     val host = createHost(ownerStore)
     val calls = mutableListOf<String>()
+    val firstFailure = Error("first close action failure")
+    val secondFailure = IllegalStateException("second close action failure")
     host.onSurfaceClose { calls += "first" }
     host.onSurfaceClose {
       calls += "failing"
-      throw Error("close action failure")
+      throw firstFailure
+    }
+    host.onSurfaceClose {
+      calls += "also failing"
+      throw secondFailure
     }
     host.onSurfaceClose { calls += "last" }
 
     ownerStore.clear()
 
-    assertThat(calls).containsExactly("first", "failing", "last")
+    assertThat(calls).containsExactly("first", "failing", "also failing", "last")
+    assertThat(reports).hasSize(1)
+    val report = reports.single()
+    assertThat(report.level).isEqualTo(LogLevel.ERROR)
+    assertThat(report.categoryKey).isEqualTo(LithoViewModel.CLOSE_ACTION_FAILED_CATEGORY)
+    assertThat(report.message).contains("[test]")
+    assertThat(report.cause).isSameAs(firstFailure)
+    assertThat(firstFailure.suppressed).containsExactly(secondFailure)
     assertThatThrownBy { host.onSurfaceClose { calls += "unexpected" } }
         .isInstanceOf(IllegalStateException::class.java)
         .hasMessageContaining("cleared")
     ownerStore.clear()
-    assertThat(calls).containsExactly("first", "failing", "last")
+    assertThat(calls).containsExactly("first", "failing", "also failing", "last")
+    assertThat(reports).hasSize(1)
+  }
+
+  @Test
+  fun `close actions that throw the same Throwable all run and it is reported once`() {
+    val ownerStore = ViewModelStore()
+    val host = createHost(ownerStore)
+    val calls = mutableListOf<String>()
+    val sharedFailure = IllegalStateException("shared close action failure")
+    host.onSurfaceClose {
+      calls += "first"
+      throw sharedFailure
+    }
+    host.onSurfaceClose {
+      calls += "second"
+      throw sharedFailure
+    }
+    host.onSurfaceClose { calls += "last" }
+
+    ownerStore.clear()
+
+    assertThat(calls).containsExactly("first", "second", "last")
+    assertThat(reports.map { it.cause }).containsExactly(sharedFailure)
+    assertThat(sharedFailure.suppressed).isEmpty()
+  }
+
+  @Test
+  fun `close actions that succeed report nothing`() {
+    val ownerStore = ViewModelStore()
+    val host = createHost(ownerStore)
+    host.onSurfaceClose {}
+
+    ownerStore.clear()
+
+    assertThat(reports).isEmpty()
   }
 
   @Test
@@ -148,6 +210,13 @@ class LithoViewModelRetentionTest {
   }
 
   @SuppressLint("EndpointWithoutSwitchOff")
+  private class Report(
+      val level: LogLevel,
+      val categoryKey: String,
+      val message: String,
+      val cause: Throwable?,
+  )
+
   class SaveableStateActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
       super.onCreate(savedInstanceState)
