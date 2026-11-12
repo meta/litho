@@ -783,6 +783,7 @@ internal object LithoReducer {
     val descendantTestOutputStart = reductionState.testOutputs?.size ?: 0
     val descendantComponentScopeStart = reductionState.componentScopes.size
     val descendantAttachableStart = reductionState.attachables?.size ?: 0
+    val descendantStyleTargetStart = reductionState.styleTransitionTargets?.size ?: 0
 
     // Per-direct-child range starts in the CURRENT pass's mountableOutputs. The next pass's
     // splice uses these to slice the snapshot into per-child ranges so it can apply per-child
@@ -870,6 +871,8 @@ internal object LithoReducer {
             accumulatedSubtreeScopeCount = accumulatedSubtreeScopeCount,
             needsHostView = needsHostView,
             containsDeferredDescendant = containsDeferredDescendant,
+            containsStyleTargets =
+                (reductionState.styleTransitionTargets?.size ?: 0) > descendantStyleTargetStart,
         )
     ) {
       val cache =
@@ -1165,11 +1168,14 @@ internal object LithoReducer {
       accumulatedSubtreeScopeCount: Int,
       needsHostView: Boolean,
       containsDeferredDescendant: Boolean,
+      containsStyleTargets: Boolean,
   ): Boolean {
     if (!ComponentsConfiguration.enableSubtreeCaching) return false
     if (!hasParentRenderTreeNode) return false
     if (needsHostView) return false
     if (containsDeferredDescendant) return false
+    // The splice does not reconstruct descendant animation metadata or its host-space bounds.
+    if (containsStyleTargets) return false
     if (isSubtreeCacheHit) return true
     return !isCachedLayoutResult && accumulatedSubtreeScopeCount >= MIN_SUBTREE_SCOPES
   }

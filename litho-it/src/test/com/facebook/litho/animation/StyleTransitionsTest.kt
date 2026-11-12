@@ -32,12 +32,15 @@ import com.facebook.litho.Style
 import com.facebook.litho.Transition.TransitionKeyType
 import com.facebook.litho.TransitionId
 import com.facebook.litho.annotations.ExperimentalLithoApi
+import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.core.height
 import com.facebook.litho.core.margin
 import com.facebook.litho.core.width
 import com.facebook.litho.key
+import com.facebook.litho.kotlin.widget.Text
 import com.facebook.litho.layout.flexbox.Column
 import com.facebook.litho.layout.flexbox.Row
+import com.facebook.litho.stats.LithoStats
 import com.facebook.litho.testing.LithoTestRule
 import com.facebook.litho.testing.TransitionTestRule
 import com.facebook.litho.testing.testrunner.LithoTestRunner
@@ -77,6 +80,34 @@ class StyleTransitionsTest {
   @Before
   fun setUp() {
     activityController = Robolectric.buildActivity(Activity::class.java, Intent())
+  }
+
+  @Test
+  fun subtreeCaching_preservesStyleTransitionTargets() {
+    val previousCaching = ComponentsConfiguration.enableSubtreeCaching
+    try {
+      ComponentsConfiguration.enableSubtreeCaching = true
+      val testView = lithoTestRule.render { CachedStyleTransitionRoot() }
+      lithoTestRule.idle()
+      val initial = checkNotNull(testView.committedLayoutState).styleTransitionTargets
+      assertThat(initial).hasSize(1)
+
+      repeat(3) {
+        LithoStats.resetAllCounters()
+        lithoTestRule.act(testView) { clickOnText("revision-$it") }
+        val updated = checkNotNull(testView.committedLayoutState).styleTransitionTargets
+
+        assertThat(LithoStats.subtreeCacheHitCount.get()).isGreaterThan(0)
+        assertThat(updated.map { it.styleTransitionId to it.data })
+            .isEqualTo(initial.map { it.styleTransitionId to it.data })
+        assertThat(updated.map { it.animatableItem?.getId() })
+            .isEqualTo(initial.map { it.animatableItem?.getId() })
+        assertThat(updated.map { it.animatableItem?.getAbsoluteBounds() })
+            .isEqualTo(initial.map { it.animatableItem?.getAbsoluteBounds() })
+      }
+    } finally {
+      ComponentsConfiguration.enableSubtreeCaching = previousCaching
+    }
   }
 
   @Test
@@ -1179,6 +1210,32 @@ class StyleTransitionsTest {
                 .onClick { onClick() }
                 .viewTag(id),
     )
+  }
+
+  private class CachedStyleTransitionRoot : KComponent() {
+    override fun ComponentScope.render(): Component = Column {
+      child(CachedUpdateSink())
+      child(
+          Column {
+            child(
+                Column(style = Style.alpha(1f).transition { alpha = tween<Float>(100.ms) }) {
+                  repeat(3) { child(Text(text = "endpoint-$it")) }
+                },
+            )
+            child(Column { repeat(3) { child(Text(text = "sibling-$it")) } })
+          },
+      )
+    }
+  }
+
+  private class CachedUpdateSink : KComponent() {
+    override fun ComponentScope.render(): Component {
+      val revision = useState { 0 }
+      return Text(
+          text = "revision-${revision.value}",
+          style = Style.onClick { revision.update { it + 1 } },
+      )
+    }
   }
 
   private class CountingAnimationSpec(private val reportedDurationNanos: Long = 0L) :
