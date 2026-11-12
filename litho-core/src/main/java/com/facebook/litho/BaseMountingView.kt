@@ -114,14 +114,14 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
 
   /**
    * Whether the pass that set [previousMountBounds] also processed visibility, and the extensions
-   * still hold what it found. [isFullyShownAndMounted] and [isTransformStillWholeOrCovered] read
-   * it: full bounds alone don't show that `onVisible` was dispatched for them.
+   * still hold what it found. [isFullyShownAndMounted] and [isVisibilityProcessedOverNestedTrees]
+   * read it: full bounds alone don't show that `onVisible` was dispatched for them.
    */
   private var isVisibilityProcessedForMountBounds = false
 
   /**
    * The bounds of the mounted tree's nested trees, united, in this view's coordinates. Only a view
-   * whose transformer records at every pass keeps them, for [isTransformStillWholeOrCovered].
+   * whose transformer records at every pass keeps them, for [isVisibilityProcessedOverNestedTrees].
    */
   private val nestedTreeBounds = Rect()
 
@@ -1389,11 +1389,23 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
             previousRect.right <= parentWidth &&
             previousRect.bottom <= parentHeight &&
             previousRect.width() == width &&
-            previousRect.height() == height &&
-            isTransformStillWholeOrCovered()
+            previousRect.height() == height
     ) {
-      // View is fully visible, and has already been completely mounted.
-      return
+      if (isTransformStillWholeOrCovered()) {
+        // View is fully visible, and has already been completely mounted.
+        return
+      }
+      if (canSkipMount()) {
+        lastVisibilityReason = VisibilityChangeReason.SCROLL
+        try {
+          isMounting = true
+          processVisibilityOutputs(Rect(previousRect), VisibilityChangeReason.SCROLL)
+        } finally {
+          isMounting = false
+        }
+        consumeReentrantMounts()
+        return
+      }
     }
 
     val rect = Rect()
@@ -1430,10 +1442,42 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
       return true
     }
     val extensionState = lithoHostListenerCoordinator?.visibilityExtensionState ?: return false
-    return isVisibilityProcessedForMountBounds &&
-        previousMountBounds.contains(nestedTreeBounds) &&
+    return isVisibilityProcessedOverNestedTrees() &&
         isVisibleRectStillWholeOrCovered(extensionState, previousMountBounds)
   }
+
+  /**
+   * Whether a move that leaves this view fully visible can run only the visibility pass, as
+   * [ComponentsConfiguration.skipMountWhenOnlyTransformChanges] allows for a transformer that
+   * records at every pass. Nested trees then get their pass only from this tree's visibility
+   * extension, which doesn't process while visibility processing is off or this view has transient
+   * state. Never while mounting is paused with the visibility hint false: the full pass does
+   * nothing then. Only with incremental mount on, whose full pass also runs the handlers inside the
+   * mount, so a mount that a handler requests runs after the pass either way. With incremental
+   * mount off, the full pass mounts nothing and runs the handlers outside the mount, where they may
+   * release the tree.
+   */
+  private fun canSkipMount(): Boolean {
+    val config = configuration ?: return false
+    return config.skipMountWhenOnlyTransformChanges &&
+        isIncrementalMountEnabled &&
+        config.visibilityBoundsTransformer?.shouldRecordTransformedVisibleRectAtEveryPass() ==
+            true &&
+        isVisibilityProcessingEnabled &&
+        !shouldPauseMountingWithVisibilityHintFalse() &&
+        !hasTransientState() &&
+        isVisibilityProcessedOverNestedTrees() &&
+        !isMounting &&
+        !isMountStateDirty &&
+        !mountStateNeedsRemount()
+  }
+
+  /**
+   * Whether the last pass processed visibility over [previousMountBounds], and every nested tree
+   * lies inside them: a parent that doesn't clip its children shows what lies outside this view.
+   */
+  private fun isVisibilityProcessedOverNestedTrees(): Boolean =
+      isVisibilityProcessedForMountBounds && previousMountBounds.contains(nestedTreeBounds)
 
   /** Unites the bounds of [layoutState]'s nested trees into [nestedTreeBounds]. */
   private fun updateNestedTreeBounds(layoutState: LayoutState) {

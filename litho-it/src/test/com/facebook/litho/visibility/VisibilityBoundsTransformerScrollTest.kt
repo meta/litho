@@ -93,6 +93,165 @@ class VisibilityBoundsTransformerScrollTest {
   }
 
   @Test
+  fun `a root that a visibility handler sets during a step that skips mount mounts after that step's pass`() {
+    occlusion.bandTopPx = 60
+    val events = mutableListOf<String>()
+    var nextRoot: Component? = null
+    lateinit var row: TestLithoView
+    val halves =
+        listOf("left", "right").map { id ->
+          Column(
+              style =
+                  Style.width(50.px).height(20.px).onVisibilityChanged {
+                    events += "$id changed"
+                    nextRoot?.let { root ->
+                      nextRoot = null
+                      row.componentTree.setRootSync(root)
+                    }
+                  },
+          )
+        }
+    row = renderRowInList(content = Row { halves.forEach { child(it) } }, skipsMount = true)
+    row.lithoView.offsetTopAndBottom(50)
+    events.clear()
+    nextRoot =
+        Column(style = Style.width(100.px).height(20.px).onVisible { events += "new root visible" })
+
+    row.lithoView.offsetTopAndBottom(5)
+
+    assertThat(events).startsWith("left changed", "right changed", "new root visible")
+  }
+
+  @Test
+  fun `a row whose visibility handler sets the hint false during a step that skips mount reports nothing at the next step`() {
+    occlusion.bandTopPx = 60
+    val events = mutableListOf<String>()
+    var hidesOnChange = false
+    lateinit var row: TestLithoView
+    val top = Column(
+        style =
+            Style.width(100.px).height(10.px).onVisibilityChanged {
+              if (hidesOnChange) {
+                hidesOnChange = false
+                row.lithoView.setVisibilityHint(false)
+              }
+            },
+    )
+    val bottom =
+        Column(style = Style.width(100.px).height(10.px) + loggingVisibility("bottom", events))
+    row =
+        renderRowInList(
+            content =
+                Column {
+                  child(top)
+                  child(bottom)
+                },
+            skipsMount = true,
+        )
+    row.lithoView.offsetTopAndBottom(50)
+    hidesOnChange = true
+    row.lithoView.offsetTopAndBottom(5)
+    events.clear()
+
+    row.lithoView.offsetTopAndBottom(-10)
+
+    assertThat(events).isEmpty()
+  }
+
+  @Test
+  fun `with incremental mount off, a visibility handler can release its row's tree during a step, even with skip mount on`() {
+    occlusion.bandTopPx = 60
+    var releasesOnChange = false
+    lateinit var tree: ComponentTree
+    val content = Column(
+        style =
+            Style.width(100.px).height(20.px).onVisibilityChanged {
+              if (releasesOnChange) {
+                releasesOnChange = false
+                tree.release()
+              }
+            },
+    )
+    val row = renderRowInList(content = content, skipsMount = true, incrementalMountEnabled = false)
+    tree = requireNotNull(row.lithoView.componentTree)
+    row.lithoView.offsetTopAndBottom(50)
+    releasesOnChange = true
+
+    row.lithoView.offsetTopAndBottom(5)
+
+    assertThat(tree.isReleased).isTrue()
+  }
+
+  @Test
+  fun `rows the band cuts, and their nested trees, report the same events whether the rows skip mount or not`() {
+    occlusion.bandTopPx = 60
+    val skippingEvents = mutableListOf<String>()
+    val mountingEvents = mutableListOf<String>()
+    val rows =
+        listOf(true to skippingEvents, false to mountingEvents).flatMap { (skipsMount, events) ->
+          listOf(true, false).map { hasOutputs ->
+            val id = if (hasOutputs) "row" else "row without outputs"
+            val nestedRow = Row(
+                style = Style.width(100.px).height(10.px) + loggingVisibility("$id nested", events),
+            )
+            renderRowInList(
+                style = if (hasOutputs) loggingVisibility(id, events) else Style,
+                content = NestedTree(nestedRow),
+                skipsMount = skipsMount,
+            )
+          }
+        }
+
+    for (dy in List(30) { 3 } + List(30) { -3 }) {
+      rows.forEach { it.lithoView.offsetTopAndBottom(dy) }
+    }
+
+    assertThat(skippingEvents).isEqualTo(mountingEvents)
+    assertThat(skippingEvents)
+        .contains(
+            "row without outputs nested invisible SCROLL",
+            "row without outputs nested visible SCROLL",
+        )
+    val (skippingPasses, mountingPasses) =
+        rows.chunked(2).map { pair -> pair.sumOf { (it.lithoView as CountingLithoView).passes } }
+    assertThat(skippingPasses).isLessThan(mountingPasses)
+  }
+
+  @Test
+  fun `a row the band cuts runs its full pass while a child has transient state, so its nested tree reports the same events`() {
+    occlusion.bandTopPx = 60
+    val skippingEvents = mutableListOf<String>()
+    val mountingEvents = mutableListOf<String>()
+    val rows =
+        listOf(true to skippingEvents, false to mountingEvents).map { (skipsMount, events) ->
+          val nestedRow =
+              Row(style = Style.width(100.px).height(10.px) + loggingVisibility("nested", events))
+          renderRowInList(
+              content =
+                  Column {
+                    child(NestedTree(nestedRow))
+                    child(NestedTree(Row()))
+                  },
+              skipsMount = skipsMount,
+          )
+        }
+    for (row in rows) {
+      val lithoView = row.lithoView
+      (0 until lithoView.childCount)
+          .map(lithoView::getChildAt)
+          .maxBy { it.top }
+          .setHasTransientState(true)
+    }
+
+    for (dy in List(30) { 3 } + List(30) { -3 }) {
+      rows.forEach { it.lithoView.offsetTopAndBottom(dy) }
+    }
+
+    assertThat(skippingEvents).isEqualTo(mountingEvents)
+    assertThat(skippingEvents).contains("nested invisible SCROLL", "nested visible SCROLL")
+  }
+
+  @Test
   fun `rows and their nested trees report the same events whether a scroll step skips them or not`() {
     occlusion.bandTopPx = 60
     val skippingList = ScrollingList(runsPassAtEveryStep = false)
@@ -164,7 +323,7 @@ class VisibilityBoundsTransformerScrollTest {
                 .onVisible { isNestedVisible = true }
                 .onInvisible { isNestedVisible = false },
     )
-    val row = renderRowInList(nestedTree = NestedTree(nestedRow))
+    val row = renderRowInList(content = NestedTree(nestedRow), skipsMount = true)
     val abovePx = -5
     row.setRoot(
         Column(style = Style.width(100.px).height(20.px)) {
@@ -180,15 +339,33 @@ class VisibilityBoundsTransformerScrollTest {
     assertThat(isNestedVisible).isTrue()
   }
 
-  /** Renders a 100 x 20 px row, with [nestedTree] at its top, at the top of a 100 x 100 px list. */
-  private fun renderRowInList(style: Style = Style, nestedTree: Component? = null): TestLithoView {
+  /**
+   * Renders a 100 x 20 px row, with [content] at its top, at the top of a 100 x 100 px list. The
+   * row counts its passes, and with [skipsMount] it skips mount when only the transform changes.
+   */
+  private fun renderRowInList(
+      style: Style = Style,
+      content: Component? = null,
+      skipsMount: Boolean = false,
+      incrementalMountEnabled: Boolean = true,
+  ): TestLithoView {
     val list = FrameLayout(lithoTestRule.context.androidContext)
     list.measure(exactly(100), exactly(100))
     list.layout(0, 0, 100, 100)
-    val row = lithoTestRule.createTestLithoView()
-    list.addView(row.lithoView)
-    return lithoTestRule.render(lithoView = row.lithoView, widthPx = 100, heightPx = 20) {
-      Column(style = Style.width(100.px).height(20.px) + style) { child(nestedTree) }
+    val row = CountingLithoView(lithoTestRule.context)
+    row.componentTree =
+        ComponentTree.create(lithoTestRule.context)
+            .componentsConfiguration(
+                requireNotNull(lithoTestRule.componentsConfiguration)
+                    .copy(
+                        skipMountWhenOnlyTransformChanges = skipsMount,
+                        incrementalMountEnabled = incrementalMountEnabled,
+                    ),
+            )
+            .build()
+    list.addView(row)
+    return lithoTestRule.render(lithoView = row, widthPx = 100, heightPx = 20) {
+      Column(style = Style.width(100.px).height(20.px) + style) { child(content) }
     }
   }
 

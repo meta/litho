@@ -117,6 +117,18 @@ internal constructor(
      */
     @JvmField val skipMountWhenFullyShownAndMounted: Boolean = false,
     /**
+     * When true, a [com.facebook.litho.BaseMountingView] with incremental mount on, whose
+     * [com.facebook.rendercore.visibility.VisibilityBoundsTransformer] records at every pass, runs
+     * only its visibility pass when an offset or translation moves it while it stays inside its
+     * parent, and the transform may now cut it differently: incremental mount has nothing to mount
+     * or unmount then. A skipped step notifies nested trees through the visibility pass, only when
+     * the transformed rect changed. Where the window or an ancestor above the parent clips the
+     * view, the clipped content stays mounted until the view leaves its parent's bounds, and
+     * outputs that don't read the transformed rect see the whole view. Without such a transformer,
+     * or with incremental mount off, the full pass runs.
+     */
+    @JvmField val skipMountWhenOnlyTransformChanges: Boolean = false,
+    /**
      * When true, uses an empty visible rect for visibility processing when the root host view is
      * detached from the window. This causes all visibility outputs to be treated as invisible,
      * properly firing InvisibleEvent, UnfocusedVisibleEvent, etc. This prevents incorrect
@@ -686,6 +698,10 @@ internal constructor(
 
     fun skipMountWhenFullyShownAndMounted(enabled: Boolean): Builder = apply {
       config = config.copy(skipMountWhenFullyShownAndMounted = enabled)
+    }
+
+    fun skipMountWhenOnlyTransformChanges(enabled: Boolean): Builder = apply {
+      config = config.copy(skipMountWhenOnlyTransformChanges = enabled)
     }
 
     fun useEmptyVisibleRectOnDetach(enabled: Boolean): Builder = apply {
