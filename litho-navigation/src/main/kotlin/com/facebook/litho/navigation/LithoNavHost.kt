@@ -342,7 +342,7 @@ private class LithoNavHostComponent(
         holder,
         lifecycleOwner,
     ) {
-      check(backStack.onStackChanged == null) {
+      check(!backStack.isDisplayed) {
         "Another LithoNavHost shows this back stack; show one host per owner and key at a time."
       }
       shownStack.value = backStack
@@ -428,7 +428,7 @@ private fun onStackChanged(
 /**
  * Clears [backStack] from [holder] once the commit that removed its host is done, unless another
  * host displays it by then, as when the same host moves to a new place in the tree in that commit,
- * or the holder's owner is destroyed by then. A displayed back stack has a host's change callback.
+ * or the holder's owner is destroyed by then. A displayed back stack has `isDisplayed` true.
  */
 private fun clearWhenNotDisplayed(
     backStack: FoaBackStack<LithoDestination>,
@@ -439,7 +439,7 @@ private fun clearWhenNotDisplayed(
     if (
         ownerLifecycle?.currentState != Lifecycle.State.DESTROYED &&
             holder.backStack === backStack &&
-            backStack.onStackChanged == null
+            !backStack.isDisplayed
     ) {
       holder.backStack = null
     }
