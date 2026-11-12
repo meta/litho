@@ -359,6 +359,15 @@ internal constructor(
      */
     @JvmField var useMountSpecContentVersion: Boolean = true
 
+    /**
+     * Fixes a bug in `useComponentCoroutineScope`. When false, every scope from the hook shares the
+     * tree's Job, so removing one component cancels every coroutine running in the tree. When true,
+     * each scope gets its own Job, which joins the tree's Job when its component commits, so
+     * removing the component cancels only its own scope. Apps set this once at startup, from their
+     * own gate, while the fix rolls out; it goes away once the fix is the only behavior.
+     */
+    @JvmField var useOwnJobInComponentCoroutineScope: Boolean = false
+
     @JvmField var shouldOverrideHasTransientState: Boolean = false
     @JvmField var reduceMemorySpikeUserSession: Boolean = false
     @JvmField var reduceMemorySpikeDataDiffSection: Boolean = false

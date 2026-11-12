@@ -16,8 +16,11 @@
 
 package com.facebook.litho
 
+import com.facebook.litho.config.ComponentsConfiguration
+import com.facebook.litho.layout.flexbox.Column
 import com.facebook.litho.testing.LithoTestRule
 import com.facebook.litho.testing.LithoTestRuleResizeMode
+import com.facebook.litho.testing.TestLithoView
 import com.facebook.litho.testing.testrunner.LithoTestRunner
 import java.lang.Exception
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -27,10 +30,12 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.setMain
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -52,6 +57,11 @@ class UseCoroutineScopeTest {
   @Before
   fun setUp() {
     Dispatchers.setMain(testDispatcher)
+  }
+
+  @After
+  fun tearDown() {
+    ComponentsConfiguration.useOwnJobInComponentCoroutineScope = false
   }
 
   @Test
@@ -86,6 +96,55 @@ class UseCoroutineScopeTest {
 
     assertThat(scope?.isActive).isFalse()
 
+    lithoView.detachFromWindow().release()
+  }
+
+  @Test
+  fun `with the legacy shared Job, removing a component cancels every coroutine in its tree`() {
+    ComponentsConfiguration.useOwnJobInComponentCoroutineScope = false
+    val tree = TreeWithScopedChildren(lithoViewRule)
+
+    tree.removeFirstChild()
+
+    assertThat(tree.removedChildScope?.isActive).isFalse()
+    assertThat(tree.keptChildScope?.isActive).isFalse()
+    assertThat(tree.hostJob?.isActive).isFalse()
+    tree.release()
+  }
+
+  @Test
+  fun `with its own Job, removing a component cancels only its scope until the tree is released`() {
+    ComponentsConfiguration.useOwnJobInComponentCoroutineScope = true
+    val tree = TreeWithScopedChildren(lithoViewRule)
+
+    tree.removeFirstChild()
+
+    assertThat(tree.removedChildScope?.isActive).isFalse()
+    assertThat(tree.keptChildScope?.isActive).isTrue()
+    assertThat(tree.hostJob?.isActive).isTrue()
+
+    tree.release()
+
+    assertThat(tree.keptChildScope?.isActive).isFalse()
+    assertThat(tree.hostJob?.isActive).isFalse()
+  }
+
+  @Test
+  fun `with its own Job, a render that never commits leaves nothing on the tree's Job`() {
+    var treeJob: Job? = null
+    var uncommittedScope: CoroutineScope? = null
+    ComponentsConfiguration.useOwnJobInComponentCoroutineScope = true
+    val lithoView = lithoViewRule.render { TreeJobReader { treeJob = it } }
+    // Lets the tree scope register its release listener, so only component Jobs stay on it.
+    testDispatcher.scheduler.runCurrent()
+
+    // Resolved off the main thread, then superseded before it reaches the UI.
+    lithoView.componentTree.setRootAsync(ScopeReader { uncommittedScope = it })
+    lithoViewRule.finishAsyncUpdates()
+    lithoView.setRoot(TreeJobReader { treeJob = it })
+
+    assertThat(uncommittedScope).describedAs("Asserting test setup: the render ran.").isNotNull()
+    assertThat(checkNotNull(treeJob).children.toList()).isEmpty()
     lithoView.detachFromWindow().release()
   }
 
@@ -278,5 +337,62 @@ class UseCoroutineScopeTest {
     assertThat(scopes[0]).isSameAs(scopes[1])
 
     lithoView.detachFromWindow().release()
+  }
+
+  /** Reads the Job of the tree it renders in. */
+  private class TreeJobReader(private val onTreeJob: (Job) -> Unit) : KComponent() {
+    override fun ComponentScope.render(): Component {
+      onTreeJob(checkNotNull(context.lithoTree).lithoTreeScope.coroutineContext.job)
+      return EmptyComponent()
+    }
+  }
+
+  /** Reads its component scope. */
+  private class ScopeReader(private val onScope: (CoroutineScope) -> Unit) : KComponent() {
+    override fun ComponentScope.render(): Component {
+      onScope(useComponentCoroutineScope())
+      return EmptyComponent()
+    }
+  }
+
+  /**
+   * A host whose own coroutine runs beside two children that each hold a component scope, rendered
+   * by [rule].
+   */
+  private inner class TreeWithScopedChildren(rule: LithoTestRule) {
+    var removedChildScope: CoroutineScope? = null
+    var keptChildScope: CoroutineScope? = null
+    var hostJob: Job? = null
+    private val lithoView: TestLithoView
+
+    init {
+      lithoView = rule.render { HostComponent(isFirstChildShown = true) }
+      testDispatcher.scheduler.runCurrent()
+    }
+
+    fun removeFirstChild() {
+      lithoView.setRoot(HostComponent(isFirstChildShown = false))
+      testDispatcher.scheduler.runCurrent()
+    }
+
+    fun release() {
+      lithoView.detachFromWindow().release()
+      testDispatcher.scheduler.runCurrent()
+    }
+
+    private inner class HostComponent(private val isFirstChildShown: Boolean) : KComponent() {
+      override fun ComponentScope.render(): Component {
+        useCoroutine(Unit) {
+          hostJob = coroutineContext[Job]
+          awaitCancellation()
+        }
+        return Column {
+          if (isFirstChildShown) {
+            child(key("removed") { ScopeReader { removedChildScope = it } })
+          }
+          child(key("kept") { ScopeReader { keptChildScope = it } })
+        }
+      }
+    }
   }
 }

@@ -17,11 +17,14 @@
 package com.facebook.litho
 
 import com.facebook.litho.annotations.Hook
+import com.facebook.litho.config.ComponentsConfiguration
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.job
 
 /**
  * Returns a [CoroutineScope] that is be active as long as the [Component] is not released. This
@@ -35,6 +38,13 @@ import kotlinx.coroutines.cancel
  * This scope will be [cancelled][CoroutineScope.cancel] when the [Component] is removed from the
  * tree or the [ComponentTree] is released. The optional [coroutineContext] parameter may not
  * contain a [Job] as this scope is managed by Litho.
+ *
+ * Known bug: unless [ComponentsConfiguration.useOwnJobInComponentCoroutineScope] is on, this scope
+ * shares the tree's [Job]. Removing the [Component] then cancels every coroutine running in the
+ * tree, and the scopes this hook already gave other components stay cancelled. The flag fixes this:
+ * each scope gets its own Job, which joins the tree's Job when the [Component] commits, so removing
+ * the [Component] cancels only its own scope. Each component reads the flag once, at its first
+ * render.
  *
  * Use this scope to launch coroutines in response to callback events such as clicks or other user
  * interactions where the launched logic may take some time to finish and it's expected that the
@@ -58,7 +68,28 @@ fun ComponentScope.useComponentCoroutineScope(
   }
 
   val lithoTreeCoroutineContext = checkNotNull(context.lithoTree).lithoTreeScope.coroutineContext
-  val state = useState { CoroutineScope(lithoTreeCoroutineContext + coroutineContext) }
-  useEffect(Unit) { onCleanup { state.value.cancel() } }
-  return state.value
+  val (hasOwnJob, scope) =
+      useState {
+        val ownJob = ComponentsConfiguration.useOwnJobInComponentCoroutineScope
+        ownJob to
+            CoroutineScope(
+                lithoTreeCoroutineContext +
+                    (if (ownJob) SupervisorJob() else EmptyCoroutineContext) +
+                    coroutineContext,
+            )
+      }
+          .value
+  useEffect(Unit) {
+    if (hasOwnJob) {
+      // The own Job joins the tree's Job only once the component commits, so a render that never
+      // commits leaves nothing on it. Removing the component, or releasing the tree, cancels the
+      // link and the scope.
+      val treeLink = Job(parent = lithoTreeCoroutineContext.job)
+      treeLink.invokeOnCompletion { scope.cancel() }
+      onCleanup { treeLink.cancel() }
+    } else {
+      onCleanup { scope.cancel() }
+    }
+  }
+  return scope
 }
