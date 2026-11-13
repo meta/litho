@@ -58,20 +58,25 @@ MyComponent(style = Style.background(gradient))
 
 ### Filled rounded or circular background
 
-Pass a color and a `Shape` to `background` to paint a solid rounded rectangle or circle. Unlike `clip`, it doesn't clip children.
+For a solid rounded rectangle or circle, set `backgroundColor` and `clip` to a `Shape`:
 
 ```kotlin
 import com.facebook.litho.view.Shape
-import com.facebook.litho.view.background
+import com.facebook.litho.view.backgroundColor
+import com.facebook.litho.view.clip
 import com.facebook.rendercore.dp
 
-MyComponent(style = Style.background(Color.RED, Shape.RoundedRectangle(12.dp)))
-MyComponent(style = Style.background(Color.RED, Shape.Circle))
+MyComponent(style = Style.backgroundColor(Color.RED).clip(Shape.RoundedRectangle(12.dp)))
+MyComponent(style = Style.backgroundColor(Color.RED).clip(Shape.Circle))
 ```
 
-:::note Elevation
-For an elevated `Row` or `Column` that needs a shaped shadow, keep `backgroundColor(color).clip(shape)` for now (which clips children). Until host background outlines are supported, `background(color, shape)` alone paints the fill but gives the host no outline, so it casts no shadow.
-:::
+`clip` also clips children. When children must draw outside the shape, pass the color and `Shape` to `background` instead, which paints the shape without clipping children:
+
+```kotlin
+import com.facebook.litho.view.background
+
+MyComponent(style = Style.background(Color.RED, Shape.RoundedRectangle(12.dp)))
+```
 
 ## Clickable
 

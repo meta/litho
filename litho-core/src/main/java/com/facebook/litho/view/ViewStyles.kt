@@ -388,8 +388,8 @@ fun Style.backgroundColor(@ColorInt backgroundColor: Long): Style =
  * shapes fall back to [clip], see below).
  *
  * Unlike [clip] — which uses [android.view.View.setClipToOutline] and therefore also clips children
- * — this paints a drawable shaped like [shape]. Use it for filled rounded or circular surfaces; use
- * [clip] when you need to clip content (e.g. images) to a shape.
+ * — this paints a drawable shaped like [shape]. For filled rounded or circular surfaces, prefer
+ * [backgroundColor] + [clip]; use this only when children must draw outside the shape.
  *
  * [Shape.Circle] and [Shape.RoundedRectangle] are drawn exactly on all API levels, matching the
  * region [clip] would use. Any other [Shape] only exposes a [ViewOutlineProvider], so it falls back
