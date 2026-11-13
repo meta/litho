@@ -432,6 +432,7 @@ private fun List<CanvasNodeModel>.cachedPathCount(): Int {
           is CanvasFill -> node.shape.cachedPathCount()
           is CanvasStroke -> node.shape.cachedPathCount()
           is CanvasDrawIntoCanvas -> 0
+          is CanvasText -> 0
         }
   }
   return count

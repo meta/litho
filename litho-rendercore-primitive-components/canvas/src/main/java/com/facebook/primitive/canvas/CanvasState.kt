@@ -21,15 +21,19 @@ import android.graphics.DashPathEffect
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
+import android.os.Build
 import androidx.annotation.VisibleForTesting
 import androidx.collection.LruCache
 import androidx.core.util.Pools
 import com.facebook.primitive.canvas.model.CanvasFill
+import com.facebook.primitive.canvas.model.CanvasFont
 import com.facebook.primitive.canvas.model.CanvasGradientShading
 import com.facebook.primitive.canvas.model.CanvasLayer
 import com.facebook.primitive.canvas.model.CanvasPathModel
+import com.facebook.primitive.canvas.model.CanvasShadingModel
 import com.facebook.primitive.canvas.model.CanvasSolidColorShading
 import com.facebook.primitive.canvas.model.CanvasStroke
+import com.facebook.primitive.canvas.model.CanvasText
 import com.facebook.primitive.canvas.model.CanvasTransformModel
 
 /**
@@ -66,6 +70,12 @@ class CanvasState(
   // The paint object used for compositing layers
   private var layerPaint: Paint? = null
   private var prevLayerModel: CanvasLayer? = null
+
+  // The paint object used for drawing and outlining text, and the last outline it made
+  private var textPaint: Paint? = null
+  private var textModel: CanvasText? = null
+  private var textFont: CanvasFont? = null
+  private var textOutline: Path? = null
 
   private val matrixPool = Pools.SimplePool<Matrix>(matrixPoolSize)
 
@@ -140,23 +150,7 @@ class CanvasState(
             }
 
             if (newFillModel.shading != fillModel?.shading) {
-              when (val shading = newFillModel.shading) {
-                is CanvasSolidColorShading -> {
-                  if (shader != null) {
-                    shader = null
-                  }
-                  if (color != shading.color) {
-                    color = shading.color
-                  }
-                }
-                is CanvasGradientShading -> {
-                  // The paint's alpha modulates the shader; the gradient colors carry their own.
-                  if (alpha != OPAQUE) {
-                    alpha = OPAQUE
-                  }
-                  shader = shading.gradient.toShader()
-                }
-              }
+              applyShading(newFillModel.shading)
             }
           }
           .also { fillModel = newFillModel }
@@ -178,23 +172,7 @@ class CanvasState(
             }
 
             if (newStrokeModel.shading != strokeModel?.shading) {
-              when (val shading = newStrokeModel.shading) {
-                is CanvasSolidColorShading -> {
-                  if (shader != null) {
-                    shader = null
-                  }
-                  if (color != shading.color) {
-                    color = shading.color
-                  }
-                }
-                is CanvasGradientShading -> {
-                  // The paint's alpha modulates the shader; the gradient colors carry their own.
-                  if (alpha != OPAQUE) {
-                    alpha = OPAQUE
-                  }
-                  shader = shading.gradient.toShader()
-                }
-              }
+              applyShading(newStrokeModel.shading)
             }
 
             if (
@@ -247,6 +225,81 @@ class CanvasState(
             }
           }
           .also { prevLayerModel = newLayerModel }
+
+  /**
+   * The outline of [text] drawn with [font], with its origin on the baseline. The path is reused by
+   * the next call: add it to another path before calling again.
+   */
+  internal fun getTextOutline(text: String, font: CanvasFont): Path {
+    val paint = getOrCreateTextPaint()
+    applyFont(paint, font)
+    val outline = textOutline ?: Path().also { textOutline = it }
+    paint.getTextPath(text, 0, text.length, 0f, 0f, outline)
+    return outline
+  }
+
+  internal fun configureTextPaint(newTextModel: CanvasText): Paint =
+      getOrCreateTextPaint().apply {
+        applyFont(this, newTextModel.font)
+        if (newTextModel.blendingMode != textModel?.blendingMode) {
+          newTextModel.blendingMode.applyTo(this)
+        }
+        if (newTextModel.shading != textModel?.shading) {
+          applyShading(newTextModel.shading)
+        }
+        textModel = newTextModel
+      }
+
+  private fun applyFont(paint: Paint, font: CanvasFont) {
+    if (font == textFont) {
+      return
+    }
+    paint.typeface = font.typeface
+    paint.textSize = font.size
+    paint.fontFeatureSettings = font.featureSettings
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      try {
+        paint.fontVariationSettings = font.variationSettings
+      } catch (e: IllegalArgumentException) {
+        // Malformed settings draw the default instance rather than failing the whole draw.
+        paint.fontVariationSettings = null
+      }
+    }
+    textFont = font
+  }
+
+  private fun Paint.applyShading(shading: CanvasShadingModel) {
+    when (shading) {
+      is CanvasSolidColorShading -> {
+        if (shader != null) {
+          shader = null
+        }
+        if (color != shading.color) {
+          color = shading.color
+        }
+      }
+      is CanvasGradientShading -> {
+        // The paint's alpha modulates the shader; the gradient colors carry their own.
+        if (alpha != OPAQUE) {
+          alpha = OPAQUE
+        }
+        shader = shading.gradient.toShader()
+      }
+    }
+  }
+
+  private fun getOrCreateTextPaint(): Paint {
+    return textPaint
+        ?: createPaint()
+            .apply {
+              style = Paint.Style.FILL
+              // Unhinted, unrounded glyphs, so text scales exactly with its transform.
+              isLinearText = true
+              isSubpixelText = true
+              hinting = Paint.HINTING_OFF
+            }
+            .also { textPaint = it }
+  }
 
   private fun getOrCreateFillPaint(): Paint {
     return fillPaint ?: createPaint().apply { style = Paint.Style.FILL }.also { fillPaint = it }
