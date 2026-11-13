@@ -81,6 +81,14 @@ public class RCRecyclerView extends RecyclerView implements NestedScrollingParen
   private boolean mOverrideStateToIsDragging;
   private @Nullable ArrayList<OnScrollListener> mScrollListeners;
 
+  // Set from the list's mount binder; false everywhere else until other mounts pass it too.
+  private boolean mReportMovedScrollDistance;
+
+  /** Sets whether this list reports the distance it moved in nested scrolls. */
+  public void setReportMovedScrollDistance(final boolean enabled) {
+    mReportMovedScrollDistance = enabled;
+  }
+
   public RCRecyclerView(final Context context) {
     super(context);
   }
