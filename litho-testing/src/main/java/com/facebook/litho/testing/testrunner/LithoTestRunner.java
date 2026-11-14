@@ -16,7 +16,6 @@
 
 package com.facebook.litho.testing.testrunner;
 
-import android.os.Build;
 import androidx.annotation.Nullable;
 import com.facebook.infer.annotation.Nullsafe;
 import com.facebook.litho.ComponentsSystrace;
@@ -83,12 +82,6 @@ public class LithoTestRunner extends RobolectricTestRunner {
         IncrementalMountConfiguration.class,
         CachedValueFromStateConfiguration.class,
         MemoryEfficientGlobalKeysConfiguration.class);
-  }
-
-  @Override
-  protected Config buildGlobalConfig() {
-    // NULLSAFE_FIXME[Not Vetted Third-Party]
-    return Config.Builder.defaults().setSdk(Build.VERSION_CODES.TIRAMISU).build();
   }
 
   /**
