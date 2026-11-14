@@ -26,6 +26,11 @@ android {
 
     useLibrary 'org.apache.http.legacy'
 
+    // The internal build has these annotations in a target that isn't exported yet.
+    sourceSets {
+        main.java.srcDirs += 'src/oss/java'
+    }
+
 
     defaultConfig {
         minSdkVersion rootProject.minSdkVersion

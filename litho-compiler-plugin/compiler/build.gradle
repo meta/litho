@@ -31,6 +31,12 @@ sourceSets {
     }
 }
 
+kotlin {
+    compilerOptions {
+        freeCompilerArgs.add('-Xcontext-parameters')
+    }
+}
+
 dependencies {
     compileOnly "org.jetbrains.kotlin:kotlin-compiler-embeddable:${KOTLIN_VERSION}"
 }
