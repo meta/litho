@@ -166,6 +166,17 @@ class DebugProcessEvent(
 /** Base class for event subscribers */
 abstract class DebugEventSubscriber(vararg val events: String) {
   abstract fun onEvent(event: DebugEvent)
+
+  /**
+   * Whether this subscriber takes the next event of [type], one of its [events], at [logLevel].
+   *
+   * The dispatcher asks before it builds the event, and builds it only if a subscriber takes it, so
+   * a subscriber that samples events should sample here rather than in [onEvent]: the events it
+   * skips then cost nothing to make. Trace events are asked about at [LogLevel.DEBUG], once per
+   * trace. A trace recorded with `beginTrace` and `endTrace` is asked about in `endTrace`, after
+   * the attributes passed to `beginTrace` were built.
+   */
+  open fun acceptsEvent(type: String, logLevel: LogLevel): Boolean = true
 }
 
 /**
@@ -217,8 +228,9 @@ object DebugEventDispatcher {
       return
     }
 
-    val subscribersToNotify = subscribers.filterLikelyEmpty {
-      it.events.contains(type) || it.events.contains(DebugEvent.All)
+    val subscribersToNotify = subscribers.filterLikelyEmpty { subscriber ->
+      (subscriber.events.contains(type) || subscriber.events.contains(DebugEvent.All)) &&
+          subscriber.acceptsEvent(type, logLevel)
     }
     if (subscribersToNotify.isNotEmpty()) {
       val attributes = LinkedHashMap<String, Any?>()
@@ -348,7 +360,8 @@ object DebugEventDispatcher {
 
     // find the subscribers listening for this event
     val subscribersToNotify = subscribers.filterLikelyEmpty { subscriber ->
-      subscriber.events.contains(type) || subscriber.events.contains(DebugEvent.All)
+      (subscriber.events.contains(type) || subscriber.events.contains(DebugEvent.All)) &&
+          subscriber.acceptsEvent(type, LogLevel.DEBUG)
     }
 
     if (subscribersToNotify.isEmpty()) {
@@ -381,7 +394,8 @@ object DebugEventDispatcher {
 
     // find the subscribers listening for this event
     val subscribersToNotify = subscribers.filterLikelyEmpty { subscriber ->
-      subscriber.events.contains(type) || subscriber.events.contains(All)
+      (subscriber.events.contains(type) || subscriber.events.contains(All)) &&
+          subscriber.acceptsEvent(type, LogLevel.DEBUG)
     }
 
     // run the block if there are no subscribers

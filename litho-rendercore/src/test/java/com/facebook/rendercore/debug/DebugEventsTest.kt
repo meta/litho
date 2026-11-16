@@ -565,6 +565,89 @@ class DebugEventsTest {
     assertThat(traceListener2.records.size).isEqualTo(2)
   }
 
+  @Test
+  fun `an event no subscriber accepts is not built`() {
+    val declining = AcceptingSubscriber(accepts = false)
+    DebugEventBus.subscribe(declining)
+    var builtAttributes = false
+
+    DebugEventDispatcher.dispatch(type = TestEvent, renderStateId = { TestRenderStateId }) {
+      builtAttributes = true
+    }
+
+    assertThat(builtAttributes).isFalse
+    assertThat(declining.received).isEmpty()
+  }
+
+  @Test
+  fun `an event is built once and reaches only the subscribers that accept it`() {
+    val declining = AcceptingSubscriber(accepts = false)
+    val accepting = AcceptingSubscriber(accepts = true)
+    DebugEventBus.subscribe(declining)
+    DebugEventBus.subscribe(accepting)
+    var attributeBuilds = 0
+
+    DebugEventDispatcher.dispatch(type = TestEvent, renderStateId = { TestRenderStateId }) { map ->
+      attributeBuilds++
+      map[TestAttr] = TestAttrValue
+    }
+
+    assertThat(attributeBuilds).isEqualTo(1)
+    assertThat(declining.received).isEmpty()
+    assertThat(accepting.received).hasSize(1)
+    assertThat(accepting.received.single().attribute<Int>(TestAttr)).isEqualTo(TestAttrValue)
+  }
+
+  @Test
+  fun `a subscriber is asked with the event's type and log level`() {
+    val accepting = AcceptingSubscriber(accepts = true)
+    DebugEventBus.subscribe(accepting)
+
+    DebugEventDispatcher.dispatch(
+        type = TestEvent,
+        renderStateId = { TestRenderStateId },
+        logLevel = LogLevel.ERROR,
+    )
+
+    assertThat(accepting.questions).containsExactly(TestEvent to LogLevel.ERROR)
+  }
+
+  @Test
+  fun `a trace no subscriber accepts runs its block without building the event`() {
+    val declining = AcceptingSubscriber(accepts = false)
+    DebugEventBus.subscribe(declining)
+    var builtAttributes = false
+    var ranBlock = false
+
+    DebugEventDispatcher.trace(
+        type = TestEvent,
+        renderStateId = { TestRenderStateId },
+        attributesAccumulator = { builtAttributes = true },
+    ) { scope ->
+      ranBlock = true
+      assertThat(scope).isNull()
+    }
+
+    assertThat(ranBlock).isTrue
+    assertThat(builtAttributes).isFalse
+    assertThat(declining.received).isEmpty()
+    assertThat(declining.questions).containsExactly(TestEvent to LogLevel.DEBUG)
+  }
+
+  class AcceptingSubscriber(private val accepts: Boolean) : DebugEventSubscriber(TestEvent) {
+    val questions = mutableListOf<Pair<String, LogLevel>>()
+    val received = mutableListOf<DebugEvent>()
+
+    override fun acceptsEvent(type: String, logLevel: LogLevel): Boolean {
+      questions.add(type to logLevel)
+      return accepts
+    }
+
+    override fun onEvent(event: DebugEvent) {
+      received.add(event)
+    }
+  }
+
   class TestEventSubscriber(val listener: (DebugEvent) -> Unit) : DebugEventSubscriber(TestEvent) {
     override fun onEvent(event: DebugEvent) {
       listener(event)
