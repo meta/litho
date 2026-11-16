@@ -31,6 +31,7 @@ import androidx.fragment.app.FragmentManager
 import androidx.lifecycle.LifecycleRegistry
 import com.facebook.litho.Component
 import com.facebook.litho.ComponentScope
+import com.facebook.litho.ComponentTree
 import com.facebook.litho.EmptyComponent
 import com.facebook.litho.KComponent
 import com.facebook.litho.LithoSaveableStateRegistry
@@ -52,10 +53,12 @@ import kotlin.concurrent.thread
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.shadows.ShadowLog
 import org.robolectric.shadows.ShadowLooper
@@ -68,6 +71,27 @@ class LithoHostTest {
   @get:Rule val backgroundLayoutLooper = BackgroundLayoutLooperRule()
 
   private val controllers = mutableListOf<ActivityController<out ComponentActivity>>()
+
+  private var wasLayoutLooperPaused = false
+
+  /**
+   * Robolectric's PAUSED mode still lets background loopers run freely, so async layout can finish
+   * before assertions that it has not happened yet. Pause Litho's layout looper so only explicit
+   * drains run that work, and restore its previous state after each test.
+   */
+  @Before
+  fun pauseLayoutLooper() {
+    val layoutLooper = shadowOf(ComponentTree.getDefaultLayoutThreadLooper())
+    wasLayoutLooperPaused = layoutLooper.isPaused
+    layoutLooper.pause()
+  }
+
+  @After
+  fun restoreLayoutLooper() {
+    if (!wasLayoutLooperPaused) {
+      shadowOf(ComponentTree.getDefaultLayoutThreadLooper()).unPause()
+    }
+  }
 
   @After
   fun tearDown() {
