@@ -17,6 +17,7 @@
 package com.facebook.rendercore
 
 import android.content.Context
+import androidx.collection.MutableScatterMap
 import com.facebook.rendercore.extensions.RenderCoreExtension
 
 /**
@@ -46,6 +47,8 @@ class LayoutContext<RenderContext>(
 
   private var _layoutCache: LayoutCache? = layoutCache
 
+  private var passScopedData: MutableScatterMap<Any, Any>? = null
+
   val layoutCache: LayoutCache
     get() =
         checkNotNull(_layoutCache) { "Trying to access the LayoutCache from outside a layout call" }
@@ -59,6 +62,23 @@ class LayoutContext<RenderContext>(
    */
   fun clearCache() {
     _layoutCache = null
+    passScopedData = null
+  }
+
+  /**
+   * Stores [value] for [key] for this layout pass, replacing any value stored for [key]. For state
+   * the nodes of a pass share that isn't a layout result to reuse in the next pass (those go in
+   * [layoutCache]): it lives with this context, isn't carried over, and is dropped by [clearCache].
+   */
+  fun putPassScopedData(key: Any, value: Any) {
+    val data = passScopedData ?: MutableScatterMap<Any, Any>().also { passScopedData = it }
+    data[key] = value
+  }
+
+  /** The data stored for [key] for this layout pass, if any, see [putPassScopedData]. */
+  fun <T : Any> getPassScopedData(key: Any): T? {
+    @Suppress("UNCHECKED_CAST")
+    return passScopedData?.get(key) as T?
   }
 
   fun setPreviousLayoutDataForCurrentNode(previousLayoutData: Any?) {
