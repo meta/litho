@@ -47,6 +47,8 @@ import java.util.concurrent.FutureTask
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.After
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -60,6 +62,29 @@ import org.robolectric.annotation.LooperMode
 class AnimatedContentTest {
 
   @Rule @JvmField val lithoTestRule = LithoTestRule()
+
+  private var wasLayoutLooperPaused = false
+
+  /**
+   * Pauses Litho's background layout looper per test; @After restores its previous state.
+   * Robolectric 4.17's free-running idle check needs an empty queue and the thread back in its
+   * poll. That racy cross-thread check can exhaust ten idle passes (~0.7% of runs), reporting
+   * "idle() did not reach quiescence". A paused looper checks only its queue; explicit drains still
+   * run queued layout work on the background thread.
+   */
+  @Before
+  fun pauseLayoutLooper() {
+    val layoutLooper = shadowOf(ComponentTree.getDefaultLayoutThreadLooper())
+    wasLayoutLooperPaused = layoutLooper.isPaused
+    layoutLooper.pause()
+  }
+
+  @After
+  fun restoreLayoutLooper() {
+    if (!wasLayoutLooperPaused) {
+      shadowOf(ComponentTree.getDefaultLayoutThreadLooper()).unPause()
+    }
+  }
 
   private var flushAfterAnimationFrame = true
 
