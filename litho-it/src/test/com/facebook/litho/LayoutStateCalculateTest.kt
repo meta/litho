@@ -110,6 +110,7 @@ class LayoutStateCalculateTest {
 
   @After
   fun validate() {
+    AccessibilityUtils.invalidateCachedIsAccessibilityEnabled()
     Mockito.validateMockitoUsage()
   }
 
