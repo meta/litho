@@ -46,6 +46,36 @@ import org.robolectric.annotation.LooperMode
 @RunWith(LithoTestRunner::class)
 class SystemDurationScaleSourceTest {
   @Test
+  fun motionQueryInitializesAndObservesSettingsWithoutRequestingFrames() {
+    val context = RuntimeEnvironment.getApplication()
+    val resolver = context.contentResolver
+    val setting = Settings.Global.ANIMATOR_DURATION_SCALE
+    val previous = Settings.Global.getString(resolver, setting)
+    val driver = FrameDriver()
+    try {
+      Settings.Global.putFloat(resolver, setting, 0f)
+      AnimationController.withFrameDriverForTest(driver, observeSystemDurationScale = true) {
+        AnimationController.bindContext(context)
+        assertThat(AnimationController.isMotionEnabled).isFalse()
+        assertThat(driver.callback).isNull()
+        Settings.Global.putFloat(resolver, setting, 0.5f)
+        resolver.notifyChange(Settings.Global.getUriFor(setting), null)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertThat(AnimationController.isMotionEnabled).isTrue()
+        assertThat(driver.callback).isNull()
+        Settings.Global.putFloat(resolver, setting, 0f)
+        resolver.notifyChange(Settings.Global.getUriFor(setting), null)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertThat(AnimationController.isMotionEnabled).isFalse()
+        assertThat(driver.callback).isNull()
+      }
+    } finally {
+      Settings.Global.putString(resolver, setting, previous)
+      shadowOf(Looper.getMainLooper()).idle()
+    }
+  }
+
+  @Test
   fun preViewCommitInitializesBeforeMotionAndObservesLiveSettings() {
     val context = ComponentContext(RuntimeEnvironment.getApplication())
     val resolver = context.androidContext.contentResolver

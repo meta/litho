@@ -17,6 +17,11 @@ keywords:
     - AnimationSpec
     - Value
     - useInfiniteAnimationGroup
+    - useAnimationScope
+    - launchLatest
+    - AnimationRunScope
+    - awaitMotion
+    - isMotionEnabled
     - infiniteRepeatable
     - StartOffset
     - FiniteAnimationSpec
@@ -55,6 +60,8 @@ When animations are disabled, finite runs reach their natural endpoint on the ne
 frame and deliver normal completion callbacks. Reverse repeats can end at their starting value.
 Infinite groups show each slot's `from` value and restart when animations are enabled again.
 Explicitly paused animations hold until played.
+
+For coroutine loops that should wait while motion is disabled, see [`awaitMotion()`](#waiting-for-motion).
 
 ## Quick Start
 
@@ -234,7 +241,6 @@ Use `startAnimation` with a `chain` for a fixed sequence on one value. The optio
 
 ```kotlin
 import com.facebook.litho.animation.animateTo
-import com.facebook.litho.animation.wait
 import com.facebook.litho.animation.snapTo
 import com.facebook.litho.animation.useAnimationScope
 
@@ -253,31 +259,84 @@ Style.onClick {
 }
 ```
 
-`animateTo` waits for natural completion or `finish()`. Replacement, stop, unmount, and coroutine
-cancellation cancel the await. `snapTo` updates immediately without waiting for a frame. Both also
-work outside an animation run. Use `launch` for parallel steps. A newer command on the same value
-interrupts the older await; normal coroutine cancellation also affects that await's children.
+`launchLatest` cancels the previous run and returns a `Job`. Its block receives an
+`AnimationRunScope`, a `CoroutineScope` whose children share the run's ownership and playback.
+Use `launch` for parallel steps.
 
-`launchLatest` cancels its predecessor and returns a `Job`. Cancelling this job stops owned motion
-before cleanup finishes; `join()` waits for the body and its children. Removing the hook cancels the
-run. Launching after removal returns a cancelled job. An explicit launch from cancellation cleanup
-is still a new request.
+`animateTo` waits for natural completion or `finish()`. Replacement, stop, unmount, or coroutine
+cancellation cancels the await. `snapTo` checks cancellation and sets the value immediately without
+suspending. Both extensions also work outside an animation run.
 
-Use the returned job's `cancel()` to stop the whole run. `cancelChildren()` uses normal cooperative
-child cancellation; it does not cancel the run job or bypass `NonCancellable` work.
+#### Ownership and cancellation
 
-Suspending commands inherit ownership through coroutine context. Claims last between steps until
-the run ends; taking over a claimed value cancels its run and siblings. A replacement run preserves
-interruption velocity; unused predecessor values stop and retain that velocity until the replacement
-ends. Commands on those unused values remain independent.
+Cancel the returned job or call `animations.cancel()` to stop the whole run. Owned motion stops
+before cleanup finishes; `join()` waits for the body and all its children, including cleanup.
+`cancelChildren()` only cancels child coroutines; it does not cancel the run job or bypass
+`NonCancellable` work.
 
-Synchronous `startAnimation`, `jumpTo`, and `stop` are external controls, including inside a run.
-Using them in stale cancellation cleanup can take over a newer run. Suspending commands check the
-run's cancellation even in `NonCancellable` cleanup and cannot change its replacement.
+Removing the hook cancels its run. Launching after removal returns a cancelled job. An explicit
+launch from cancellation cleanup is still a new request.
 
-Playback controls owned animations and `wait`. Ordinary `delay` and external awaits keep their
-usual coroutine semantics. Commands and waits run on the main thread. Dispatch and skipped frames
-can introduce gaps between awaits; use `chain` for exact leg timing.
+Within a run, `animateTo` and `snapTo` retain ownership between steps until the run ends. A newer
+command on the same value interrupts the older await. External takeover of an owned value cancels
+its whole run and siblings. Replacement runs preserve interruption velocity. Values not reused by
+the replacement stop and retain velocity until it ends; commands on those values remain independent.
+
+Synchronous `startAnimation`, `jumpTo`, and `stop` are external controls, even inside a run. Using
+them in stale cancellation cleanup can take over a newer run. Suspending commands check cancellation
+even in `NonCancellable` cleanup and cannot change a cancelled run's replacement.
+Cancelling the run also cancels pending `wait()` and `awaitMotion()` calls inside `NonCancellable`.
+
+#### Playback and waits
+
+These members belong to `AnimationRunScope`. Run commands must execute on the main thread within
+that run's coroutine tree; they check the calling child's context.
+
+| Member | Behavior |
+|--------|----------|
+| `wait(duration)` | Waits on animation time, respecting playback pauses and duration scale. Zero returns immediately. |
+| `awaitMotion()` | Waits for system motion to be enabled and playback to permit progress. |
+| `isMotionEnabled` | Live, untracked query of whether the system duration scale is positive, independent of playback and cancellation. |
+
+Wait durations must be finite and nonnegative. With motion disabled, a positive `wait` completes
+on the next frame that playback permits. Ordinary `delay` and external awaits keep their usual
+coroutine timing and are unaffected by animation playback. Dispatch and skipped frames can introduce
+gaps between sequential awaits; use `chain` for exact leg timing.
+
+#### Waiting for motion
+
+Call `awaitMotion()` at the start of an iteration to suspend while Android's animator duration
+scale is zero or the run's playback is paused:
+
+```kotlin
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+
+animations.launchLatest {
+  launch {
+    while (isActive) {
+      awaitMotion()
+      opacity.animateTo(1f, tween(800.ms))
+      opacity.animateTo(0.4f, tween(800.ms))
+    }
+  }
+  position.animateTo(0.dp, spring())
+}
+```
+
+`awaitMotion()` returns immediately when motion is available. Otherwise it waits without polling,
+then rechecks system motion, playback, and cancellation before returning. Cancelling its child,
+replacing the run, or unmounting the hook cancels the await.
+
+`awaitMotion()` provides no frame pacing. A loop containing only `awaitMotion()` and `snapTo()`
+can block the main thread. Use timed animation work or a positive `wait` for pacing.
+
+Repetition uses ordinary Kotlin `while`, `repeat`, `break`, and `return`. Wrap parallel iteration
+work in `coroutineScope` to wait for its children before starting the next iteration. Finite commands
+and `wait` already follow duration scale and settle when motion is disabled; add `awaitMotion`
+when that work should wait until motion is available.
+
+If a loop exits when `isMotionEnabled` becomes false, it needs an explicit relaunch to start again.
 
 ## Testing Animations
 
@@ -315,7 +374,11 @@ frames through the shared `AnimationController`.
 | `runNextFrame(frameDelay)` | Dispatches one frame. New duration-based animations start on this frame. |
 | `advanceBy(duration)` | Advances elapsed animation time by `duration`, bootstrapping scheduled animations. |
 | `advanceTo(frameTime)` | Advances animation time to an absolute test timestamp. |
-| `hasScheduledFrames()` | Returns whether any animations are waiting for another frame. |
+| `hasScheduledFrames()` | Reports whether a frame is scheduled, including completion delivery. |
+
+Cancellation stops owned motion, but pending waits may schedule a final frame to deliver cancellation
+callbacks, including after unmount. If a frame is scheduled, use `runNextFrame()` to drain those
+callbacks before checking that the controller is idle.
 
 ### Playback and deferred start
 

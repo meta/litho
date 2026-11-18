@@ -592,6 +592,7 @@ class AnimationScopeTest {
     dispatcher.scheduler.advanceTimeBy(100)
     dispatcher.scheduler.runCurrent()
     assertThat(previous.isCompleted).isTrue()
+    animationRule.runNextFrame()
     assertThat(animationRule.hasScheduledFrames()).isFalse()
   }
 

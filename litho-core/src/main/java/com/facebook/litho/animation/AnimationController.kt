@@ -63,6 +63,14 @@ object AnimationController {
   internal var durationScale: Float = 1f
     private set
 
+  @get:MainThread
+  internal val isMotionEnabled: Boolean
+    get() {
+      ThreadUtils.assertMainThread()
+      if (phase == FramePhase.Idle) systemDurationScale.initialize()
+      return durationScale > 0f
+    }
+
   /** Running motion excludes system-disabled animations; false does not imply callbacks drained. */
   val hasRunningAnimations: Boolean
     get() = durationScale > 0f && activeAnimations.isNotEmpty()

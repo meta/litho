@@ -42,9 +42,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
- * Hook-owned animation runs. Suspending commands share ownership and playback; synchronous
- * Animatable controls remain external. Claims survive completed steps until the run ends. Taking
- * over a claimed value cancels the run. Launch and control are main-thread operations.
+ * Animation runs tied to the lifetime of a [useAnimationScope] hook.
+ *
+ * Suspending [animateTo] and [snapTo] commands share ownership and optional playback. Values stay
+ * owned between steps until the run ends. External takeover of an owned value cancels the whole
+ * run. Launch and control operations must run on the main thread.
  */
 @ExperimentalLithoApi
 class AnimationScope internal constructor() {
@@ -53,13 +55,17 @@ class AnimationScope internal constructor() {
   private var playback: AnimationPlayback? = null
 
   /**
-   * Starts a sequence, cancelling its predecessor. Cancelling the returned [Job] stops owned
-   * motion; joining it waits for the body and its children, including cleanup. Unused predecessor
-   * values stop and retain velocity until the replacement ends. An unmounted host returns a
-   * cancelled job. An explicit call from cancelled cleanup is still a new request.
+   * Starts a new run, cancelling the previous one and preserving interruption velocity.
+   *
+   * Cancelling the returned [Job] stops owned motion immediately and cancels pending run waits,
+   * including inside `NonCancellable`. Joining it waits for the body and its children, including
+   * cleanup. Values unused by the replacement stop and retain velocity until that replacement ends.
+   *
+   * An unmounted hook returns a cancelled job. A call from cancellation cleanup is still a new
+   * request.
    */
   @MainThread
-  fun launchLatest(block: suspend CoroutineScope.() -> Unit): Job {
+  fun launchLatest(block: suspend AnimationRunScope.() -> Unit): Job {
     ThreadUtils.assertMainThread()
     val parent = host
     if (parent == null || !parent.isActive) {
@@ -75,7 +81,8 @@ class AnimationScope internal constructor() {
     val job =
         parent.launch(run, start = CoroutineStart.LAZY) {
           try {
-            val body = launch(block = block)
+            // Joining a child lets cancellation reach finally before NonCancellable cleanup ends.
+            val body = launch { block(AnimationRunScope(coroutineContext)) }
             body.join()
           } finally {
             release()
@@ -93,7 +100,7 @@ class AnimationScope internal constructor() {
     return job
   }
 
-  /** Cancels the current run, including its claims and pending holds. */
+  /** Cancels the current run and stops its owned motion. */
   @MainThread
   fun cancel() {
     ThreadUtils.assertMainThread()
@@ -118,7 +125,10 @@ class AnimationScope internal constructor() {
   }
 }
 
-/** Returns a stable animation host, cancelled when this hook leaves the committed tree. */
+/**
+ * Returns a stable host for [AnimationScope.launchLatest] runs. [playback] controls their
+ * animations and waits. Removing the hook cancels its current run.
+ */
 @ExperimentalLithoApi
 @Hook
 fun ComponentScope.useAnimationScope(playback: AnimationPlayback? = null): AnimationScope {
@@ -135,24 +145,84 @@ fun ComponentScope.useAnimationScope(playback: AnimationPlayback? = null): Anima
   return animations
 }
 
-/** Waits on animation playback time inside [AnimationScope.launchLatest]. */
+/**
+ * Coroutine receiver for a single [AnimationScope.launchLatest] run.
+ *
+ * Reuses the body's coroutine context and job. Children inherit ownership and playback. Run
+ * commands check the calling coroutine's context and must execute on the main thread within this
+ * run, including from nested coroutine scopes.
+ */
 @ExperimentalLithoApi
-@MainThread
-suspend fun wait(duration: Duration) {
-  ThreadUtils.assertMainThread()
-  require(duration.isFinite() && duration >= Duration.ZERO) {
-    "Wait duration must be finite and nonnegative."
+class AnimationRunScope internal constructor(override val coroutineContext: CoroutineContext) :
+    CoroutineScope {
+  private val run = checkNotNull(coroutineContext[AnimationRun])
+
+  /**
+   * Whether Android's animator duration scale is positive, read live without Litho state tracking.
+   * Playback and cancellation do not affect this value. Use [awaitMotion] to wait for available
+   * motion.
+   */
+  @get:MainThread
+  val isMotionEnabled: Boolean
+    get() = AnimationController.isMotionEnabled
+
+  /**
+   * Waits for [duration] in animation playback time, respecting pauses and duration scale.
+   * [duration] must be finite and nonnegative. Zero returns immediately. With motion disabled, a
+   * positive wait completes on the next frame that playback permits.
+   */
+  @MainThread
+  suspend fun wait(duration: Duration) {
+    activeContext()
+    require(duration.isFinite() && duration >= Duration.ZERO) {
+      "Wait duration must be finite and nonnegative."
+    }
+    if (duration == Duration.ZERO) return
+    run.awaitHold { onEnd -> run.owner.hold(duration, onEnd) }
   }
-  val context = currentCoroutineContext()
-  context.ensureActive()
-  val run = checkNotNull(context[AnimationRun]) { "wait must run inside launchLatest." }
-  run.job.ensureActive()
-  if (duration == Duration.ZERO) return
+
+  /**
+   * Checks cancellation and waits until system motion is enabled and playback permits progress.
+   * Returns immediately when available; otherwise suspends without polling.
+   *
+   * Does not pace loop iterations. Loops of immediate commands such as [snapTo] can block the main
+   * thread. Use timed animations or a positive [wait] for pacing.
+   */
+  @MainThread
+  suspend fun awaitMotion() {
+    val context = activeContext()
+    while (!run.owner.canAnimate) {
+      run.awaitHold(run.owner::awaitMotion)
+      context.ensureActive()
+      run.job.ensureActive()
+    }
+  }
+
+  private suspend fun activeContext(): CoroutineContext {
+    ThreadUtils.assertMainThread()
+    val context = currentCoroutineContext()
+    context.ensureActive()
+    run.job.ensureActive()
+    check(context[AnimationRun] === run) {
+      "Animation run commands must execute within their launchLatest run."
+    }
+    return context
+  }
+}
+
+@OptIn(ExperimentalLithoApi::class)
+private suspend inline fun AnimationRun.awaitHold(
+    crossinline register: ((AnimationEnd) -> Unit) -> AnimationRunOwner.Hold,
+) {
   suspendCancellableCoroutine<Unit> { continuation ->
-    val hold = run.owner.hold(duration) { continuation.resume(Unit) }
+    val hold = register { outcome ->
+      if (outcome == AnimationEnd.Finished) continuation.resume(Unit)
+      else if (continuation.isActive) continuation.cancel(animationCancellation(outcome))
+    }
     continuation.invokeOnCancellation {
       onMain {
-        if (!run.job.isActive) run.cancel() else run.owner.cancelHold(hold)
+        owner.cancelHold(hold)
+        if (!job.isActive) cancel()
       }
     }
   }
@@ -188,8 +258,8 @@ suspend fun <T> Animatable<T>.animateTo(target: T, spec: FiniteAnimationSpec<T>)
 }
 
 /**
- * Sets [target] without waiting for a frame, retaining ownership inside
- * [AnimationScope.launchLatest].
+ * Sets [target] immediately without suspending, while checking cancellation. Retains ownership
+ * inside [AnimationScope.launchLatest] and also works outside a run.
  */
 @ExperimentalLithoApi
 @MainThread

@@ -38,10 +38,22 @@ internal class AnimationRunOwner(
   internal var playback = playback
     private set
 
-  fun hold(duration: Duration, onEnd: () -> Unit): Hold {
+  val canAnimate: Boolean
+    get() = AnimationController.isMotionEnabled && playback?.currentState != PlaybackState.Paused
+
+  fun hold(duration: Duration, onEnd: (AnimationEnd) -> Unit): Hold =
+      registerHold(duration.toFiniteNanos(), requiresMotion = false, onEnd)
+
+  fun awaitMotion(onEnd: (AnimationEnd) -> Unit): Hold =
+      registerHold(0L, requiresMotion = true, onEnd)
+
+  private fun registerHold(
+      durationNanos: Long,
+      requiresMotion: Boolean,
+      onEnd: (AnimationEnd) -> Unit,
+  ): Hold {
     ThreadUtils.assertMainThread()
     check(!isReleased) { "The animation run has ended." }
-    val durationNanos = duration.toFiniteNanos()
     val pendingHolds = holds ?: ArrayList<Hold>().also { holds = it }
     val driver =
         holdDriver
@@ -50,7 +62,7 @@ internal class AnimationRunOwner(
               holdDriver = createdDriver
             }
     driver.anchorInCompletionFrame()
-    val hold = Hold(driver.playTimeNanos, durationNanos, onEnd)
+    val hold = Hold(driver.playTimeNanos, durationNanos, requiresMotion, onEnd)
     pendingHolds.add(hold)
     driver.updatePendingWork(true)
     return hold
@@ -126,6 +138,7 @@ internal class AnimationRunOwner(
   private fun clearHolds() {
     holdDriver?.unmount()
     holdDriver = null
+    holds?.forEach { AnimationController.enqueueCompletion(it) }
     holds?.clear()
     holds = null
   }
@@ -148,10 +161,12 @@ internal class AnimationRunOwner(
     val pendingHolds = checkNotNull(holds)
     for (index in pendingHolds.lastIndex downTo 0) {
       val hold = pendingHolds[index]
-      if (
-          AnimationController.durationScale == 0f ||
-              playTimeNanos - hold.originNanos >= hold.durationNanos
-      ) {
+      val ready =
+          if (hold.requiresMotion) AnimationController.durationScale > 0f
+          else
+              AnimationController.durationScale == 0f ||
+                  playTimeNanos - hold.originNanos >= hold.durationNanos
+      if (ready) {
         pendingHolds.removeAt(index)
         AnimationController.enqueueCompletion(hold)
       }
@@ -162,10 +177,11 @@ internal class AnimationRunOwner(
   internal inner class Hold(
       val originNanos: Long,
       val durationNanos: Long,
-      val callback: () -> Unit,
+      val requiresMotion: Boolean,
+      val callback: (AnimationEnd) -> Unit,
   ) : PostFrameCallback {
     override fun onPostFrame() {
-      if (!isReleased) callback()
+      callback(if (isReleased) AnimationEnd.Cancelled else AnimationEnd.Finished)
     }
   }
 }
