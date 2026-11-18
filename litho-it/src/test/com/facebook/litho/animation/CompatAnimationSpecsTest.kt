@@ -17,6 +17,7 @@
 package com.facebook.litho.animation
 
 import android.view.animation.AccelerateDecelerateInterpolator
+import android.view.animation.LinearInterpolator
 import android.view.animation.OvershootInterpolator
 import com.facebook.litho.dataflow.springs.Spring
 import com.facebook.litho.dataflow.springs.SpringConfig
@@ -97,6 +98,18 @@ class CompatAnimationSpecsTest {
     assertThat(custom.getValue(100 * NANOS_PER_MS))
         .isCloseTo(100f * overshoot.getInterpolation(0.5f), within(0.01f))
     assertThat(linear.getValue(50 * NANOS_PER_MS)).isCloseTo(25f, within(0.01f))
+  }
+
+  @Test
+  fun compatTiming_withNegativeDuration_finishesAtOnce() {
+    // `Transition.timing(-25)` ends before it starts, so legacy jumps to the target; `tween`
+    // rejects
+    // a negative duration.
+    for (spec in listOf(compatTiming<Float>(-25), compatTiming<Float>(-25, LinearInterpolator()))) {
+      val animator = spec.createAnimator(0f, 100f, FloatTypeConverter)
+      assertThat(animator.durationNanos).isEqualTo(0L)
+      assertThat(animator.getValue(0L)).isEqualTo(100f)
+    }
   }
 
   @Test

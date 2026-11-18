@@ -63,17 +63,23 @@ fun <T> compatSpringNoOvershoot(): FiniteAnimationSpec<T> =
 
 /**
  * Equivalent of `Transition.timing(durationMs)`, which eases with accelerate-decelerate. Keeps the
- * existing motion of code moving off `Transition`; prefer [tween] for new code.
+ * existing motion of code moving off `Transition`; prefer [tween] for new code. A negative
+ * [durationMs] finishes at once, as it does for `Transition`.
  */
 fun <T> compatTiming(durationMs: Int): DurationBasedAnimationSpec<T> =
-    tween(duration = durationMs.ms, easing = ACCELERATE_DECELERATE)
+    tween(duration = durationMs.coerceAtLeast(0).ms, easing = ACCELERATE_DECELERATE)
 
 /**
  * Equivalent of `Transition.timing(durationMs, interpolator)`. A `null` [interpolator] is linear,
- * as it is for `Transition`.
+ * as it is for `Transition`, and a negative [durationMs] finishes at once.
  */
-fun <T> compatTiming(durationMs: Int, interpolator: Interpolator?): DurationBasedAnimationSpec<T> =
-    tween(duration = durationMs.ms, easing = interpolator?.asEasing() ?: Easing.Linear)
+fun <T> compatTiming(
+    durationMs: Int,
+    interpolator: Interpolator?,
+): DurationBasedAnimationSpec<T> = tween(
+    duration = durationMs.coerceAtLeast(0).ms,
+    easing = interpolator?.asEasing() ?: Easing.Linear,
+)
 
 // Mirror `SpringConfig.defaultConfig` and `SpringConfig.noOvershootConfig`. Duplicated rather than
 // referenced so this file has no dependency on the engine it replaces.
