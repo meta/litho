@@ -338,8 +338,10 @@ Style.alpha(alpha)
 permits future runs. To play once visibility first permits it, call `play()` without pausing on
 subsequent invisibility events. Calling `play()` before work exists permits later runs too.
 
-Control and diagnostics require the main thread and do not cause renders. `state` records desired
-playback; `isRunning` reports actual activity after a frame has started. Initial targets remain
+Control and diagnostics require the main thread. `state` records desired playback and is
+observable: reading it in render, layout, an effect or a binder updates that scope on `play()` or
+`pause()`, so a Pause/Resume label needs no extra state. A controller nobody reads causes no
+renders. `isRunning` reports actual activity after a frame has started. Initial targets remain
 silent. Genuine no-motion target changes still settle asynchronously while paused; timed work
 and snaps to a different value wait for play or finite owner finish.
 

@@ -254,6 +254,56 @@ class AnimationPlaybackTest {
     assertThat(loop.value).isEqualTo(frozen)
   }
 
+  @Test
+  fun readingStateRerendersTheReaderOnPauseAndPlay() {
+    val rendered = mutableListOf<PlaybackState>()
+    lateinit var playback: AnimationPlayback
+    lithoTestRule.render {
+      object : KComponent() {
+        override fun ComponentScope.render(): Component {
+          playback = useAnimationPlayback()
+          rendered.add(playback.state)
+          return Row(style = Style.width(10.px).height(10.px))
+        }
+      }
+    }
+    lithoTestRule.idle()
+    assertThat(rendered.last()).isEqualTo(PlaybackState.Playing)
+
+    playback.pause()
+    assertThat(playback.state).isEqualTo(PlaybackState.Paused)
+    lithoTestRule.idle()
+    assertThat(rendered.last()).isEqualTo(PlaybackState.Paused)
+
+    playback.play()
+    lithoTestRule.idle()
+    assertThat(rendered.last()).isEqualTo(PlaybackState.Playing)
+  }
+
+  @Test
+  fun unreadStateDoesNotRerender() {
+    var renders = 0
+    lateinit var playback: AnimationPlayback
+    lithoTestRule.render {
+      object : KComponent() {
+        override fun ComponentScope.render(): Component {
+          playback = useAnimationPlayback()
+          renders++
+          return Row(style = Style.width(10.px).height(10.px))
+        }
+      }
+    }
+    lithoTestRule.idle()
+    val initialRenders = renders
+
+    playback.pause()
+    lithoTestRule.idle()
+    playback.play()
+    lithoTestRule.idle()
+
+    assertThat(renders).isEqualTo(initialRenders)
+  }
+
   private inner class Mixed(
       private val target: Float,
       private val playback: AnimationPlayback,

@@ -26,12 +26,12 @@ internal abstract class AnimationDriver : AnimationClock(), FrameDrivenAnimation
   private var hasPendingWork = false
 
   final override fun onFrame(frameTimeNanos: Long): Boolean {
-    if (!hasPendingWork || playback?.state == PlaybackState.Paused) {
+    if (!hasPendingWork || playback?.currentState == PlaybackState.Paused) {
       freeze()
       return false
     }
     hasPendingWork = advance(tick(frameTimeNanos))
-    val ticking = hasPendingWork && playback?.state != PlaybackState.Paused
+    val ticking = hasPendingWork && playback?.currentState != PlaybackState.Paused
     if (!ticking || AnimationController.durationScale == 0f) freeze()
     return ticking
   }
@@ -69,7 +69,7 @@ internal abstract class AnimationDriver : AnimationClock(), FrameDrivenAnimation
   }
 
   internal fun reconcilePlayback(forceFrame: Boolean = false) {
-    if (hasPendingWork && playback?.state != PlaybackState.Paused) {
+    if (hasPendingWork && playback?.currentState != PlaybackState.Paused) {
       AnimationController.register(this, forceFrame)
     } else {
       AnimationController.unregister(this)
