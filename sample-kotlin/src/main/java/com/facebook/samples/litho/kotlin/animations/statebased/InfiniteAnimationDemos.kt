@@ -17,11 +17,13 @@
 package com.facebook.samples.litho.kotlin.animations.statebased
 
 import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import com.facebook.litho.Component
 import com.facebook.litho.ComponentScope
 import com.facebook.litho.KComponent
 import com.facebook.litho.ResourcesScope
 import com.facebook.litho.Style
+import com.facebook.litho.Value
 import com.facebook.litho.animation.Easing
 import com.facebook.litho.animation.RepeatMode
 import com.facebook.litho.animation.StartOffset
@@ -47,17 +49,20 @@ import com.facebook.litho.layout.StackLayout
 import com.facebook.litho.layout.flexbox.Column
 import com.facebook.litho.layout.flexbox.FlexboxScope
 import com.facebook.litho.layout.flexbox.Row
-import com.facebook.litho.useCallback
 import com.facebook.litho.useState
 import com.facebook.litho.view.Shape
 import com.facebook.litho.view.background
 import com.facebook.litho.view.clip
+import com.facebook.litho.view.clipToOutline
 import com.facebook.litho.view.onClick
 import com.facebook.rendercore.dp
 import com.facebook.rendercore.graphics.Color as LithoColor
 import com.facebook.rendercore.ms
 import com.facebook.rendercore.sp
+import com.facebook.rendercore.stringRes
+import com.facebook.samples.litho.R
 import com.facebook.samples.litho.kotlin.drawable.RoundedRect
+import com.facebook.samples.litho.kotlin.primitives.widgets.VerticalScroll
 import com.facebook.yoga.YogaAlign
 import com.facebook.yoga.YogaJustify
 
@@ -66,48 +71,68 @@ class InfiniteAnimationDemosComponent : KComponent() {
 
   override fun ComponentScope.render(): Component {
     val running = useState { true }
-    val toggleRunning = useCallback { -> running.update { !it } }
 
     return InfiniteDemoSurface {
-      child(
-          Row(
-              alignItems = YogaAlign.CENTER,
-              justifyContent = YogaJustify.SPACE_BETWEEN,
-              style = Style.widthPercent(100f).margin(bottom = 16.dp),
-          ) {
-            child(
-                Column(style = Style.flex(grow = 1f)) {
-                  child(Text("Infinite animations", textSize = 22.sp, textColor = INK))
-                  child(
-                      Text(
-                          "Lifecycle-owned loops for pulse, spinner, shimmer, and staged motion",
-                          textSize = 13.sp,
-                          textColor = MUTED,
-                          style = Style.margin(top = 4.dp),
-                      ),
-                  )
-                },
-            )
-            child(RunToggle(running.value, toggleRunning))
-          },
-      )
-      child(PulseDemoComponent(running.value))
-      child(
-          Row(style = Style.margin(top = 12.dp), alignItems = YogaAlign.STRETCH) {
-            child(SpinnerDemoComponent(running.value, Style.flex(grow = 1f).margin(end = 12.dp)))
-            child(TypingDotsDemoComponent(running.value, Style.flex(grow = 1f)))
-          },
-      )
-      child(ShimmerDemoComponent(running.value, Style.margin(top = 12.dp)))
+      child(ShowcaseHeader(running.value) { running.update { !it } })
+      child(ShowcaseContent(running.value))
     }
   }
 }
 
+private fun ResourcesScope.ShowcaseHeader(
+    running: Boolean,
+    onClick: () -> Unit,
+): Component = Row(
+    alignItems = YogaAlign.CENTER,
+    justifyContent = YogaJustify.SPACE_BETWEEN,
+    style = Style.widthPercent(100f).margin(bottom = 12.dp),
+) {
+  child(
+      Column(style = Style.flex(grow = 1f, shrink = 1f).margin(end = 12.dp)) {
+        child(
+            Text(
+                stringRes(R.string.litho_sample_infinite_showcase_title),
+                textSize = 22.sp,
+                textColor = INK,
+            ),
+        )
+        child(
+            Text(
+                stringRes(R.string.litho_sample_infinite_showcase_subtitle),
+                textSize = 13.sp,
+                textColor = MUTED,
+                style = Style.margin(top = 4.dp),
+            ),
+        )
+      },
+  )
+  child(RunToggle(running, onClick))
+}
+
+private fun ResourcesScope.ShowcaseContent(running: Boolean): Component =
+    VerticalScroll(style = Style.clipToOutline(false)) {
+      Column {
+        child(LaunchCommandCenterComponent(running))
+        child(
+            Row(style = Style.margin(top = 12.dp), alignItems = YogaAlign.STRETCH) {
+              child(
+                  TelemetryRefreshComponent(
+                      running,
+                      Style.flex(grow = 1f).margin(end = 12.dp),
+                  ),
+              )
+              child(LaunchAssistantComponent(running, Style.flex(grow = 1f)))
+            },
+        )
+        child(RolloutForecastComponent(running, Style.margin(top = 12.dp)))
+      }
+    }
+
 @OptIn(ExperimentalLithoApi::class)
-private class PulseDemoComponent(private val running: Boolean) : KComponent() {
+private class LaunchCommandCenterComponent(private val running: Boolean) : KComponent() {
 
   override fun ComponentScope.render(): Component {
-    val infinite = useInfiniteAnimationGroup(shouldRun = running, label = "sample/pulse")
+    val infinite = useInfiniteAnimationGroup(shouldRun = running, label = "sample/launch-status")
     val scale =
         infinite.animateFloat(
             from = 0.92f,
@@ -130,44 +155,82 @@ private class PulseDemoComponent(private val running: Boolean) : KComponent() {
             label = "color",
         )
 
-    return DemoCard {
-      child(DemoLabel("Pulse"))
+    return ProductCard(
+        style = Style.margin(top = 4.dp).background(RoundedRect(0xFF0F172A.toInt(), 22.dp)),
+    ) {
       child(
           Row(
               alignItems = YogaAlign.CENTER,
-              style = Style.widthPercent(100f).margin(top = 14.dp),
+              justifyContent = YogaJustify.SPACE_BETWEEN,
+              style = Style.widthPercent(100f),
           ) {
             child(
-                Column(
-                    alignItems = YogaAlign.CENTER,
-                    justifyContent = YogaJustify.CENTER,
-                    style =
-                        Style.size(72.dp)
-                            .scale(scale)
-                            .alpha(alpha)
-                            .clip(Shape.Circle)
-                            .backgroundColor(color),
-                ) {
+                Row(alignItems = YogaAlign.CENTER, style = Style.flex(grow = 1f, shrink = 1f)) {
                   child(
-                      Column(
-                          style =
-                              Style.size(24.dp).background(RoundedRect(0xFFFFFFFF.toInt(), 12.dp)),
+                      LiveBeacon(
+                          scale = scale,
+                          alpha = alpha,
+                          color = color,
+                          style = Style.margin(end = 12.dp),
                       ),
+                  )
+                  child(
+                      Column(style = Style.flex(grow = 1f, shrink = 1f)) {
+                        child(
+                            Text(
+                                stringRes(R.string.litho_sample_infinite_showcase_hero_label),
+                                textSize = 12.sp,
+                                textColor = 0xFF99F6E4.toInt(),
+                            ),
+                        )
+                        child(
+                            Text(
+                                stringRes(R.string.litho_sample_infinite_showcase_hero_title),
+                                textSize = 20.sp,
+                                textColor = Color.WHITE,
+                                style = Style.margin(top = 2.dp),
+                            ),
+                        )
+                      },
                   )
                 },
             )
+            child(StatusPill(R.string.litho_sample_infinite_showcase_live_status))
+          },
+      )
+      child(
+          Text(
+              stringRes(R.string.litho_sample_infinite_showcase_hero_summary),
+              textSize = 13.sp,
+              textColor = 0xFFCBD5E1.toInt(),
+              style = Style.margin(top = 14.dp),
+          ),
+      )
+      child(
+          Row(
+              style = Style.widthPercent(100f).margin(top = 18.dp),
+              alignItems = YogaAlign.STRETCH,
+          ) {
             child(
-                Column(style = Style.flex(grow = 1f).margin(start = 18.dp)) {
-                  child(Text("Attention cue", textSize = 16.sp, textColor = INK))
-                  child(
-                      Text(
-                          "Reverse mode is the ergonomic default for breathing UI loops.",
-                          textSize = 13.sp,
-                          textColor = MUTED,
-                          style = Style.margin(top = 4.dp),
-                      ),
-                  )
-                },
+                ProductMetric(
+                    valueRes = R.string.litho_sample_infinite_showcase_metric_health_value,
+                    labelRes = R.string.litho_sample_infinite_showcase_metric_health,
+                    style = Style.flex(grow = 1f).margin(end = 8.dp),
+                ),
+            )
+            child(
+                ProductMetric(
+                    valueRes = R.string.litho_sample_infinite_showcase_metric_checks_value,
+                    labelRes = R.string.litho_sample_infinite_showcase_metric_checks,
+                    style = Style.flex(grow = 1f).margin(end = 8.dp),
+                ),
+            )
+            child(
+                ProductMetric(
+                    valueRes = R.string.litho_sample_infinite_showcase_metric_latency_value,
+                    labelRes = R.string.litho_sample_infinite_showcase_metric_latency,
+                    style = Style.flex(grow = 1f),
+                ),
             )
           },
       )
@@ -176,13 +239,13 @@ private class PulseDemoComponent(private val running: Boolean) : KComponent() {
 }
 
 @OptIn(ExperimentalLithoApi::class)
-private class SpinnerDemoComponent(
+private class TelemetryRefreshComponent(
     private val running: Boolean,
     private val style: Style,
 ) : KComponent() {
 
   override fun ComponentScope.render(): Component {
-    val infinite = useInfiniteAnimationGroup(shouldRun = running, label = "sample/spinner")
+    val infinite = useInfiniteAnimationGroup(shouldRun = running, label = "sample/telemetry-sync")
     val rotation =
         infinite.animateFloat(
             from = 0f,
@@ -192,29 +255,30 @@ private class SpinnerDemoComponent(
             label = "rotation",
         )
 
-    return DemoCard(style) {
-      child(DemoLabel("Spinner"))
+    return ProductCard(style) {
+      child(SectionLabel(R.string.litho_sample_infinite_showcase_telemetry_label))
       child(
           Column(
               alignItems = YogaAlign.CENTER,
               justifyContent = YogaJustify.CENTER,
-              style = Style.widthPercent(100f).height(112.dp).margin(top = 12.dp),
+              style = Style.widthPercent(100f).height(126.dp).margin(top = 10.dp),
           ) {
+            child(SyncSpinner(rotation))
             child(
-                StackLayout(style = Style.size(58.dp).rotation(rotation)) {
-                  child(
-                      Column(style = Style.size(58.dp).background(RoundedRect(0xFFE0F2FE, 29.dp))),
-                  )
-                  child(
-                      Column(
-                          style =
-                              Style.width(18.dp)
-                                  .height(18.dp)
-                                  .margin(start = 20.dp)
-                                  .background(RoundedRect(0xFF0284C7.toInt(), 9.dp)),
-                      ),
-                  )
-                },
+                Text(
+                    stringRes(R.string.litho_sample_infinite_showcase_telemetry_title),
+                    textSize = 15.sp,
+                    textColor = INK,
+                    style = Style.margin(top = 12.dp),
+                ),
+            )
+            child(
+                Text(
+                    stringRes(R.string.litho_sample_infinite_showcase_telemetry_subtitle),
+                    textSize = 12.sp,
+                    textColor = MUTED,
+                    style = Style.margin(top = 4.dp),
+                ),
             )
           },
       )
@@ -223,40 +287,108 @@ private class SpinnerDemoComponent(
 }
 
 @OptIn(ExperimentalLithoApi::class)
-private class TypingDotsDemoComponent(
+private class LaunchAssistantComponent(
     private val running: Boolean,
     private val style: Style,
 ) : KComponent() {
 
   override fun ComponentScope.render(): Component {
-    val infinite = useInfiniteAnimationGroup(shouldRun = running, label = "sample/dots")
+    val infinite = useInfiniteAnimationGroup(shouldRun = running, label = "sample/assistant-dots")
     val offsets =
         (0..2).map { index ->
           infinite.animateFloat(
               from = 0f,
-              to = -16f,
+              to = -12f,
               animation = tween(360.ms),
               initialStartOffset = StartOffset(index * 120, StartOffsetType.FastForward),
               label = "dot$index",
           )
         }
 
-    return DemoCard(style) {
-      child(DemoLabel("Typing dots"))
+    return ProductCard(style) {
+      child(SectionLabel(R.string.litho_sample_infinite_showcase_assistant_label))
+      child(
+          Column(
+              justifyContent = YogaJustify.CENTER,
+              style = Style.widthPercent(100f).height(126.dp).margin(top = 10.dp),
+          ) {
+            child(
+                Text(
+                    stringRes(R.string.litho_sample_infinite_showcase_assistant_title),
+                    textSize = 15.sp,
+                    textColor = INK,
+                ),
+            )
+            child(
+                Text(
+                    stringRes(R.string.litho_sample_infinite_showcase_assistant_subtitle),
+                    textSize = 12.sp,
+                    textColor = MUTED,
+                    style = Style.margin(top = 4.dp),
+                ),
+            )
+            child(TypingIndicator(offsets, Style.margin(top = 18.dp)))
+          },
+      )
+    }
+  }
+}
+
+@OptIn(ExperimentalLithoApi::class)
+private class RolloutForecastComponent(
+    private val running: Boolean,
+    private val style: Style,
+) : KComponent() {
+
+  override fun ComponentScope.render(): Component {
+    val infinite = useInfiniteAnimationGroup(shouldRun = running, label = "sample/forecast-shimmer")
+    val translateX =
+        infinite.animateFloat(
+            from = -220f,
+            to = 420f,
+            animation = tween(1_800.ms, easing = Easing.Linear),
+            repeatMode = RepeatMode.Restart,
+            label = "sweep",
+        )
+    val sweepAlpha =
+        infinite.animateFloat(
+            from = 0.46f,
+            to = 0.88f,
+            animation = tween(900.ms),
+            label = "sweepAlpha",
+        )
+
+    return ProductCard(style) {
       child(
           Row(
               alignItems = YogaAlign.CENTER,
-              justifyContent = YogaJustify.CENTER,
-              style = Style.widthPercent(100f).height(112.dp).margin(top = 12.dp),
+              justifyContent = YogaJustify.SPACE_BETWEEN,
+              style = Style.widthPercent(100f),
           ) {
-            offsets.forEachIndexed { index, offset ->
+            child(SectionLabel(R.string.litho_sample_infinite_showcase_forecast_label))
+            child(
+                Text(
+                    stringRes(R.string.litho_sample_infinite_showcase_forecast_status),
+                    textSize = 12.sp,
+                    textColor = MUTED,
+                ),
+            )
+          },
+      )
+      child(
+          StackLayout(
+              style =
+                  Style.widthPercent(100f)
+                      .height(148.dp)
+                      .margin(top = 14.dp)
+                      .clip(Shape.RoundedRectangle(18.dp))
+                      .background(RoundedRect(0xFFF8FAFC, 18.dp)),
+          ) {
+            child(ForecastSkeleton())
+            if (running) {
               child(
-                  Column(
-                      style =
-                          Style.size(16.dp)
-                              .margin(horizontal = 4.dp)
-                              .translationY(offset)
-                              .background(RoundedRect(DOT_COLORS[index], 8.dp)),
+                  ShimmerSweep(
+                      Style.width(220.dp).height(148.dp).translationX(translateX).alpha(sweepAlpha),
                   ),
               )
             }
@@ -267,88 +399,145 @@ private class TypingDotsDemoComponent(
 }
 
 @OptIn(ExperimentalLithoApi::class)
-private class ShimmerDemoComponent(
-    private val running: Boolean,
-    private val style: Style,
-) : KComponent() {
+private fun ResourcesScope.LiveBeacon(
+    scale: Value<Float>,
+    alpha: Value<Float>,
+    color: Value<LithoColor>,
+    style: Style,
+): Component = Column(
+    alignItems = YogaAlign.CENTER,
+    justifyContent = YogaJustify.CENTER,
+    style = style.size(58.dp).scale(scale).alpha(alpha).clip(Shape.Circle).backgroundColor(color),
+) {
+  child(Column(style = Style.size(18.dp).background(RoundedRect(0xFFFFFFFF.toInt(), 9.dp))))
+}
 
-  override fun ComponentScope.render(): Component {
-    val infinite = useInfiniteAnimationGroup(shouldRun = running, label = "sample/shimmer")
-    val translateX =
-        infinite.animateFloat(
-            from = -220f,
-            to = 260f,
-            animation = tween(1_300.ms, easing = Easing.Linear),
-            repeatMode = RepeatMode.Restart,
-            label = "sweep",
-        )
-    val shine =
-        infinite.animateFloat(
-            from = 0.28f,
-            to = 0.52f,
-            animation = tween(1_300.ms),
-            label = "shine",
-        )
-
-    return DemoCard(style) {
-      child(DemoLabel("Shimmer"))
+@OptIn(ExperimentalLithoApi::class)
+private fun ResourcesScope.SyncSpinner(rotation: Value<Float>): Component =
+    StackLayout(style = Style.size(62.dp).rotation(rotation)) {
+      child(Column(style = Style.size(62.dp).background(RoundedRect(0xFFE0F2FE, 31.dp))))
       child(
-          StackLayout(
+          Column(
               style =
-                  Style.widthPercent(100f)
-                      .height(118.dp)
-                      .margin(top = 14.dp)
-                      .clip(Shape.RoundedRectangle(18.dp))
-                      .background(RoundedRect(0xFFF1F5F9, 18.dp)),
-          ) {
-            child(
-                Column(style = Style.widthPercent(100f).padding(all = 16.dp)) {
-                  child(SkeletonLine(0xFFE2E8F0.toInt(), Style.width(170.dp)))
-                  child(
-                      SkeletonLine(0xFFE5E7EB.toInt(), Style.widthPercent(88f).margin(top = 12.dp)),
-                  )
-                  child(
-                      SkeletonLine(0xFFE5E7EB.toInt(), Style.widthPercent(64f).margin(top = 10.dp)),
-                  )
-                },
-            )
-            child(
-                Column(
-                    style =
-                        Style.width(74.dp)
-                            .height(118.dp)
-                            .translationX(translateX)
-                            .alpha(shine)
-                            .background(RoundedRect(0xFFFFFFFF.toInt(), 18.dp)),
-                ),
-            )
-          },
+                  Style.width(22.dp)
+                      .height(22.dp)
+                      .margin(start = 21.dp)
+                      .background(RoundedRect(0xFF0284C7.toInt(), 11.dp)),
+          ),
+      )
+      child(
+          Column(
+              style =
+                  Style.width(34.dp)
+                      .height(34.dp)
+                      .margin(start = 14.dp, top = 14.dp)
+                      .background(RoundedRect(0xFFFFFFFF.toInt(), 17.dp)),
+          ),
       )
     }
+
+@OptIn(ExperimentalLithoApi::class)
+private fun ResourcesScope.TypingIndicator(
+    offsets: List<Value<Float>>,
+    style: Style,
+): Component = Row(
+    alignItems = YogaAlign.CENTER,
+    justifyContent = YogaJustify.CENTER,
+    style = style.widthPercent(100f).height(42.dp).background(RoundedRect(0xFFF1F5F9, 21.dp)),
+) {
+  offsets.forEachIndexed { index, offset ->
+    child(
+        Column(
+            style =
+                Style.size(10.dp)
+                    .margin(horizontal = 4.dp)
+                    .translationY(offset)
+                    .background(RoundedRect(DOT_COLORS[index], 5.dp)),
+        ),
+    )
   }
 }
 
+private fun ResourcesScope.ForecastSkeleton(): Component =
+    Column(style = Style.widthPercent(100f).padding(all = 16.dp)) {
+      child(
+          Row(alignItems = YogaAlign.CENTER, style = Style.widthPercent(100f)) {
+            child(SkeletonBlock(SKELETON_STRONG, Style.size(38.dp)))
+            child(
+                Column(style = Style.flex(grow = 1f).margin(start = 12.dp)) {
+                  child(SkeletonLine(SKELETON_STRONG, Style.widthPercent(52f)))
+                  child(SkeletonLine(SKELETON_SOFT, Style.widthPercent(34f).margin(top = 8.dp)))
+                },
+            )
+            child(SkeletonLine(SKELETON_SOFT, Style.width(56.dp).height(22.dp)))
+          },
+      )
+      child(
+          Row(
+              style = Style.widthPercent(100f).margin(top = 18.dp),
+              alignItems = YogaAlign.STRETCH,
+          ) {
+            child(
+                SkeletonBlock(
+                    SKELETON_SOFT,
+                    Style.flex(grow = 1f).height(48.dp).margin(end = 8.dp),
+                ),
+            )
+            child(
+                SkeletonBlock(
+                    SKELETON_SOFT,
+                    Style.flex(grow = 1f).height(48.dp).margin(end = 8.dp),
+                ),
+            )
+            child(SkeletonBlock(SKELETON_SOFT, Style.flex(grow = 1f).height(48.dp)))
+          },
+      )
+      child(SkeletonLine(SKELETON_SOFT, Style.widthPercent(66f).margin(top = 12.dp)))
+    }
+
+private fun ResourcesScope.StatusPill(labelRes: Int): Component = Text(
+    stringRes(labelRes),
+    textSize = 12.sp,
+    textColor = Color.WHITE,
+    style =
+        Style.padding(horizontal = 10.dp, vertical = 5.dp)
+            .background(RoundedRect(0xFF0F766E, 13.dp)),
+)
+
+private fun ResourcesScope.ProductMetric(
+    valueRes: Int,
+    labelRes: Int,
+    style: Style,
+): Component = Column(
+    style =
+        style
+            .padding(horizontal = 10.dp, vertical = 10.dp)
+            .background(RoundedRect(0x1AFFFFFF, 14.dp)),
+) {
+  child(Text(stringRes(valueRes), textSize = 16.sp, textColor = Color.WHITE))
+  child(Text(stringRes(labelRes), textSize = 11.sp, textColor = 0xFFCBD5E1.toInt()))
+}
+
 private fun ResourcesScope.InfiniteDemoSurface(content: FlexboxScope.() -> Unit): Component =
-    Column(style = Style.padding(all = 18.dp).background(RoundedRect(Color.WHITE, 0.dp))) {
+    Column(style = Style.padding(all = 18.dp).background(RoundedRect(0xFFF8FAFC.toInt(), 0.dp))) {
       content()
     }
 
-private fun ResourcesScope.DemoCard(
+private fun ResourcesScope.ProductCard(
     style: Style = Style,
     content: FlexboxScope.() -> Unit,
 ): Component = Column(
     style =
-        style
-            .widthPercent(100f)
+        Style.widthPercent(100f)
             .padding(all = 16.dp)
-            .background(RoundedRect(0xFFFFFFFF.toInt(), 18.dp)),
+            .background(RoundedRect(0xFFFFFFFF.toInt(), 18.dp)) + style,
 ) {
   content()
 }
 
-private fun ResourcesScope.DemoLabel(text: String): Component = Text(
-    text = text,
-    textSize = 13.sp,
+private fun ResourcesScope.SectionLabel(labelRes: Int): Component = Text(
+    stringRes(labelRes),
+    textSize = 12.sp,
     textColor = MUTED,
     style =
         Style.padding(horizontal = 10.dp, vertical = 5.dp)
@@ -358,18 +547,25 @@ private fun ResourcesScope.DemoLabel(text: String): Component = Text(
 private fun ResourcesScope.RunToggle(
     running: Boolean,
     onClick: () -> Unit,
-): Component = Column(
+): Component = Row(
     alignItems = YogaAlign.CENTER,
     justifyContent = YogaJustify.CENTER,
     style =
-        Style.height(38.dp)
-            .padding(horizontal = 14.dp)
+        Style.width(104.dp)
+            .height(40.dp)
+            .padding(horizontal = 12.dp)
             .background(RoundedRect(if (running) 0xFF0F766E else 0xFFE2E8F0, 19.dp))
             .onClick { onClick() },
 ) {
   child(
       Text(
-          if (running) "Running" else "Paused",
+          stringRes(
+              if (running) {
+                R.string.litho_sample_infinite_showcase_pause
+              } else {
+                R.string.litho_sample_infinite_showcase_resume
+              },
+          ),
           textSize = 13.sp,
           textColor = if (running) Color.WHITE else INK,
       ),
@@ -381,7 +577,31 @@ private fun ResourcesScope.SkeletonLine(
     style: Style,
 ): Component = Column(style = style.height(14.dp).background(RoundedRect(color, 7.dp)))
 
+private fun ResourcesScope.SkeletonBlock(
+    color: Int,
+    style: Style,
+): Component = Column(style = style.background(RoundedRect(color, 12.dp)))
+
+private fun ResourcesScope.ShimmerSweep(style: Style): Component = Column(
+    style =
+        style.background(
+            GradientDrawable(
+                GradientDrawable.Orientation.LEFT_RIGHT,
+                intArrayOf(
+                    0x00FFFFFF,
+                    0x22FFFFFF,
+                    0x7AFFFFFF,
+                    0x22FFFFFF,
+                    0x00FFFFFF,
+                ),
+            )
+                .apply { cornerRadius = 28.dp.toPixels(resourceResolver).toFloat() },
+        ),
+)
+
 private val DOT_COLORS = intArrayOf(0xFF2563EB.toInt(), 0xFF0F766E.toInt(), 0xFFDB2777.toInt())
+private val SKELETON_SOFT = 0xFFE5E7EB.toInt()
+private val SKELETON_STRONG = 0xFFD1D5DB.toInt()
 
 private val INK = 0xFF0F172A.toInt()
 private val MUTED = 0xFF64748B.toInt()

@@ -75,4 +75,26 @@
   <string name="litho_sample_animation_content_privacy_review_subtitle" description="Timeline row subtitle for a requested privacy note in the Litho AnimatedContent animation sample">Final note requested</string>
   <string name="litho_sample_animation_content_experiment_owner_title" description="Timeline row title for an experiment owner in the Litho AnimatedContent animation sample">Experiment owner</string>
   <string name="litho_sample_animation_content_experiment_owner_subtitle" description="Timeline row subtitle for confirmed experiment holdout size in the Litho AnimatedContent animation sample">Holdout size confirmed</string>
+  <string name="litho_sample_infinite_showcase_title" description="Title for the product-style Litho infinite animation sample">LaunchFlow</string>
+  <string name="litho_sample_infinite_showcase_subtitle" description="Subtitle for the product-style Litho infinite animation sample">Live rollout command center</string>
+  <string name="litho_sample_infinite_showcase_pause" description="Button text to pause animations in the product-style Litho infinite animation sample">Pause</string>
+  <string name="litho_sample_infinite_showcase_resume" description="Button text to resume animations in the product-style Litho infinite animation sample">Resume</string>
+  <string name="litho_sample_infinite_showcase_hero_label" description="Small label above the hero title in the product-style Litho infinite animation sample">Release command</string>
+  <string name="litho_sample_infinite_showcase_hero_title" description="Hero title for the active rollout in the product-style Litho infinite animation sample">North America rollout</string>
+  <string name="litho_sample_infinite_showcase_hero_summary" description="Hero summary text for the product-style Litho infinite animation sample">Production traffic is shifting while health checks, owner updates, and forecast cards refresh in place.</string>
+  <string name="litho_sample_infinite_showcase_live_status" description="Status pill text indicating that the rollout is live in the product-style Litho infinite animation sample">Live</string>
+  <string name="litho_sample_infinite_showcase_metric_health_value" description="Health metric value in the product-style Litho infinite animation sample">99.98%</string>
+  <string name="litho_sample_infinite_showcase_metric_health" description="Health metric label in the product-style Litho infinite animation sample">health</string>
+  <string name="litho_sample_infinite_showcase_metric_checks_value" description="Checks metric value in the product-style Litho infinite animation sample">18</string>
+  <string name="litho_sample_infinite_showcase_metric_checks" description="Checks metric label in the product-style Litho infinite animation sample">checks</string>
+  <string name="litho_sample_infinite_showcase_metric_latency_value" description="Latency metric value in the product-style Litho infinite animation sample">4m</string>
+  <string name="litho_sample_infinite_showcase_metric_latency" description="Latency metric label in the product-style Litho infinite animation sample">latency</string>
+  <string name="litho_sample_infinite_showcase_telemetry_label" description="Panel label for telemetry refresh in the product-style Litho infinite animation sample">Telemetry</string>
+  <string name="litho_sample_infinite_showcase_telemetry_title" description="Panel title for telemetry refresh in the product-style Litho infinite animation sample">Syncing signals</string>
+  <string name="litho_sample_infinite_showcase_telemetry_subtitle" description="Panel subtitle for telemetry refresh in the product-style Litho infinite animation sample">Next refresh in 12s</string>
+  <string name="litho_sample_infinite_showcase_assistant_label" description="Panel label for launch assistant in the product-style Litho infinite animation sample">Assistant</string>
+  <string name="litho_sample_infinite_showcase_assistant_title" description="Panel title for launch assistant in the product-style Litho infinite animation sample">Drafting owner summary</string>
+  <string name="litho_sample_infinite_showcase_assistant_subtitle" description="Panel subtitle for launch assistant in the product-style Litho infinite animation sample">Collecting latest sign-offs</string>
+  <string name="litho_sample_infinite_showcase_forecast_label" description="Panel label for rollout forecast in the product-style Litho infinite animation sample">Rollout forecast</string>
+  <string name="litho_sample_infinite_showcase_forecast_status" description="Status text for a loading forecast in the product-style Litho infinite animation sample">Refreshing model</string>
 </resources>
