@@ -125,4 +125,21 @@
   <string name="litho_sample_like_burst_like" description="Label next to the like button before the post is liked in the Litho like burst animation sample">Like</string>
   <string name="litho_sample_like_burst_liked" description="Label next to the like button after the post is liked in the Litho like burst animation sample">Liked</string>
   <string name="litho_sample_like_burst_hint" description="Hint below the photo post explaining where to tap and how rapid taps behave in the Litho like burst animation sample">Tap anywhere on the photo, or the heart. Tapping mid-burst cancels the running sequence and starts the next one.</string>
+  <string name="litho_sample_prism_eyebrow" description="Small introductory label for the Prism animation scope showcase">INTERACTIVE LIGHT STUDY</string>
+  <string name="litho_sample_prism_title" description="Title of the Prism light sculpture animation showcase">PRISM</string>
+  <string name="litho_sample_prism_subtitle" description="Subtitle of the Prism light sculpture animation showcase">Make the invisible move.</string>
+  <string name="litho_sample_prism_halo" description="Button selecting the orbital halo light sculpture">Halo</string>
+  <string name="litho_sample_prism_bloom" description="Button selecting the flower shaped light sculpture">Bloom</string>
+  <string name="litho_sample_prism_galaxy" description="Button selecting the spiral galaxy light sculpture">Galaxy</string>
+  <string name="litho_sample_prism_halo_title" description="Title below the orbital halo light sculpture">Orbital halo</string>
+  <string name="litho_sample_prism_halo_description" description="Description below the orbital halo light sculpture">Six ribbons. One gravitational dance.</string>
+  <string name="litho_sample_prism_bloom_title" description="Title below the flower shaped light sculpture">Electric bloom</string>
+  <string name="litho_sample_prism_bloom_description" description="Description below the flower shaped light sculpture">Light unfolds, petal by petal.</string>
+  <string name="litho_sample_prism_galaxy_title" description="Title below the spiral galaxy light sculpture">Spiral galaxy</string>
+  <string name="litho_sample_prism_galaxy_description" description="Description below the spiral galaxy light sculpture">A small universe, endlessly turning.</string>
+  <string name="litho_sample_prism_pause" description="Button freezing the Prism sculpture and its animation sequence">Freeze time</string>
+  <string name="litho_sample_prism_resume" description="Button resuming the frozen Prism animation sequence">Let it flow</string>
+  <string name="litho_sample_prism_replay" description="Button replaying the entrance choreography for the selected Prism sculpture">Replay entrance</string>
+  <string name="litho_sample_prism_replay_description" description="Accessible name of the interactive sculpture, which replays its entrance when activated">Light sculpture. Replay entrance.</string>
+  <string name="litho_sample_prism_hint" description="Hint encouraging interruption of the Prism animation by selecting another scene">Change scenes mid-flight. The light follows you.</string>
 </resources>

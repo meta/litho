@@ -101,6 +101,7 @@ import com.facebook.samples.litho.kotlin.animations.statebased.AnimatedCounterCo
 import com.facebook.samples.litho.kotlin.animations.statebased.AnimatedPropertiesComponent
 import com.facebook.samples.litho.kotlin.animations.statebased.AnimatedVisibilityDemoComponent
 import com.facebook.samples.litho.kotlin.animations.statebased.AnimationCallbackComponent
+import com.facebook.samples.litho.kotlin.animations.statebased.AnimationScopeShowcaseComponent
 import com.facebook.samples.litho.kotlin.animations.statebased.ColorAnimationComponent
 import com.facebook.samples.litho.kotlin.animations.statebased.FadeToggleComponent
 import com.facebook.samples.litho.kotlin.animations.statebased.FeedPhotoComponent
@@ -361,6 +362,10 @@ class Demos {
                         SingleDemo(
                             name = "Like Burst",
                             component = LikeBurstComponent(),
+                        ),
+                        SingleDemo(
+                            name = "Prism Studio · Choreography",
+                            component = AnimationScopeShowcaseComponent(),
                         ),
                     ),
                 ),
