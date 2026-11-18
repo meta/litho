@@ -28,7 +28,7 @@ class DepChangeTest {
 
   @Test
   fun `reports the index and values of the dependency that changed`() {
-    val changes = describeDepChanges(arrayOf<Any>("a", 1, true), arrayOf<Any>("a", 2, true))
+    val changes = describeDepChanges(arrayOf<Any?>("a", 1, true), arrayOf<Any?>("a", 2, true))
 
     assertThat(changes).hasSize(1)
     assertThat(changes[0].index).isEqualTo(1)
@@ -40,14 +40,14 @@ class DepChangeTest {
 
   @Test
   fun `reports every dependency that changed, in declaration order`() {
-    val changes = describeDepChanges(arrayOf<Any>("a", 1, true), arrayOf<Any>("b", 1, false))
+    val changes = describeDepChanges(arrayOf<Any?>("a", 1, true), arrayOf<Any?>("b", 1, false))
 
     assertThat(changes.map { it.index }).containsExactly(0, 2)
   }
 
   @Test
   fun `reports nothing when every dependency compares equal`() {
-    assertThat(describeDepChanges(arrayOf<Any>("a", 1), arrayOf<Any>("a", 1))).isEmpty()
+    assertThat(describeDepChanges(arrayOf<Any?>("a", 1), arrayOf<Any?>("a", 1))).isEmpty()
   }
 
   @Test
