@@ -121,4 +121,8 @@
   <string name="litho_sample_expandable_day_one_summary" description="Summary of the first itinerary day">Bixby Bridge &amp; a sunset at Pfeiffer Beach</string>
   <string name="litho_sample_expandable_day_two_title" description="Title of the second itinerary day">Sunday · Into the redwoods</string>
   <string name="litho_sample_expandable_day_two_summary" description="Summary of the second itinerary day">A slow morning in the forest at Big Sur</string>
+  <string name="litho_sample_like_burst_title" description="Title of the post with a like button in the Litho like burst animation sample">Golden hour at Pfeiffer Beach</string>
+  <string name="litho_sample_like_burst_like" description="Label next to the like button before the post is liked in the Litho like burst animation sample">Like</string>
+  <string name="litho_sample_like_burst_liked" description="Label next to the like button after the post is liked in the Litho like burst animation sample">Liked</string>
+  <string name="litho_sample_like_burst_hint" description="Hint below the photo post explaining where to tap and how rapid taps behave in the Litho like burst animation sample">Tap anywhere on the photo, or the heart. Tapping mid-burst cancels the running sequence and starts the next one.</string>
 </resources>

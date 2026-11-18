@@ -105,6 +105,7 @@ import com.facebook.samples.litho.kotlin.animations.statebased.ColorAnimationCom
 import com.facebook.samples.litho.kotlin.animations.statebased.FadeToggleComponent
 import com.facebook.samples.litho.kotlin.animations.statebased.FeedPhotoComponent
 import com.facebook.samples.litho.kotlin.animations.statebased.InfiniteAnimationDemosComponent
+import com.facebook.samples.litho.kotlin.animations.statebased.LikeBurstComponent
 import com.facebook.samples.litho.kotlin.animations.statebased.PathMotionComponent
 import com.facebook.samples.litho.kotlin.animations.statebased.SpecComparisonComponent
 import com.facebook.samples.litho.kotlin.animations.statebased.SpringComparisonComponent
@@ -356,6 +357,10 @@ class Demos {
                         SingleDemo(
                             name = "Animation Callback",
                             component = AnimationCallbackComponent(),
+                        ),
+                        SingleDemo(
+                            name = "Like Burst",
+                            component = LikeBurstComponent(),
                         ),
                     ),
                 ),
