@@ -921,6 +921,13 @@ open class ComponentTree protected constructor(builder: Builder) :
     return true
   }
 
+  private fun isSameSpec(currentSpec: Int, spec: Int, ignoreUnspecifiedSize: Boolean): Boolean =
+      if (ignoreUnspecifiedSize) {
+        MeasureComparisonUtils.areMeasureSpecsEquivalent(currentSpec, spec)
+      } else {
+        currentSpec == spec
+      }
+
   internal fun measure(
       widthSpec: Int,
       heightSpec: Int,
@@ -948,10 +955,20 @@ open class ComponentTree protected constructor(builder: Builder) :
         }
 
         val mainThreadLayoutState = _mainThreadLayoutState
+        val ignoreUnspecifiedSize =
+            context.lithoConfiguration.componentsConfig.exactSameSpecsCheckIgnoresUnspecifiedSize
         val hasExactSameSpecs =
             mainThreadLayoutState != null &&
-                getWidthSpec(mainThreadLayoutState.sizeConstraints) == widthSpec &&
-                getHeightSpec(mainThreadLayoutState.sizeConstraints) == heightSpec
+                isSameSpec(
+                    getWidthSpec(mainThreadLayoutState.sizeConstraints),
+                    widthSpec,
+                    ignoreUnspecifiedSize,
+                ) &&
+                isSameSpec(
+                    getHeightSpec(mainThreadLayoutState.sizeConstraints),
+                    heightSpec,
+                    ignoreUnspecifiedSize,
+                )
         val rootInstanceId = _root?.instanceId ?: INVALID_ID
         val hasSameRootAndEquivalentSpecs = isCompatibleComponentAndSpec(
             mainThreadLayoutState,

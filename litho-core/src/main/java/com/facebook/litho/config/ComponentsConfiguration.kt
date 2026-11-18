@@ -161,6 +161,19 @@ internal constructor(
      * this creates a bug in a specific scenario where double measure happens.
      */
     @JvmField val performExactSameSpecsCheck: Boolean = true,
+    /**
+     * Lets [performExactSameSpecsCheck] treat two `UNSPECIFIED` specs as the same whatever sizes
+     * they carry. The committed spec is read back from its `SizeConstraints`, which keep no size
+     * for `UNSPECIFIED`, so without this a tree measured `UNSPECIFIED` with any size above 0 never
+     * matches, and lays out again on the main thread, or waits for a background layout, whenever
+     * its root changed.
+     *
+     * With this on, a measure while a newer root is laid out in the background returns the
+     * committed layout's size. A parent that then measures again with that size as its bound
+     * (`AT_MOST` or `EXACTLY`) gets the newer root laid out within it, and nothing measures it
+     * again. Only enable it where no parent re-measures at the size it was first given.
+     */
+    @JvmField val exactSameSpecsCheckIgnoresUnspecifiedSize: Boolean = false,
     @JvmField val componentEqualityMode: ComponentEqualityMode = ComponentEqualityMode.DEFAULT,
 
     /**

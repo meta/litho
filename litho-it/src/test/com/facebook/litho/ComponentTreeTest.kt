@@ -664,6 +664,72 @@ class ComponentTreeTest {
   }
 
   @Test
+  fun `measure at another unspecified height during an async root keeps the committed layout`() {
+    val componentTree = asyncRootAfterUnspecifiedHeightMeasure(ignoreUnspecifiedSize = true)
+
+    assertThat(componentTree.mainThreadLayoutState?.isForComponentId(component.instanceId)).isTrue
+    runToEndOfTasks()
+    assertThat(
+        componentTree.mainThreadLayoutState?.isForComponentId(componentTree.root!!.instanceId),
+    )
+        .isTrue
+  }
+
+  @Test
+  fun `measure at another unspecified height during an async root lays out again without the config`() {
+    val componentTree = asyncRootAfterUnspecifiedHeightMeasure(ignoreUnspecifiedSize = false)
+
+    assertThat(
+        componentTree.mainThreadLayoutState?.isForComponentId(componentTree.root!!.instanceId),
+    )
+        .isTrue
+    runToEndOfTasks()
+  }
+
+  @Test
+  fun `measure at the same unspecified height during an async root lays out again without the config`() {
+    val componentTree =
+        asyncRootAfterUnspecifiedHeightMeasure(ignoreUnspecifiedSize = false, firstHeight = 1_208)
+
+    // SizeConstraints keep no size for UNSPECIFIED, so even the same spec misses the check.
+    assertThat(
+        componentTree.mainThreadLayoutState?.isForComponentId(componentTree.root!!.instanceId),
+    )
+        .isTrue
+    runToEndOfTasks()
+  }
+
+  private fun asyncRootAfterUnspecifiedHeightMeasure(
+      ignoreUnspecifiedSize: Boolean,
+      firstHeight: Int = 0,
+  ): ComponentTree {
+    val componentTree =
+        ComponentTree.create(context, component)
+            .componentsConfiguration(
+                ComponentsConfiguration.defaultInstance.copy(
+                    exactSameSpecsCheckIgnoresUnspecifiedSize = ignoreUnspecifiedSize,
+                ),
+            )
+            .build()
+    componentTree.setLithoView(LithoView(context))
+    componentTree.measure(
+        widthSpec,
+        SizeSpec.makeSizeSpec(firstHeight, SizeSpec.UNSPECIFIED),
+        IntArray(2),
+        false,
+    )
+    componentTree.attach()
+    componentTree.setRootAsync(SimpleMountSpecTester(color = 1_234))
+    componentTree.measure(
+        widthSpec,
+        SizeSpec.makeSizeSpec(1_208, SizeSpec.UNSPECIFIED),
+        IntArray(2),
+        false,
+    )
+    return componentTree
+  }
+
+  @Test
   fun `measure with the same specs during a state update's layout does not lay out again`() {
     val caller = SimpleStateUpdateEmulatorSpec.Caller()
     val componentTree = stateUpdateTree(caller, skipRedundantAsyncMeasureLayout = true)
