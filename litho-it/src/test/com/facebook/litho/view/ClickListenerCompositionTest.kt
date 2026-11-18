@@ -252,7 +252,7 @@ class ClickListenerCompositionTest {
                       // installed via the earlier `onClick { … }` would be overwritten by the
                       // null assignment, but the additional registered between the two stays.
                       // Documented edge: the explicit null assignment cancels the primary; it
-                      // does NOT cancel additionals (see the setter in BinderMigratedNodeInfo).
+                      // does NOT cancel additionals (see the setter in NodeInfo).
                       .onClick(enabled = false) { error("disabled onClick should not execute") },
           )
         }

@@ -16,7 +16,10 @@
 
 package com.facebook.litho
 
+import android.annotation.SuppressLint
+import android.view.ViewOutlineProvider
 import com.facebook.litho.testing.testrunner.LithoTestRunner
+import com.facebook.litho.visibility.Visibility
 import java.lang.reflect.Modifier
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.Test
@@ -31,6 +34,10 @@ import org.junit.runner.RunWith
  * entry.
  */
 @RunWith(LithoTestRunner::class)
+// The renderEffect entries construct LithoRenderEffect.Offset, whose class carries
+// RequiresApi(S). The instances are pure-Kotlin data holders here (toRenderEffect() is never
+// called) and Robolectric runs at API 33, so the requirement is vacuous in this test.
+@SuppressLint("NewApi")
 class NodeInfoAccessibilityPropertiesTest {
 
   private class Property(
@@ -216,13 +223,128 @@ class NodeInfoAccessibilityPropertiesTest {
           { sendAccessibilityEventUncheckedHandler = handler(1) },
           { sendAccessibilityEventUncheckedHandler = handler(2) },
       ),
+      Property(
+          "inputHandlers",
+          listOf(
+              "_clickHandler",
+              "_longClickHandler",
+              "_focusChangeHandler",
+              "_touchHandler",
+              "_interceptTouchHandler",
+          ),
+          needsDelegate = false,
+          {
+            clickHandler = handler(1)
+            longClickHandler = handler(1)
+            focusChangeHandler = handler(1)
+            touchHandler = handler(1)
+            interceptTouchHandler = handler(1)
+          },
+          {
+            clickHandler = handler(2)
+            longClickHandler = handler(2)
+            focusChangeHandler = handler(2)
+            touchHandler = handler(2)
+            interceptTouchHandler = handler(2)
+          },
+      ),
+      Property(
+          "viewAppearance",
+          listOf(
+              "_transitionName",
+              "_visibility",
+              "_tooltipText",
+              "_viewTag",
+              "_outlineProvider",
+              "_renderEffect",
+              "_viewId",
+              "_shadowElevation",
+              "_ambientShadowColor",
+              "_spotShadowColor",
+              "_clipToOutline",
+              "_clipChildren",
+              "_defaultFocusHighlightEnabled",
+              "_scale",
+              "_alpha",
+              "_rotation",
+              "_rotationX",
+              "_rotationY",
+          ),
+          needsDelegate = false,
+          {
+            transitionName = "a"
+            visibility = Visibility.Visible
+            tooltipText = "a"
+            viewTag = "a"
+            outlineProvider = ViewOutlineProvider.BACKGROUND
+            renderEffect = LithoRenderEffect.Offset(1f, 2f)
+            viewId = 1
+            shadowElevation = 1f
+            ambientShadowColor = 1
+            spotShadowColor = 1
+            clipToOutline = true
+            clipChildren = false
+            defaultFocusHighlightEnabled = false
+            scale = 2f
+            alpha = 0.5f
+            rotation = 1f
+            rotationX = 1f
+            rotationY = 1f
+          },
+          {
+            transitionName = "b"
+            visibility = Visibility.Invisible
+            tooltipText = "b"
+            viewTag = "b"
+            outlineProvider = null
+            renderEffect = LithoRenderEffect.Offset(3f, 4f)
+            viewId = 2
+            shadowElevation = 2f
+            ambientShadowColor = 2
+            spotShadowColor = 2
+            clipToOutline = false
+            clipChildren = true
+            defaultFocusHighlightEnabled = true
+            scale = 3f
+            alpha = 0.6f
+            rotation = 2f
+            rotationX = 2f
+            rotationY = 2f
+          },
+      ),
+      Property(
+          "booleanViewStates",
+          listOf(
+              "focusState",
+              "clickableState",
+              "enabledState",
+              "selectedState",
+              "keyboardNavigationClusterState",
+          ),
+          needsDelegate = false,
+          {
+            setFocusable(true)
+            setClickable(true)
+            setEnabled(true)
+            setSelected(true)
+            setKeyboardNavigationCluster(true)
+          },
+          {
+            setFocusable(false)
+            setClickable(false)
+            setEnabled(false)
+            setSelected(false)
+            setKeyboardNavigationCluster(false)
+          },
+      ),
   )
 
   /**
    * Fields of [NodeInfo] that are not accessibility properties of their own: bookkeeping, and the
-   * binder-migrated half, which carries its own equality and copy.
+   * additional-click listeners, which are only settable through internal APIs and are covered by
+   * [NodeInfo.isEquivalentTo] and [NodeInfo.copyInto] instead.
    */
-  private val notAccessibilityProperties = setOf("flags", "binderMigratedNodeInfo", "viewTags")
+  private val notAccessibilityProperties = setOf("flags", "viewTags", "_extraClickListeners")
 
   @Test
   fun `every field of NodeInfo is an entry in this table or is known not to be one`() {

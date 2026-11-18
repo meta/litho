@@ -28,10 +28,8 @@ import android.graphics.PorterDuffColorFilter
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.drawable.Drawable
-import android.graphics.drawable.InsetDrawable
 import android.os.Build
 import android.view.View
-import android.view.ViewOutlineProvider
 import androidx.annotation.RequiresApi
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.drawable.toDrawable
@@ -40,7 +38,6 @@ import com.facebook.litho.animated.alpha
 import com.facebook.litho.animated.background
 import com.facebook.litho.animated.backgroundColor
 import com.facebook.litho.binders.viewBinder
-import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.core.height
 import com.facebook.litho.core.width
 import com.facebook.litho.drawable.ComparableCircleDrawable
@@ -63,7 +60,6 @@ import com.facebook.rendercore.primitives.Primitive
 import com.facebook.rendercore.primitives.ViewAllocator
 import com.facebook.rendercore.px
 import org.assertj.core.api.Assertions.assertThat
-import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -87,13 +83,6 @@ import org.robolectric.annotation.GraphicsMode.Mode.NATIVE
 class ShapeBackgroundTest {
 
   @Rule @JvmField val lithoTestRule = LithoTestRule()
-
-  private val originalConfiguration = ComponentsConfiguration.defaultInstance
-
-  @After
-  fun tearDown() {
-    ComponentsConfiguration.defaultInstance = originalConfiguration
-  }
 
   // Code that fades a View's background sets alpha on the drawable itself. The circle is the View's
   // own background.
@@ -277,24 +266,6 @@ class ShapeBackgroundTest {
   }
 
   @Test
-  fun binderMode_circleOnARowWithElevation_castsACircularShadow() {
-    useViewStyleBinders()
-    val testLithoView =
-        lithoTestRule.render(widthSpec = unspecified(), heightSpec = unspecified()) {
-          Row(
-              style =
-                  Style.width(200.px)
-                      .height(80.px)
-                      .background(Color.RED, Shape.Circle)
-                      .elevation(8.dp),
-          )
-        }
-    assertCircularOutline(testLithoView.lithoView)
-  }
-
-  // background(color, Shape.Circle) should paint exactly the region clip(Shape.Circle) keeps.
-
-  @Test
   fun circle_paintsTheRegionClipKeeps_onAnOddLeftoverWidth() {
     val drawable = ComparableCircleDrawable.create(Color.RED).apply { setBounds(0, 0, 201, 80) }
     val view = View(lithoTestRule.context.androidContext).apply { layout(0, 0, 201, 80) }
@@ -304,117 +275,6 @@ class ShapeBackgroundTest {
     assertThat(clip.getRect(clipRect)).isTrue
     assertThat(clipRect).isEqualTo(Rect(60, 0, 140, 80))
     assertThat(drawnCircle(drawable)).isEqualTo(RectF(60f, 0f, 140f, 80f))
-  }
-
-  @Test
-  fun binderMode_paintableBackgrounds_doNotClipChildren() {
-    useViewStyleBinders()
-    for (shape in listOf(Shape.Circle, Shape.RoundedRectangle(16.px))) {
-      val testLithoView =
-          lithoTestRule.render(widthSpec = unspecified(), heightSpec = unspecified()) {
-            Row(style = Style.width(100.px).height(100.px).background(Color.RED, shape))
-          }
-      assertThat(testLithoView.lithoView.clipToOutline).isFalse
-    }
-  }
-
-  @Test
-  fun binderMode_customShapeFallback_clipsToItsOutline() {
-    useViewStyleBinders()
-    val shape =
-        object : Shape {
-          override fun getOutlineProvider(context: ComponentContext): ViewOutlineProvider =
-              ViewOutlineProvider.BOUNDS
-        }
-    val testLithoView =
-        lithoTestRule.render(widthSpec = unspecified(), heightSpec = unspecified()) {
-          Row(style = Style.width(100.px).height(100.px).background(Color.RED, shape))
-        }
-
-    assertThat(testLithoView.lithoView.clipToOutline).isTrue
-    assertThat(testLithoView.lithoView.outlineProvider).isSameAs(ViewOutlineProvider.BOUNDS)
-  }
-
-  @Test
-  fun binderMode_reusedBackgroundColor_keepsAlphaChangesOnOneView() {
-    useViewStyleBinders()
-    val (first, second) = viewsWithSharedBackground(Style.backgroundColor(Color.RED))
-    assertThat(first.background).isNotSameAs(second.background)
-
-    first.background.alpha = 0
-
-    assertThat(pixelDrawnByView(first)).isEqualTo(Color.TRANSPARENT)
-    assertThat(pixelDrawnByView(second)).isEqualTo(Color.RED)
-  }
-
-  @Test
-  fun binderMode_reusedBackgroundColor_keepsEachViewsBounds() {
-    useViewStyleBinders()
-    val (first, second) = viewsWithSharedBackground(Style.backgroundColor(Color.RED))
-    pixelDrawnByView(first)
-    pixelDrawnByView(second)
-
-    assertThat(pixelDrawnByView(first, y = 75)).isEqualTo(Color.RED)
-    assertThat(first.background.bounds).isEqualTo(Rect(0, 0, 100, 100))
-    assertThat(second.background.bounds).isEqualTo(Rect(0, 0, 200, 50))
-  }
-
-  @Test
-  fun binderMode_reusedBackgroundColor_keepsDynamicColorChangesOnOneView() {
-    useViewStyleBinders()
-    val color = DynamicValue(Color.RED)
-    val (first, second) =
-        viewsWithSharedBackground(Style.backgroundColor(Color.GRAY), Style.backgroundColor(color))
-
-    color.set(Color.BLUE)
-
-    assertThat(pixelDrawnByView(first)).isEqualTo(Color.BLUE)
-    assertThat(pixelDrawnByView(second)).isEqualTo(Color.GRAY)
-  }
-
-  @Test
-  fun binderMode_equivalentBackgroundColor_preservesTheFadedDrawable() {
-    useViewStyleBinders()
-    val testLithoView =
-        lithoTestRule.render(widthSpec = unspecified(), heightSpec = unspecified()) {
-          Row(style = Style.width(100.px).height(100.px).backgroundColor(Color.RED))
-        }
-    val background = testLithoView.lithoView.background
-    background.alpha = 128
-
-    testLithoView.setRoot(
-        Row(style = Style.width(100.px).height(100.px).backgroundColor(Color.RED)),
-    )
-
-    assertThat(testLithoView.lithoView.background).isSameAs(background)
-    assertThat(pixelDrawnByView(testLithoView.lithoView)).isEqualTo(HALF_RED)
-  }
-
-  @Test
-  fun binderMode_explicitCircleReplacement_updatesItsAlpha() {
-    useViewStyleBinders()
-    val testLithoView =
-        lithoTestRule.render(widthSpec = unspecified(), heightSpec = unspecified()) {
-          Row(
-              style =
-                  Style.width(100.px)
-                      .height(100.px)
-                      .background(ComparableCircleDrawable.create(Color.RED)),
-          )
-        }
-    val view = testLithoView.lithoView
-    assertThat(pixelDrawnByView(view)).isEqualTo(Color.RED)
-
-    for ((alpha, expectedPixel) in
-        listOf(0 to Color.TRANSPARENT, 128 to HALF_RED, 255 to Color.RED)) {
-      val replacement = ComparableCircleDrawable.create(Color.RED).apply { this.alpha = alpha }
-      testLithoView.setRoot(
-          Row(style = Style.width(100.px).height(100.px).background(replacement)),
-      )
-
-      assertThat(view.background).isSameAs(replacement)
-      assertThat(pixelDrawnByView(view)).describedAs("alpha=$alpha").isEqualTo(expectedPixel)
-    }
   }
 
   @Test
@@ -430,66 +290,6 @@ class ShapeBackgroundTest {
     assertThat(faded.hashCode()).isEqualTo(sameFade.hashCode())
     assertThat(transparent.isEquivalentTo(sameTransparency)).isTrue
     assertThat(transparent.hashCode()).isEqualTo(sameTransparency.hashCode())
-  }
-
-  @Test
-  fun binderMode_removingDynamicColor_restoresTheStaticCircle() {
-    useViewStyleBinders()
-    assertStaticBackgroundRestored(
-        Style.background(Color.RED, Shape.Circle),
-        Style.backgroundColor(DynamicValue(Color.BLUE)),
-        transparentCorners = true,
-    )
-  }
-
-  @Test
-  fun binderMode_removingDynamicDrawable_restoresTheStaticCircle() {
-    useViewStyleBinders()
-    assertStaticBackgroundRestored(
-        Style.background(Color.RED, Shape.Circle),
-        Style.background(DynamicValue(Color.BLUE.toDrawable())),
-        transparentCorners = true,
-    )
-  }
-
-  @Test
-  fun binderMode_removingDynamicColor_restoresTheStaticRoundedRectangle() {
-    useViewStyleBinders()
-    assertStaticBackgroundRestored(
-        Style.background(Color.RED, Shape.RoundedRectangle(16.px)),
-        Style.backgroundColor(DynamicValue(Color.BLUE)),
-        transparentCorners = true,
-    )
-  }
-
-  @Test
-  fun binderMode_removingDynamicDrawable_restoresTheStaticRoundedRectangle() {
-    useViewStyleBinders()
-    assertStaticBackgroundRestored(
-        Style.background(Color.RED, Shape.RoundedRectangle(16.px)),
-        Style.background(DynamicValue(Color.BLUE.toDrawable())),
-        transparentCorners = true,
-    )
-  }
-
-  @Test
-  fun binderMode_removingDynamicColor_restoresTheStaticColor() {
-    useViewStyleBinders()
-    assertStaticBackgroundRestored(
-        Style.backgroundColor(Color.RED),
-        Style.backgroundColor(DynamicValue(Color.BLUE)),
-        transparentCorners = false,
-    )
-  }
-
-  @Test
-  fun binderMode_removingDynamicDrawable_restoresTheStaticColor() {
-    useViewStyleBinders()
-    assertStaticBackgroundRestored(
-        Style.backgroundColor(Color.RED),
-        Style.background(DynamicValue(Color.BLUE.toDrawable())),
-        transparentCorners = false,
-    )
   }
 
   @Test
@@ -567,170 +367,6 @@ class ShapeBackgroundTest {
   }
 
   @Test
-  fun binderMode_removingDynamicColor_restoresTheStaticCircleOnTheRootHost() {
-    useViewStyleBinders()
-    val style = Style.width(100.px).height(100.px).background(Color.RED, Shape.Circle)
-    val testLithoView =
-        lithoTestRule.render(widthSpec = unspecified(), heightSpec = unspecified()) {
-          Row(style = style.backgroundColor(DynamicValue(Color.BLUE)))
-        }
-    val view = testLithoView.lithoView
-    val oldId = mountItemForView(testLithoView, view).renderUnit.id
-    assertThat(pixelDrawnByView(view)).isEqualTo(Color.BLUE)
-
-    testLithoView.setRoot(Row(style = style))
-
-    assertThat(mountItemForView(testLithoView, view).renderUnit.id).isEqualTo(oldId)
-    assertThat(view.background).isInstanceOf(ComparableCircleDrawable::class.java)
-    assertThat(pixelDrawnByView(view)).isEqualTo(Color.RED)
-    assertThat(pixelDrawnByView(view, x = 0, y = 0)).isEqualTo(Color.TRANSPARENT)
-  }
-
-  @Test
-  fun binderMode_removingDynamicBackground_keepsUnrelatedDynamicAlpha() {
-    useViewStyleBinders()
-    val alpha = DynamicValue(0.5f)
-    val style = Style.background(Color.RED, Shape.Circle).alpha(alpha)
-    val testLithoView =
-        lithoTestRule.render(widthSpec = unspecified(), heightSpec = unspecified()) {
-          PlainView(style.viewTag(PLAIN_VIEW_TAG).backgroundColor(DynamicValue(Color.BLUE)))
-        }
-    val view = testLithoView.findViewWithTag(PLAIN_VIEW_TAG)
-
-    testLithoView.setRoot(PlainView(style.viewTag(PLAIN_VIEW_TAG)))
-
-    assertThat(testLithoView.findViewWithTag(PLAIN_VIEW_TAG)).isSameAs(view)
-    assertThat(view.background).isInstanceOf(ComparableCircleDrawable::class.java)
-    assertThat(view.alpha).isEqualTo(0.5f)
-    alpha.set(1f)
-    assertThat(view.alpha).isEqualTo(1f)
-    assertThat(pixelDrawnByView(view)).isEqualTo(Color.RED)
-  }
-
-  @Test
-  fun binderMode_removingOneDynamicBackground_keepsTheOther() {
-    useViewStyleBinders()
-    val drawable = Color.GREEN.toDrawable()
-    val dynamicColor = Style.backgroundColor(DynamicValue(Color.BLUE))
-    val dynamicDrawable = Style.background(DynamicValue(drawable))
-    val lifecycle = MountLifecycle()
-    val style = observedBackgroundStyle(Style.background(Color.RED, Shape.Circle), lifecycle)
-    val testLithoView =
-        lithoTestRule.render(widthSpec = unspecified(), heightSpec = unspecified()) {
-          PlainView(style + dynamicColor + dynamicDrawable)
-        }
-    val view = testLithoView.findViewWithTag(BACKGROUND_VIEW_TAG)
-    assertThat(view.background).isSameAs(drawable)
-
-    testLithoView.setRoot(PlainView(style + dynamicDrawable))
-
-    assertThat(view.background).isSameAs(drawable)
-
-    testLithoView.setRoot(PlainView(style + dynamicColor + dynamicDrawable))
-    testLithoView.setRoot(PlainView(style + dynamicColor))
-
-    assertThat(pixelDrawnByView(view)).isEqualTo(Color.BLUE)
-    assertThat(lifecycle.binds).isEqualTo(1)
-    assertThat(lifecycle.unbinds).isZero
-  }
-
-  @Test
-  fun binderMode_removingDynamicBackground_withoutAStaticBackground_clearsIt() {
-    useViewStyleBinders()
-    val lifecycle = MountLifecycle()
-    val style = observedBackgroundStyle(Style, lifecycle)
-    val testLithoView =
-        lithoTestRule.render(widthSpec = unspecified(), heightSpec = unspecified()) {
-          PlainView(style.backgroundColor(DynamicValue(Color.BLUE)))
-        }
-    val view = testLithoView.findViewWithTag(BACKGROUND_VIEW_TAG)
-
-    testLithoView.setRoot(PlainView(style))
-
-    assertThat(view.background).isNull()
-    assertThat(lifecycle.binds).isEqualTo(1)
-    assertThat(lifecycle.unbinds).isZero
-  }
-
-  // In binder mode the binders of background(drawable), backgroundColor and
-  // background(color, shape) all write View.background, and each sets it to null on unbind.
-
-  @Test
-  fun binderMode_removingTheShape_keepsTheBackgroundColorStillDeclared() {
-    useViewStyleBinders()
-    val testLithoView = lithoTestRule.render { ColorThenCircle(withCircle = true) }
-    assertThat(testLithoView.lithoView.background)
-        .isInstanceOf(ComparableCircleDrawable::class.java)
-
-    testLithoView.setRoot(ColorThenCircle(withCircle = false))
-
-    assertThat(testLithoView.lithoView.background)
-        .isEqualTo(ComparableColorDrawable.create(Color.GRAY))
-  }
-
-  @Test
-  fun binderMode_recoloringTheShape_keepsTheLaterBackgroundColorOnTop() {
-    useViewStyleBinders()
-    val testLithoView = lithoTestRule.render { CircleThenColor(circleColor = Color.RED) }
-    assertThat(testLithoView.lithoView.background)
-        .isEqualTo(ComparableColorDrawable.create(Color.GRAY))
-
-    testLithoView.setRoot(CircleThenColor(circleColor = Color.BLUE))
-
-    assertThat(testLithoView.lithoView.background)
-        .isEqualTo(ComparableColorDrawable.create(Color.GRAY))
-  }
-
-  @Test
-  fun binderMode_drawableBackground_isSetOnTheView() {
-    useViewStyleBinders()
-    val drawable = Color.GREEN.toDrawable()
-    val testLithoView = lithoTestRule.render { DrawableThenCircle(drawable, withCircle = false) }
-    assertThat(testLithoView.lithoView.background).isSameAs(drawable)
-  }
-
-  @Test
-  fun binderMode_drawableWithPadding_padsTheComponent() {
-    useViewStyleBinders()
-    val padded = InsetDrawable(Color.GREEN.toDrawable(), 10)
-    val testLithoView =
-        lithoTestRule.render(widthSpec = unspecified(), heightSpec = unspecified()) {
-          Row(style = Style.width(100.px).height(100.px).background(padded)) {
-            child(Row(style = Style.width(20.px).height(20.px).viewTag(CHILD_TAG)))
-          }
-        }
-    val child = testLithoView.findViewWithTag(CHILD_TAG)
-    assertThat(child.left).isEqualTo(10)
-    assertThat(child.top).isEqualTo(10)
-    assertThat(testLithoView.lithoView.width).isEqualTo(100)
-    assertThat(testLithoView.lithoView.height).isEqualTo(100)
-  }
-
-  @Test
-  fun binderMode_removingTheDrawableBackground_clearsIt() {
-    useViewStyleBinders()
-    val drawable = Color.GREEN.toDrawable()
-    val testLithoView = lithoTestRule.render { DrawableThenCircle(drawable, withCircle = false) }
-
-    testLithoView.setRoot(DrawableThenCircle(drawable = null, withCircle = false))
-
-    assertThat(testLithoView.lithoView.background).isNull()
-  }
-
-  @Test
-  fun binderMode_removingALaterShape_restoresTheDrawable() {
-    useViewStyleBinders()
-    val drawable = Color.GREEN.toDrawable()
-    val testLithoView = lithoTestRule.render { DrawableThenCircle(drawable, withCircle = true) }
-    assertThat(testLithoView.lithoView.background)
-        .isInstanceOf(ComparableCircleDrawable::class.java)
-
-    testLithoView.setRoot(DrawableThenCircle(drawable, withCircle = false))
-
-    assertThat(testLithoView.lithoView.background).isSameAs(drawable)
-  }
-
-  @Test
   fun removingTheShape_keepsTheBackgroundColorStillDeclared() {
     val testLithoView = lithoTestRule.render { ColorThenCircle(withCircle = true) }
 
@@ -788,26 +424,6 @@ class ShapeBackgroundTest {
     val bitmap = createBitmap(view.width, view.height)
     view.draw(Canvas(bitmap))
     return bitmap[x, y]
-  }
-
-  private fun viewsWithSharedBackground(style: Style, firstStyle: Style = Style): Pair<View, View> {
-    val testLithoView =
-        lithoTestRule.render(widthSpec = unspecified(), heightSpec = unspecified()) {
-          Row {
-            child(
-                Row(
-                    style = style.width(100.px).height(100.px).viewTag(FIRST_VIEW_TAG) + firstStyle,
-                ),
-            )
-            child(Row(style = style.width(200.px).height(50.px).viewTag(SECOND_VIEW_TAG)))
-          }
-        }
-    return testLithoView.findViewWithTag(FIRST_VIEW_TAG) to
-        testLithoView.findViewWithTag(SECOND_VIEW_TAG)
-  }
-
-  private fun useViewStyleBinders() {
-    ComponentsConfiguration.defaultInstance = originalConfiguration.copy(useViewStyleBinders = true)
   }
 
   private fun assertStaticBackgroundRestored(
@@ -1007,7 +623,6 @@ class ShapeBackgroundTest {
 
   private companion object {
     const val BACKGROUND_VIEW_TAG = "background_view"
-    const val CHILD_TAG = "child"
     const val HALF_RED = 0x80FF0000.toInt()
     const val PLAIN_VIEW_TAG = "plain_view"
     const val FIRST_VIEW_TAG = "first_view"

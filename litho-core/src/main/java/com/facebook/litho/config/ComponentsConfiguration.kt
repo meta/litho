@@ -222,11 +222,6 @@ internal constructor(
     @JvmField
     var customLayoutHandlerProvider: RunnableHandlerProvider =
         ComponentTree.DefaultLayoutHandlerProvider(),
-    /**
-     * When true, view style properties use onBindViewWithDescription binders instead of
-     * ViewAttributes.
-     */
-    @JvmField val useViewStyleBinders: Boolean = false,
     /** Use postAtFront for layout promotion to prioritize background layout results */
     @property:ExperimentalLithoApi @JvmField val usePostAtFrontForLayoutPromotion: Boolean = false,
     /**

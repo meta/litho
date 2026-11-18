@@ -141,18 +141,14 @@ class CommonProps : LayoutProps, Equivalence<CommonProps?> {
 
   private var wrapInView: Boolean = false
 
-  private var _binderMigratedCommonProps: BinderMigratedCommonProps? = null
-
-  private fun getOrCreateBinderMigratedCommonProps(): BinderMigratedCommonProps {
-    return _binderMigratedCommonProps
-        ?: BinderMigratedCommonProps().also { _binderMigratedCommonProps = it }
-  }
+  private var _background: Drawable? = null
+  private var _paddingFromBackground: Rect? = null
 
   val background: Drawable?
-    get() = _binderMigratedCommonProps?.background
+    get() = _background
 
   val paddingFromBackground: Rect?
-    get() = _binderMigratedCommonProps?.paddingFromBackground
+    get() = _paddingFromBackground
 
   private var _testKey: String? = null
 
@@ -181,12 +177,19 @@ class CommonProps : LayoutProps, Equivalence<CommonProps?> {
   }
 
   fun background(background: Drawable?) {
-    getOrCreateBinderMigratedCommonProps().background(background)
+    background(background, background?.let(DrawableUtils::getPaddingOrNull))
   }
 
   internal fun background(background: Drawable?, paddingFromBackground: Rect?) {
-    getOrCreateBinderMigratedCommonProps().background(background, paddingFromBackground)
+    privateFlags = privateFlags or PFLAG_BACKGROUND_IS_SET
+    _background = background
+    if (paddingFromBackground != null) {
+      _paddingFromBackground = paddingFromBackground
+    }
   }
+
+  val isBackgroundSet: Boolean
+    get() = privateFlags and PFLAG_BACKGROUND_IS_SET != 0
 
   fun testKey(testKey: String?) {
     privateFlags = (privateFlags or PFLAG_TEST_KEY_IS_SET)
@@ -205,7 +208,9 @@ class CommonProps : LayoutProps, Equivalence<CommonProps?> {
   }
 
   private fun shouldWrapInView(): Boolean {
-    return wrapInView || (_binderMigratedCommonProps?.shouldWrapInView() == true)
+    return wrapInView ||
+        privateFlags and
+            (PFLAG_SCALE_KEY_IS_SET or PFLAG_ALPHA_KEY_IS_SET or PFLAG_ROTATION_KEY_IS_SET) != 0
   }
 
   override fun layoutDirection(direction: LayoutDirection) {
@@ -499,6 +504,10 @@ class CommonProps : LayoutProps, Equivalence<CommonProps?> {
   companion object {
     // Flags used to indicate that a certain attribute was explicitly set on the node.
     private const val PFLAG_TEST_KEY_IS_SET = (1 shl 0)
+    private const val PFLAG_BACKGROUND_IS_SET = (1 shl 1)
+    private const val PFLAG_SCALE_KEY_IS_SET = (1 shl 2)
+    private const val PFLAG_ALPHA_KEY_IS_SET = (1 shl 3)
+    private const val PFLAG_ROTATION_KEY_IS_SET = (1 shl 4)
 
     internal const val VISIBILITY_HANDLER_VISIBLE = 0
     internal const val VISIBILITY_HANDLER_FOCUSED = 1
@@ -698,12 +707,22 @@ class CommonProps : LayoutProps, Equivalence<CommonProps?> {
 
   fun scale(scale: Float) {
     getOrCreateNodeInfo().scale = scale
-    getOrCreateBinderMigratedCommonProps().onScaleSet(scale)
+    privateFlags =
+        if (scale == 1f) {
+          privateFlags and PFLAG_SCALE_KEY_IS_SET.inv()
+        } else {
+          privateFlags or PFLAG_SCALE_KEY_IS_SET
+        }
   }
 
   fun alpha(alpha: Float) {
     getOrCreateNodeInfo().alpha = alpha
-    getOrCreateBinderMigratedCommonProps().onAlphaSet(alpha)
+    privateFlags =
+        if (alpha == 1f) {
+          privateFlags and PFLAG_ALPHA_KEY_IS_SET.inv()
+        } else {
+          privateFlags or PFLAG_ALPHA_KEY_IS_SET
+        }
   }
 
   val alpha: Float?
@@ -711,7 +730,12 @@ class CommonProps : LayoutProps, Equivalence<CommonProps?> {
 
   fun rotation(rotation: Float) {
     getOrCreateNodeInfo().rotation = rotation
-    getOrCreateBinderMigratedCommonProps().onRotationSet(rotation)
+    privateFlags =
+        if (rotation == 0f) {
+          privateFlags and PFLAG_ROTATION_KEY_IS_SET.inv()
+        } else {
+          privateFlags or PFLAG_ROTATION_KEY_IS_SET
+        }
   }
 
   fun rotationX(rotationX: Float) {
@@ -789,7 +813,10 @@ class CommonProps : LayoutProps, Equivalence<CommonProps?> {
     if (_nodeInfo != null) {
       node.applyNodeInfo(_nodeInfo)
     }
-    _binderMigratedCommonProps?.copyInto(node)
+    if (isBackgroundSet) {
+      node.background(_background)
+      node.paddingFromBackground = _paddingFromBackground
+    }
 
     _layoutProps?.layoutDirection?.let { node.layoutDirection(it) }
 
@@ -814,7 +841,7 @@ class CommonProps : LayoutProps, Equivalence<CommonProps?> {
             wrapInView == other.wrapInView &&
             defStyleAttr == other.defStyleAttr &&
             defStyleRes == other.defStyleRes &&
-            isEquivalentTo(_binderMigratedCommonProps, other._binderMigratedCommonProps) &&
+            DrawableUtils.isEquivalentTo(background, other.background) &&
             isEquivalentTo(_otherProps, other._otherProps) &&
             isEquivalentTo(_nodeInfo, other._nodeInfo) &&
             isEquivalentTo(_layoutProps, other._layoutProps) &&
@@ -850,21 +877,13 @@ class CommonProps : LayoutProps, Equivalence<CommonProps?> {
     private var duplicateParentState: Boolean = false
     private var duplicateChildrenStates: Boolean = false
     private var touchExpansions: Edges? = null
-    // ---- Binder-migrated properties ----
-    // These properties have been migrated to the onBindViewWithDescription binder pattern.
-    // When useViewStyleBinders is fully rolled out, these can be removed.
     private var foreground: Drawable? = null
-    // ---- End binder-migrated properties ----
     private var transitionOwnerKey: Any? = null
     private var transitionKey: String? = null
     private var transitionKeyType: TransitionKeyType? = null
     private var styleTransitionData: StyleTransitionData? = null
     private var border: Border? = null
-    // ---- Binder-migrated property ----
-    // This property has been migrated to the onBindViewWithDescription binder pattern.
-    // When useViewStyleBinders is fully rolled out, this can be removed.
     private var stateListAnimator: StateListAnimator? = null
-    // ---- End binder-migrated property ----
     private var zIndex: Int = 0
 
     @DrawableRes private var stateListAnimatorRes: Int = 0

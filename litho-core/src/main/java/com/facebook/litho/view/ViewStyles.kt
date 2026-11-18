@@ -17,7 +17,6 @@
 package com.facebook.litho.view
 
 import android.animation.StateListAnimator
-import android.content.Context
 import android.graphics.Color
 import android.graphics.Outline
 import android.graphics.Paint
@@ -32,25 +31,20 @@ import android.util.SparseArray
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.view.ViewOutlineProvider
 import androidx.annotation.ColorInt
 import androidx.annotation.FloatRange
 import androidx.annotation.IdRes
 import androidx.annotation.VisibleForTesting
-import androidx.core.view.ViewCompat
 import com.facebook.kotlin.compilerplugins.dataclassgenerate.annotation.DataClassGenerate
 import com.facebook.litho.ClickEvent
 import com.facebook.litho.CommonProps
 import com.facebook.litho.Component
 import com.facebook.litho.ComponentContext
 import com.facebook.litho.ComponentHost
-import com.facebook.litho.ComponentLongClickListener
-import com.facebook.litho.ComponentTouchListener
 import com.facebook.litho.FocusChangedEvent
 import com.facebook.litho.InterceptTouchEvent
 import com.facebook.litho.LayerType
-import com.facebook.litho.LayerTypeGuard
 import com.facebook.litho.LithoRenderEffect
 import com.facebook.litho.LongClickEvent
 import com.facebook.litho.Style
@@ -60,10 +54,7 @@ import com.facebook.litho.SupportsPivotTransform
 import com.facebook.litho.SupportsPivotTransform.Companion.BadPivotClassErrorMessage
 import com.facebook.litho.TouchEvent
 import com.facebook.litho.binders.onBindViewWithDescription
-import com.facebook.litho.binders.viewBinder
 import com.facebook.litho.config.ComponentsConfiguration
-import com.facebook.litho.core.CoreDimenField
-import com.facebook.litho.core.CoreDimenStyleItem
 import com.facebook.litho.debug.DebugInfoReporter
 import com.facebook.litho.debug.getComponentStackTraceElement
 import com.facebook.litho.drawable.ComparableCircleDrawable
@@ -73,13 +64,9 @@ import com.facebook.litho.drawable.DrawableUtils
 import com.facebook.litho.drawable.inscribedSquare
 import com.facebook.litho.eventHandler
 import com.facebook.litho.eventHandlerWithReturn
-import com.facebook.litho.utils.VersionedAndroidApis
 import com.facebook.rendercore.Dimen
-import com.facebook.rendercore.RenderUnit
-import com.facebook.rendercore.ResourceCache
 import com.facebook.rendercore.ResourceResolver
 import com.facebook.rendercore.px
-import com.facebook.rendercore.utils.areObjectsEquivalent
 import com.facebook.yoga.YogaEdge
 import kotlin.math.ceil
 
@@ -303,15 +290,7 @@ internal data class IntStyleItem(override val field: IntField, override val valu
  */
 fun Style.alpha(alpha: Float): Style {
   maybeLogZeroAlpha(alpha)
-  return if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-    this +
-        Style.onBindViewWithDescription({ "alpha" }, alpha) { content ->
-          content.alpha = alpha
-          onUnbind { content.alpha = 1f }
-        }
-  } else {
-    this + FloatStyleItem(FloatField.ALPHA, alpha)
-  }
+  return this + FloatStyleItem(FloatField.ALPHA, alpha)
 }
 
 fun maybeLogZeroAlpha(alpha: Float) {
@@ -338,30 +317,7 @@ fun maybeLogZeroAlpha(alpha: Float) {
  * See [android.view.View.setBackground]
  */
 fun Style.background(background: Drawable?): Style {
-  if (!ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-    return this + BackgroundStyleItem(background, background?.let(DrawableUtils::getPaddingOrNull))
-  }
-  var style = viewBinder(BackgroundBinder, background)
-  if (background != null) {
-    val paddingRect = DrawableUtils.getPaddingOrNull(background)
-    if (paddingRect != null) {
-      style =
-          style +
-              (if (paddingRect.left > 0)
-                  CoreDimenStyleItem(CoreDimenField.PADDING_LEFT, paddingRect.left.px)
-              else null) +
-              (if (paddingRect.top > 0)
-                  CoreDimenStyleItem(CoreDimenField.PADDING_TOP, paddingRect.top.px)
-              else null) +
-              (if (paddingRect.right > 0)
-                  CoreDimenStyleItem(CoreDimenField.PADDING_RIGHT, paddingRect.right.px)
-              else null) +
-              (if (paddingRect.bottom > 0)
-                  CoreDimenStyleItem(CoreDimenField.PADDING_BOTTOM, paddingRect.bottom.px)
-              else null)
-    }
-  }
-  return style
+  return this + BackgroundStyleItem(background, background?.let(DrawableUtils::getPaddingOrNull))
 }
 
 /**
@@ -372,12 +328,7 @@ fun Style.background(background: Drawable?): Style {
  * See [android.view.View.setBackgroundColor]
  */
 fun Style.backgroundColor(@ColorInt backgroundColor: Int): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      viewBinder(BackgroundBinder, ColorBackground(backgroundColor))
-    } else {
-      this +
-          ObjectStyleItem(ObjectField.BACKGROUND, ComparableColorDrawable.create(backgroundColor))
-    }
+    this + ObjectStyleItem(ObjectField.BACKGROUND, ComparableColorDrawable.create(backgroundColor))
 
 fun Style.backgroundColor(@ColorInt backgroundColor: Long): Style =
     backgroundColor(backgroundColor.toInt())
@@ -398,67 +349,11 @@ fun Style.backgroundColor(@ColorInt backgroundColor: Long): Style =
 fun Style.background(@ColorInt color: Int, shape: Shape): Style =
     if (shape !is PaintableShape) {
       backgroundColor(color).clip(shape)
-    } else if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      viewBinder(BackgroundBinder, ShapeBackground(color, shape))
     } else {
       this + BackgroundShapeStyleItem(BackgroundShapeStyleItemParams(color, shape))
     }
 
 fun Style.background(@ColorInt color: Long, shape: Shape): Style = background(color.toInt(), shape)
-
-/**
- * Sets [View.setBackground] for the static [background] and [backgroundColor] Styles when
- * [ComponentsConfiguration.useViewStyleBinders] is on. Their shared binder key retains the last
- * background model at the first background's insertion position. Custom binders and dynamic
- * background Styles write independently and may run after this binder. Caller-provided drawables
- * retain their mutable state when rebound.
- */
-private object BackgroundBinder : RenderUnit.Binder<Any?, View, Any> {
-  override val description: String
-    get() = "background"
-
-  override fun shouldUpdate(
-      currentModel: Any?,
-      newModel: Any?,
-      currentLayoutData: Any?,
-      nextLayoutData: Any?,
-  ): Boolean = !areObjectsEquivalent(currentModel, newModel)
-
-  override fun bind(context: Context, content: View, model: Any?, layoutData: Any?): Any? {
-    content.background =
-        when (model) {
-          is ColorBackground -> ComparableColorDrawable.create(model.color)
-          is ShapeBackground ->
-              model.shape.createBackground(
-                  model.color,
-                  ResourceResolver(
-                      context,
-                      ResourceCache.getLatest(context.resources.configuration),
-                  ),
-              )
-          else -> model as Drawable?
-        }
-    return null
-  }
-
-  override fun unbind(
-      context: Context,
-      content: View,
-      model: Any?,
-      layoutData: Any?,
-      bindData: Any?,
-  ) {
-    content.background = null
-  }
-}
-
-@Suppress("ANNOTATION_WILL_BE_APPLIED_ALSO_TO_PROPERTY_OR_FIELD")
-@DataClassGenerate
-private data class ColorBackground(@ColorInt val color: Int)
-
-@DataClassGenerate
-@Suppress("ANNOTATION_WILL_BE_APPLIED_ALSO_TO_PROPERTY_OR_FIELD")
-private data class ShapeBackground(@ColorInt val color: Int, val shape: PaintableShape)
 
 /**
  * Sets if the View this Component mounts to should be clickable. Setting this property will cause
@@ -467,33 +362,7 @@ private data class ShapeBackground(@ColorInt val color: Int, val shape: Paintabl
  * See [android.view.View.setClickable]
  */
 fun Style.clickable(isClickable: Boolean): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "clickable" }, isClickable) { content ->
-            val originalClickable = content.isClickable
-            content.isClickable = isClickable
-            onUnbind { content.isClickable = originalClickable }
-          }
-    } else {
-      this + ObjectStyleItem(ObjectField.CLICKABLE, isClickable)
-    }
-
-/**
- * Wraps the given [block] with [ComponentHost.setSafeViewModificationsEnabled] if the receiver is a
- * [ComponentHost]. This mirrors the wrapping done in [ViewAttributes] for the legacy path and
- * ensures that binder-driven style mutations do not trigger
- * [ComponentHost.checkUnsafeViewModification].
- */
-@PublishedApi
-internal inline fun View.withSafeComponentHostModification(block: () -> Unit) {
-  val host = this as? ComponentHost
-  if (host != null) host.setSafeViewModificationsEnabled(true)
-  try {
-    block()
-  } finally {
-    if (host != null) host.setSafeViewModificationsEnabled(false)
-  }
-}
+    this + ObjectStyleItem(ObjectField.CLICKABLE, isClickable)
 
 /**
  * Sets if the View this Component mounts to should be enabled. Setting this property will cause the
@@ -502,18 +371,7 @@ internal inline fun View.withSafeComponentHostModification(block: () -> Unit) {
  * See [android.view.View.setClickable]
  */
 fun Style.enabled(isEnabled: Boolean): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "enabled" }, isEnabled) { content ->
-            val originalEnabled = content.isEnabled
-            content.withSafeComponentHostModification { content.isEnabled = isEnabled }
-            onUnbind {
-              content.withSafeComponentHostModification { content.isEnabled = originalEnabled }
-            }
-          }
-    } else {
-      this + ObjectStyleItem(ObjectField.ENABLED, isEnabled)
-    }
+    this + ObjectStyleItem(ObjectField.ENABLED, isEnabled)
 
 /**
  * Setting this to false allows child views of this view to draw outside its bounds, overriding the
@@ -521,22 +379,7 @@ fun Style.enabled(isEnabled: Boolean): Style =
  * Component to be represented as a View at mount time if it wasn't going to already.
  */
 fun Style.clipChildren(clipChildren: Boolean): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "clipChildren" }, clipChildren) { content ->
-            val originalClipChildren = (content as? ViewGroup)?.clipChildren
-            if (content is ViewGroup) {
-              content.clipChildren = clipChildren
-            }
-            onUnbind {
-              if (content is ViewGroup && originalClipChildren != null) {
-                content.clipChildren = originalClipChildren
-              }
-            }
-          }
-    } else {
-      this + ObjectStyleItem(ObjectField.CLIP_CHILDREN, clipChildren)
-    }
+    this + ObjectStyleItem(ObjectField.CLIP_CHILDREN, clipChildren)
 
 /**
  * Sets whether this View should have a default focus highlight when it gets focus but doesn't have
@@ -547,31 +390,11 @@ fun Style.clipChildren(clipChildren: Boolean): Style =
  * See [android.view.View.setDefaultFocusHighlightEnabled]
  */
 fun Style.defaultFocusHighlightEnabled(defaultFocusHighlightEnabled: Boolean): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription(
-              { "defaultFocusHighlightEnabled" },
-              defaultFocusHighlightEnabled,
-          ) { content ->
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-              VersionedAndroidApis.O.setDefaultFocusHighlightEnabled(
-                  content,
-                  defaultFocusHighlightEnabled,
-              )
-            }
-            onUnbind {
-              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                VersionedAndroidApis.O.setDefaultFocusHighlightEnabled(content, true)
-              }
-            }
-          }
-    } else {
-      this +
-          ObjectStyleItem(
-              ObjectField.DEFAULT_FOCUS_HIGHLIGHT_ENABLED,
-              defaultFocusHighlightEnabled,
-          )
-    }
+    this +
+        ObjectStyleItem(
+            ObjectField.DEFAULT_FOCUS_HIGHLIGHT_ENABLED,
+            defaultFocusHighlightEnabled,
+        )
 
 /**
  * Sets whether the View's Outline should be used to clip the contents of the View. Setting this
@@ -581,15 +404,7 @@ fun Style.defaultFocusHighlightEnabled(defaultFocusHighlightEnabled: Boolean): S
  * See [android.view.View.setClipToOutline]
  */
 fun Style.clipToOutline(clipToOutline: Boolean): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "clipToOutline" }, clipToOutline) { content ->
-            content.clipToOutline = clipToOutline
-            onUnbind { content.clipToOutline = false }
-          }
-    } else {
-      this + ObjectStyleItem(ObjectField.CLIP_TO_OUTLINE, clipToOutline)
-    }
+    this + ObjectStyleItem(ObjectField.CLIP_TO_OUTLINE, clipToOutline)
 
 /**
  * Sets whether this ViewGroup's drawable states also include its children's drawable states. This
@@ -619,28 +434,7 @@ fun Style.duplicateParentState(duplicateParentState: Boolean): Style =
  * See [android.view.View.setElevation]
  */
 fun Style.elevation(elevation: Dimen): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "elevation" }, elevation) { content ->
-            val elevationPx =
-                elevation.toFloatPixels(
-                    ResourceResolver(
-                        content.context,
-                        ResourceCache.getLatest(content.resources.configuration),
-                    ),
-                )
-            if (elevationPx != 0f) {
-              ViewCompat.setElevation(content, elevationPx)
-            }
-            onUnbind {
-              if (elevationPx != 0f) {
-                ViewCompat.setElevation(content, 0f)
-              }
-            }
-          }
-    } else {
-      this + DimenStyleItem(DimenField.ELEVATION, elevation)
-    }
+    this + DimenStyleItem(DimenField.ELEVATION, elevation)
 
 /**
  * Defines the drawing order for sibling components within the same container. It only orders the
@@ -660,27 +454,7 @@ internal fun Style.zIndex(order: Int): Style =
  * See [android.view.View.setFocusable]
  */
 fun Style.focusable(isFocusable: Boolean): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "focusable" }, isFocusable) { content ->
-            val originalFocusable =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                  content.focusable
-                } else {
-                  if (content.isFocusable) View.FOCUSABLE else View.NOT_FOCUSABLE
-                }
-            content.isFocusable = isFocusable
-            onUnbind {
-              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                content.focusable = originalFocusable
-              } else {
-                content.isFocusable = originalFocusable == View.FOCUSABLE
-              }
-            }
-          }
-    } else {
-      this + ObjectStyleItem(ObjectField.FOCUSABLE, isFocusable)
-    }
+    this + ObjectStyleItem(ObjectField.FOCUSABLE, isFocusable)
 
 /**
  * Sets a foreground on the View this Component mounts to. Setting this property will cause the
@@ -689,27 +463,7 @@ fun Style.focusable(isFocusable: Boolean): Style =
  * See [android.view.View.setForeground]
  */
 fun Style.foreground(foreground: Drawable?): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "foreground" }, foreground) { content ->
-            if (foreground != null) {
-              check(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                ("MountState has a ViewNodeInfo with foreground however " +
-                    "the current Android version doesn't support foreground on Views")
-              }
-              //noinspection AndroidLintNewApi
-              content.foreground = foreground
-            }
-            onUnbind {
-              if (foreground != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                //noinspection AndroidLintNewApi
-                content.foreground = null
-              }
-            }
-          }
-    } else {
-      this + ObjectStyleItem(ObjectField.FOREGROUND, foreground)
-    }
+    this + ObjectStyleItem(ObjectField.FOREGROUND, foreground)
 
 /**
  * Sets ColorDrawable of the given color as a background on the View this Component mounts to.
@@ -719,26 +473,7 @@ fun Style.foreground(foreground: Drawable?): Style =
  * See [android.view.View.setForeground]
  */
 fun Style.foregroundColor(@ColorInt foregroundColor: Int): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "foreground" }, foregroundColor) { content ->
-            check(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-              ("MountState has a ViewNodeInfo with foreground however " +
-                  "the current Android version doesn't support foreground on Views")
-            }
-            //noinspection AndroidLintNewApi
-            content.foreground = ComparableColorDrawable.create(foregroundColor)
-            onUnbind {
-              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                //noinspection AndroidLintNewApi
-                content.foreground = null
-              }
-            }
-          }
-    } else {
-      this +
-          ObjectStyleItem(ObjectField.FOREGROUND, ComparableColorDrawable.create(foregroundColor))
-    }
+    this + ObjectStyleItem(ObjectField.FOREGROUND, ComparableColorDrawable.create(foregroundColor))
 
 /**
  * Sets a listener that will invoke the given lambda when this Component's focus changes. Setting
@@ -748,24 +483,7 @@ fun Style.foregroundColor(@ColorInt foregroundColor: Int): Style =
  * See [android.view.View.OnFocusChangeListener]
  */
 fun Style.onFocusedChanged(action: (FocusChangedEvent) -> Unit): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "focus-change-handler" }, action) { content ->
-            content.withSafeComponentHostModification {
-              content.onFocusChangeListener = View.OnFocusChangeListener { view, hasFocus ->
-                val event = FocusChangedEvent()
-                event.view = view
-                event.hasFocus = hasFocus
-                action(event)
-              }
-            }
-            onUnbind {
-              content.withSafeComponentHostModification { content.onFocusChangeListener = null }
-            }
-          }
-    } else {
-      this + ObjectStyleItem(ObjectField.ON_FOCUS_CHANGED, action)
-    }
+    this + ObjectStyleItem(ObjectField.ON_FOCUS_CHANGED, action)
 
 /**
  * Sets a listener that will invoke the given lambda when this Component's focus changes but only if
@@ -777,12 +495,7 @@ fun Style.onFocusedChanged(action: (FocusChangedEvent) -> Unit): Style =
 fun Style.onFocusedChanged(
     enabled: Boolean,
     action: (FocusChangedEvent) -> Unit,
-): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      if (enabled) onFocusedChanged(action) else this
-    } else {
-      this + ObjectStyleItem(ObjectField.ON_FOCUS_CHANGED, if (enabled) action else null)
-    }
+): Style = this + ObjectStyleItem(ObjectField.ON_FOCUS_CHANGED, if (enabled) action else null)
 
 /**
  * Sets a listener that will invoke the given lambda when this Component is clicked. Setting this
@@ -860,37 +573,7 @@ inline fun Style.onKeyEvent(noinline listener: (View, Int, KeyEvent) -> Boolean)
  * going to already.
  */
 fun Style.onLongClick(action: (LongClickEvent) -> Boolean): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "long-click-handler" }, action) { content ->
-            val wasLongClickable = content.isLongClickable
-            if (content is ComponentHost) {
-              var listener = content.componentLongClickListener
-              if (listener == null) {
-                listener = ComponentLongClickListener()
-                content.componentLongClickListener = listener
-              }
-              listener.eventHandler = eventHandlerWithReturn(action)
-            } else {
-              content.setOnLongClickListener { view ->
-                val event = LongClickEvent()
-                event.view = view
-                action(event)
-              }
-            }
-            content.isLongClickable = true
-            onUnbind {
-              if (content is ComponentHost) {
-                content.componentLongClickListener?.eventHandler = null
-              } else {
-                content.setOnLongClickListener(null)
-              }
-              content.isLongClickable = wasLongClickable
-            }
-          }
-    } else {
-      this + ObjectStyleItem(ObjectField.ON_LONG_CLICK, action)
-    }
+    this + ObjectStyleItem(ObjectField.ON_LONG_CLICK, action)
 
 /**
  * Sets a listener that will invoke the given lambda when this Component is long clicked but only if
@@ -900,12 +583,7 @@ fun Style.onLongClick(action: (LongClickEvent) -> Boolean): Style =
 fun Style.onLongClick(
     enabled: Boolean,
     action: (LongClickEvent) -> Boolean,
-): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      if (enabled) onLongClick(action) else this
-    } else {
-      this + ObjectStyleItem(ObjectField.ON_LONG_CLICK, if (enabled) action else null)
-    }
+): Style = this + ObjectStyleItem(ObjectField.ON_LONG_CLICK, if (enabled) action else null)
 
 /**
  * Sets a listener that will invoke the given lambda when this Component is touched. Setting this
@@ -913,35 +591,7 @@ fun Style.onLongClick(
  * already.
  */
 fun Style.onTouch(action: (TouchEvent) -> Boolean): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "touch-handler" }, action) { content ->
-            if (content is ComponentHost) {
-              var listener = content.componentTouchListener
-              if (listener == null) {
-                listener = ComponentTouchListener()
-                content.componentTouchListener = listener
-              }
-              listener.eventHandler = eventHandlerWithReturn(action)
-            } else {
-              content.setOnTouchListener { view, motionEvent ->
-                val event = TouchEvent()
-                event.view = view
-                event.motionEvent = motionEvent
-                action(event)
-              }
-            }
-            onUnbind {
-              if (content is ComponentHost) {
-                content.componentTouchListener?.eventHandler = null
-              } else {
-                content.setOnTouchListener(null)
-              }
-            }
-          }
-    } else {
-      this + ObjectStyleItem(ObjectField.ON_TOUCH, action)
-    }
+    this + ObjectStyleItem(ObjectField.ON_TOUCH, action)
 
 /**
  * Sets a listener that will invoke the given lambda when this Component is touched but only if
@@ -949,11 +599,7 @@ fun Style.onTouch(action: (TouchEvent) -> Boolean): Style =
  * as a View at mount time if it wasn't going to already.
  */
 fun Style.onTouch(enabled: Boolean, action: (TouchEvent) -> Boolean): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      if (enabled) onTouch(action) else this
-    } else {
-      this + ObjectStyleItem(ObjectField.ON_TOUCH, if (enabled) action else null)
-    }
+    this + ObjectStyleItem(ObjectField.ON_TOUCH, if (enabled) action else null)
 
 /**
  * Sets a listener that will intercept all touch screen motion events. This allows you to watch
@@ -965,21 +611,7 @@ fun Style.onTouch(enabled: Boolean, action: (TouchEvent) -> Boolean): Style =
  * See [android.view.ViewGroup.onInterceptTouchEvent]
  */
 fun Style.onInterceptTouch(action: (InterceptTouchEvent) -> Boolean): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "intercept-touch-handler" }, action) { content ->
-            if (content is ComponentHost) {
-              content.onInterceptTouchEventHandler = eventHandlerWithReturn(action)
-            }
-            onUnbind {
-              if (content is ComponentHost) {
-                content.onInterceptTouchEventHandler = null
-              }
-            }
-          }
-    } else {
-      this + ObjectStyleItem(ObjectField.ON_INTERCEPT_TOUCH, action)
-    }
+    this + ObjectStyleItem(ObjectField.ON_INTERCEPT_TOUCH, action)
 
 /**
  * Sets a listener that will intercept all touch screen motion events but only if [enabled] is true.
@@ -994,12 +626,7 @@ fun Style.onInterceptTouch(action: (InterceptTouchEvent) -> Boolean): Style =
 fun Style.onInterceptTouch(
     enabled: Boolean,
     action: (InterceptTouchEvent) -> Boolean,
-): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      if (enabled) onInterceptTouch(action) else this
-    } else {
-      this + ObjectStyleItem(ObjectField.ON_INTERCEPT_TOUCH, if (enabled) action else null)
-    }
+): Style = this + ObjectStyleItem(ObjectField.ON_INTERCEPT_TOUCH, if (enabled) action else null)
 
 /**
  * Sets a listener that will invoke the given lambda when this Component is hovered on. If the
@@ -1101,16 +728,7 @@ fun Style.pivotPercent(
  * @see android.view.View.setRotation
  * @see pivotPercent to set the pivot point to a percentage of the component's size
  */
-fun Style.rotation(rotation: Float): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "rotation" }, rotation) { content ->
-            content.rotation = rotation
-            onUnbind { content.rotation = 0f }
-          }
-    } else {
-      this + FloatStyleItem(FloatField.ROTATION, rotation)
-    }
+fun Style.rotation(rotation: Float): Style = this + FloatStyleItem(FloatField.ROTATION, rotation)
 
 /**
  * Sets the degree that this component is rotated around the horizontal axis through the pivot
@@ -1121,15 +739,7 @@ fun Style.rotation(rotation: Float): Style =
  * @see pivotPercent to set the pivot point to a percentage of the component's size
  */
 fun Style.rotationX(rotationX: Float): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "rotationX" }, rotationX) { content ->
-            content.rotationX = rotationX
-            onUnbind { content.rotationX = 0f }
-          }
-    } else {
-      this + FloatStyleItem(FloatField.ROTATION_X, rotationX)
-    }
+    this + FloatStyleItem(FloatField.ROTATION_X, rotationX)
 
 /**
  * Sets the degree that this component is rotated around the vertical axis through the pivot point.
@@ -1140,15 +750,7 @@ fun Style.rotationX(rotationX: Float): Style =
  * @see pivotPercent to set the pivot point to a percentage of the component's size
  */
 fun Style.rotationY(rotationY: Float): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "rotationY" }, rotationY) { content ->
-            content.rotationY = rotationY
-            onUnbind { content.rotationY = 0f }
-          }
-    } else {
-      this + FloatStyleItem(FloatField.ROTATION_Y, rotationY)
-    }
+    this + FloatStyleItem(FloatField.ROTATION_Y, rotationY)
 
 /**
  * Sets the scale (scaleX and scaleY) on this component. This is mostly relevant for animations and
@@ -1160,20 +762,7 @@ fun Style.rotationY(rotationY: Float): Style =
  * @see android.view.View.setScaleY
  * @see pivotPercent to set the pivot point to a percentage of the component's size
  */
-fun Style.scale(scale: Float): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "scale" }, scale) { content ->
-            content.scaleX = scale
-            content.scaleY = scale
-            onUnbind {
-              content.scaleX = 1f
-              content.scaleY = 1f
-            }
-          }
-    } else {
-      this + FloatStyleItem(FloatField.SCALE, scale)
-    }
+fun Style.scale(scale: Float): Style = this + FloatStyleItem(FloatField.SCALE, scale)
 
 /**
  * Changes the selection state of this Component. Setting this property will cause the Component to
@@ -1182,16 +771,7 @@ fun Style.scale(scale: Float): Style =
  * See [android.view.View.setSelected]
  */
 fun Style.selected(isSelected: Boolean): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "selected" }, isSelected) { content ->
-            val originalSelected = content.isSelected
-            content.isSelected = isSelected
-            onUnbind { content.isSelected = originalSelected }
-          }
-    } else {
-      this + ObjectStyleItem(ObjectField.SELECTED, isSelected)
-    }
+    this + ObjectStyleItem(ObjectField.SELECTED, isSelected)
 
 /**
  * Attaches the provided StateListAnimator to this Component. Setting this property will cause the
@@ -1200,20 +780,7 @@ fun Style.selected(isSelected: Boolean): Style =
  * See [android.view.View.setStateListAnimator]
  */
 fun Style.stateListAnimator(stateListAnimator: StateListAnimator?): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "stateListAnimator" }, stateListAnimator) { content ->
-            content.stateListAnimator = stateListAnimator
-            onUnbind {
-              if (content.stateListAnimator != null) {
-                content.stateListAnimator.jumpToCurrentState()
-                content.stateListAnimator = null
-              }
-            }
-          }
-    } else {
-      this + ObjectStyleItem(ObjectField.STATE_LIST_ANIMATOR, stateListAnimator)
-    }
+    this + ObjectStyleItem(ObjectField.STATE_LIST_ANIMATOR, stateListAnimator)
 
 /**
  * Sets testKey on the View this Component mounts to. Setting this property will cause the Component
@@ -1228,15 +795,7 @@ fun Style.testKey(testKey: String?): Style = this + ObjectStyleItem(ObjectField.
  * See [android.view.View.setTransitionName]
  */
 fun Style.transitionName(transitionName: String?): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "transitionName" }, transitionName) { content ->
-            ViewCompat.setTransitionName(content, transitionName)
-            onUnbind { ViewCompat.setTransitionName(content, null) }
-          }
-    } else {
-      this + ObjectStyleItem(ObjectField.TRANSITION_NAME, transitionName)
-    }
+    this + ObjectStyleItem(ObjectField.TRANSITION_NAME, transitionName)
 
 /**
  * Specifies that this Component should be represented as a View when this hierarchy is mounted.
@@ -1254,18 +813,7 @@ fun Style.wrapInView(): Style = this + ObjectStyleItem(ObjectField.WRAP_IN_VIEW,
  *
  * See [android.view.View.setId]
  */
-fun Style.viewId(@IdRes viewId: Int): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "viewId" }, viewId) { content ->
-            if (viewId != View.NO_ID) {
-              content.id = viewId
-            }
-            onUnbind { content.id = View.NO_ID }
-          }
-    } else {
-      this + ObjectStyleItem(ObjectField.VIEW_ID, viewId)
-    }
+fun Style.viewId(@IdRes viewId: Int): Style = this + ObjectStyleItem(ObjectField.VIEW_ID, viewId)
 
 /**
  * Adds a View tag to the View this Component mounts to. Setting this property will cause the
@@ -1273,16 +821,7 @@ fun Style.viewId(@IdRes viewId: Int): Style =
  *
  * See [android.view.View.setTag]
  */
-fun Style.viewTag(viewTag: Any?): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "viewTag" }, viewTag) { content ->
-            content.withSafeComponentHostModification { content.tag = viewTag }
-            onUnbind { content.withSafeComponentHostModification { content.tag = null } }
-          }
-    } else {
-      this + ObjectStyleItem(ObjectField.VIEW_TAG, viewTag)
-    }
+fun Style.viewTag(viewTag: Any?): Style = this + ObjectStyleItem(ObjectField.VIEW_TAG, viewTag)
 
 /**
  * Sets a component-level tag on this Component, readable via [com.facebook.litho.DebugComponent]'s
@@ -1303,29 +842,7 @@ fun Style.componentTag(componentTag: Any?): Style =
  * See [android.view.View.setTag]
  */
 fun Style.viewTags(viewTags: SparseArray<out Any>): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "viewTags" }, viewTags) { content ->
-            if (content is ComponentHost) {
-              @Suppress("UNCHECKED_CAST") content.addViewTags(viewTags as SparseArray<Any>)
-            } else {
-              for (i in 0 until viewTags.size()) {
-                content.setTag(viewTags.keyAt(i), viewTags.valueAt(i))
-              }
-            }
-            onUnbind {
-              if (content is ComponentHost) {
-                content.unsetViewTags()
-              } else {
-                for (i in 0 until viewTags.size()) {
-                  content.setTag(viewTags.keyAt(i), null)
-                }
-              }
-            }
-          }
-    } else {
-      this + ObjectStyleItem(ObjectField.VIEW_TAGS, viewTags)
-    }
+    this + ObjectStyleItem(ObjectField.VIEW_TAGS, viewTags)
 
 /**
  * Sets a [ViewOutlineProvider] on the View this Component mounts to. Setting this property will
@@ -1337,21 +854,7 @@ fun Style.viewTags(viewTags: SparseArray<out Any>): Style =
  * See [android.view.View.setOutlineProvider]
  */
 fun Style.clip(outlineProvider: ViewOutlineProvider?): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "outlineProvider" }, outlineProvider) { content ->
-            if (outlineProvider != null) {
-              content.outlineProvider = outlineProvider
-            }
-            onUnbind {
-              if (outlineProvider != null) {
-                content.outlineProvider = ViewOutlineProvider.BACKGROUND
-              }
-            }
-          }
-    } else {
-      this + ObjectStyleItem(ObjectField.OUTLINE_PROVIDER, outlineProvider)
-    }
+    this + ObjectStyleItem(ObjectField.OUTLINE_PROVIDER, outlineProvider)
 
 /**
  * Sets a [ViewOutlineProvider] on the View this Component mounts to. Setting this property will
@@ -1447,51 +950,7 @@ fun Style.shadow(
     outlineProvider: ViewOutlineProvider = ViewOutlineProvider.BOUNDS,
     @ColorInt ambientShadowColor: Int = Color.BLACK,
     @ColorInt spotShadowColor: Int = Color.BLACK,
-): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription(
-              { "shadow" },
-              ShadowStyleItemParams(
-                  elevation,
-                  outlineProvider,
-                  ambientShadowColor,
-                  spotShadowColor,
-              ),
-          ) { content ->
-            val elevationPx =
-                elevation.toFloatPixels(
-                    ResourceResolver(
-                        content.context,
-                        ResourceCache.getLatest(content.resources.configuration),
-                    ),
-                )
-            if (elevationPx != 0f) {
-              ViewCompat.setElevation(content, elevationPx)
-            }
-            content.outlineProvider = outlineProvider
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-              VersionedAndroidApis.P.setAmbientShadowColor(content, ambientShadowColor)
-              VersionedAndroidApis.P.setSpotShadowColor(content, spotShadowColor)
-            }
-            onUnbind {
-              if (elevationPx != 0f) {
-                ViewCompat.setElevation(content, 0f)
-              }
-              content.outlineProvider = ViewOutlineProvider.BACKGROUND
-              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                if (ambientShadowColor != Color.BLACK) {
-                  VersionedAndroidApis.P.setAmbientShadowColor(content, Color.BLACK)
-                }
-                if (spotShadowColor != Color.BLACK) {
-                  VersionedAndroidApis.P.setSpotShadowColor(content, Color.BLACK)
-                }
-              }
-            }
-          }
-    } else {
-      this + ShadowStyleItem(elevation, outlineProvider, ambientShadowColor, spotShadowColor)
-    }
+): Style = this + ShadowStyleItem(elevation, outlineProvider, ambientShadowColor, spotShadowColor)
 
 /**
  * Setting this property will cause the Component to be a keyboard navigation cluster. Setting this
@@ -1501,19 +960,7 @@ fun Style.shadow(
  * See [android.view.View.setKeyboardNavigationCluster]
  */
 fun Style.keyboardNavigationCluster(isKeyboardNavigationCluster: Boolean): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription(
-              { "keyboardNavigationCluster" },
-              isKeyboardNavigationCluster,
-          ) { content ->
-            val originalCluster = ViewCompat.isKeyboardNavigationCluster(content)
-            ViewCompat.setKeyboardNavigationCluster(content, isKeyboardNavigationCluster)
-            onUnbind { ViewCompat.setKeyboardNavigationCluster(content, originalCluster) }
-          }
-    } else {
-      this + ObjectStyleItem(ObjectField.KEYBOARD_NAVIGATION_CLUSTER, isKeyboardNavigationCluster)
-    }
+    this + ObjectStyleItem(ObjectField.KEYBOARD_NAVIGATION_CLUSTER, isKeyboardNavigationCluster)
 
 /**
  * Excludes a rectangle within the local bounds from the system gesture. After layout, []exclusion]
@@ -1532,15 +979,7 @@ inline fun Style.addSystemGestureExclusionZone(noinline exclusion: (bounds: Rect
  * See [android.view.View.setTooltipText]
  */
 fun Style.tooltipText(tooltipText: String?): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "tooltipText" }, tooltipText) { content ->
-            ViewCompat.setTooltipText(content, tooltipText)
-            onUnbind { ViewCompat.setTooltipText(content, null) }
-          }
-    } else {
-      this + ObjectStyleItem(ObjectField.TOOLTIP_TEXT, tooltipText)
-    }
+    this + ObjectStyleItem(ObjectField.TOOLTIP_TEXT, tooltipText)
 
 /**
  * Specifies the type of layer backing this view. The layer can be [LayerType.LAYER_TYPE_NOT_SET],
@@ -1554,27 +993,7 @@ fun Style.tooltipText(tooltipText: String?): Style =
  * @see [android.view.View.setLayerType]
  */
 fun Style.layerType(@LayerType layerType: Int, paint: Paint? = null): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "layerType" }, layerType, paint) { content ->
-            val originalLayerType = content.layerType
-            if (layerType != LayerType.LAYER_TYPE_NOT_SET) {
-              // Guard oversized HARDWARE layers against the hwui "Unable to create layer" abort
-              // (see LayerTypeGuard). No-op unless LayerTypeGuard.maxHardwareLayerSizePx is set.
-              content.setLayerType(
-                  LayerTypeGuard.guardHardwareLayerForSize(content, layerType),
-                  paint,
-              )
-            }
-            onUnbind {
-              if (layerType != LayerType.LAYER_TYPE_NOT_SET) {
-                content.setLayerType(originalLayerType, null)
-              }
-            }
-          }
-    } else {
-      this + ObjectStyleItem(ObjectField.LAYER_TYPE, Pair(layerType, paint))
-    }
+    this + ObjectStyleItem(ObjectField.LAYER_TYPE, Pair(layerType, paint))
 
 /**
  * Creates a Blur [LithoRenderEffect] with the specified radius along the x and y axis and applies
@@ -1603,21 +1022,7 @@ fun Style.blur(
           LithoRenderEffect.Blur(radiusX, radiusY, edgeTreatment)
         }
 
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "renderEffect" }, blurEffect) { content ->
-            if (blurEffect != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-              content.setRenderEffect(blurEffect.toRenderEffect())
-            }
-            onUnbind {
-              if (blurEffect != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                content.setRenderEffect(null)
-              }
-            }
-          }
-    } else {
-      this + ObjectStyleItem(ObjectField.RENDER_EFFECT, blurEffect)
-    }
+    this + ObjectStyleItem(ObjectField.RENDER_EFFECT, blurEffect)
   } else {
     this
   }
@@ -1833,23 +1238,4 @@ internal data class ClipStyleItem(val shape: Shape) : StyleItem<Shape> {
  *
  * See [android.view.View.setClipToOutline]
  */
-fun Style.clip(shape: Shape): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "clip-shape" }, shape) { content ->
-            val outlineProvider =
-                if (shape is ViewOutlineProvider) {
-                  shape
-                } else {
-                  shape.getOutlineProvider(ComponentContext(content.context))
-                }
-            content.outlineProvider = outlineProvider
-            content.clipToOutline = true
-            onUnbind {
-              content.outlineProvider = ViewOutlineProvider.BACKGROUND
-              content.clipToOutline = false
-            }
-          }
-    } else {
-      this + ClipStyleItem(shape)
-    }
+fun Style.clip(shape: Shape): Style = this + ClipStyleItem(shape)

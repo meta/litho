@@ -24,8 +24,6 @@ import com.facebook.litho.Style
 import com.facebook.litho.StyleItem
 import com.facebook.litho.StyleItemField
 import com.facebook.litho.annotations.ExperimentalLithoApi
-import com.facebook.litho.binders.onBindViewWithDescription
-import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.config.LithoDebugConfigurations
 import com.facebook.litho.debug.DebugInfoReporter
 import com.facebook.litho.eventHandler
@@ -372,13 +370,4 @@ fun Style.onVisibilityChanged(
  */
 @ExperimentalLithoApi
 fun Style.visibility(value: Visibility): Style =
-    if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-      this +
-          Style.onBindViewWithDescription({ "visibility" }, value) { content ->
-            val originalVisibility = content.visibility
-            content.visibility = value.toViewVisibility()
-            onUnbind { content.visibility = originalVisibility }
-          }
-    } else {
-      this + VisibilityStyleItem(VisibilityField.VISIBILITY, value)
-    }
+    this + VisibilityStyleItem(VisibilityField.VISIBILITY, value)

@@ -33,15 +33,14 @@ import androidx.annotation.ColorInt
 import androidx.annotation.DrawableRes
 import androidx.annotation.IdRes
 import androidx.core.view.ViewCompat
-import com.facebook.litho.config.ComponentsConfiguration
-import com.facebook.litho.debug.DebugInfoReporter
+import com.facebook.litho.drawable.DrawableUtils
 import com.facebook.litho.layout.LayoutDirection
 import com.facebook.litho.utils.VersionedAndroidApis
 import com.facebook.litho.view.ClickListenerHolder
 import com.facebook.litho.visibility.Visibility
-import com.facebook.rendercore.LogLevel
 import com.facebook.rendercore.RenderUnit
 import com.facebook.rendercore.utils.equals
+import com.facebook.rendercore.utils.isEquivalentTo
 
 class ViewAttributes {
 
@@ -50,77 +49,59 @@ class ViewAttributes {
   var isHostSpec: Boolean = false
   var componentName: String = ""
 
-  var visibility: Visibility?
-    get() = binderMigratedAttributes?.visibility
-    set(value) {
-      getOrCreateBinderMigratedAttributes().visibility = value
-    }
+  var visibility: Visibility? = null
 
   internal var flags: Int = 0
     private set
 
-  var isFocusable: Boolean
-    get() = binderMigratedAttributes?.isFocusable ?: false
+  var isFocusable: Boolean = false
     set(value) {
       flags = flags or FLAG_FOCUS
-      getOrCreateBinderMigratedAttributes().isFocusable = value
+      field = value
     }
 
-  var isClickable: Boolean
-    get() = binderMigratedAttributes?.isClickable ?: false
+  var isClickable: Boolean = false
     set(value) {
       flags = flags or FLAG_CLICKABLE
-      getOrCreateBinderMigratedAttributes().isClickable = value
+      field = value
     }
 
-  var isEnabled: Boolean
-    get() = binderMigratedAttributes?.isEnabled ?: false
+  var isEnabled: Boolean = false
     set(value) {
       flags = flags or FLAG_ENABLED
-      getOrCreateBinderMigratedAttributes().isEnabled = value
+      field = value
     }
 
-  var isSelected: Boolean
-    get() = binderMigratedAttributes?.isSelected ?: false
+  var isSelected: Boolean = false
     set(value) {
       flags = flags or FLAG_SELECTED
-      getOrCreateBinderMigratedAttributes().isSelected = value
+      field = value
     }
 
-  var isKeyboardNavigationCluster: Boolean
-    get() = binderMigratedAttributes?.isKeyboardNavigationCluster ?: false
+  var isKeyboardNavigationCluster: Boolean = false
     set(value) {
       flags = flags or FLAG_KEYBOARD_NAVIGATION_CLUSTER
-      getOrCreateBinderMigratedAttributes().isKeyboardNavigationCluster = value
+      field = value
     }
 
-  @LayerType
-  var layerType: Int
-    get() = binderMigratedAttributes?.layerType ?: LayerType.LAYER_TYPE_NOT_SET
-    set(value) {
-      getOrCreateBinderMigratedAttributes().layerType = value
-    }
+  @LayerType var layerType: Int = LayerType.LAYER_TYPE_NOT_SET
 
-  var layoutPaint: Paint?
-    get() = binderMigratedAttributes?.layoutPaint
-    set(value) {
-      getOrCreateBinderMigratedAttributes().layoutPaint = value
-    }
+  var layoutPaint: Paint? = null
 
   val isFocusableSet: Boolean
-    get() = binderMigratedAttributes?.isFocusableSet ?: false
+    get() = flags and FLAG_FOCUS != 0
 
   val isClickableSet: Boolean
-    get() = binderMigratedAttributes?.isClickableSet ?: false
+    get() = flags and FLAG_CLICKABLE != 0
 
   val isEnabledSet: Boolean
-    get() = binderMigratedAttributes?.isEnabledSet ?: false
+    get() = flags and FLAG_ENABLED != 0
 
   val isSelectedSet: Boolean
-    get() = binderMigratedAttributes?.isSelectedSet ?: false
+    get() = flags and FLAG_SELECTED != 0
 
   val isKeyboardNavigationClusterSet: Boolean
-    get() = binderMigratedAttributes?.isKeyboardNavigationClusterSet ?: false
+    get() = flags and FLAG_KEYBOARD_NAVIGATION_CLUSTER != 0
 
   var contentDescription: CharSequence? = null
   var importantForAccessibility: Int = 0
@@ -134,230 +115,168 @@ class ViewAttributes {
 
   var systemGestureExclusionZones: List<(Rect) -> Rect>? = null
 
-  // ---- Migrated properties: delegating to binderMigratedAttributes ----
-  // These properties have been migrated to the onBindViewWithDescription binder pattern behind
-  // the useViewStyleBinders config flag. When the binder migration is fully rolled out, these
-  // delegating accessors (along with BinderMigratedViewAttributes) can be deleted.
-
-  var binderMigratedAttributes: BinderMigratedViewAttributes? = null
-    private set
-
-  private fun getOrCreateBinderMigratedAttributes(): BinderMigratedViewAttributes {
-    var attrs = binderMigratedAttributes
-    if (attrs == null) {
-      if (ComponentsConfiguration.defaultInstance.useViewStyleBinders) {
-        DebugInfoReporter.report(
-            category = "BinderMigratedViewAttributes",
-            level = LogLevel.ERROR,
-        ) {
-          put("message", "Creating BinderMigratedViewAttributes while useViewStyleBinders is true")
-        }
-      }
-      attrs = BinderMigratedViewAttributes()
-      binderMigratedAttributes = attrs
-    }
-    return attrs
-  }
-
-  var clickHandler: EventHandler<ClickEvent>?
-    get() = binderMigratedAttributes?.clickHandler
-    set(value) {
-      getOrCreateBinderMigratedAttributes().clickHandler = value
-    }
+  var clickHandler: EventHandler<ClickEvent>? = null
 
   /**
    * Additive click listeners registered via `Style.clickListener(key, …)`. Composed with
    * [clickHandler] into a single [ComponentClickListener] (with the extras passed alongside the
    * primary [EventHandler]) and installed at mount.
    */
-  internal var extraClickListeners: MutableList<ClickListenerHolder>?
-    get() = binderMigratedAttributes?.extraClickListeners
+  internal var extraClickListeners: MutableList<ClickListenerHolder>? = null
+
+  var longClickHandler: EventHandler<LongClickEvent>? = null
+
+  var focusChangeHandler: EventHandler<FocusChangedEvent>? = null
+
+  var touchHandler: EventHandler<TouchEvent>? = null
+
+  var interceptTouchHandler: EventHandler<InterceptTouchEvent>? = null
+
+  var tooltipText: String? = null
+
+  var viewId: Int = View.NO_ID
     set(value) {
-      getOrCreateBinderMigratedAttributes().extraClickListeners = value
+      field = value
+      flags = flags or FLAG_VIEW_ID
     }
 
-  var longClickHandler: EventHandler<LongClickEvent>?
-    get() = binderMigratedAttributes?.longClickHandler
+  var viewTag: Any? = null
     set(value) {
-      getOrCreateBinderMigratedAttributes().longClickHandler = value
+      field = value
+      flags = flags or FLAG_VIEW_TAG
     }
 
-  var focusChangeHandler: EventHandler<FocusChangedEvent>?
-    get() = binderMigratedAttributes?.focusChangeHandler
+  var transitionName: String? = null
+
+  var outlineProvider: ViewOutlineProvider? = null
+
+  var renderEffect: LithoRenderEffect? = null
+
+  var background: Drawable? = null
+
+  var foreground: Drawable? = null
+
+  var stateListAnimator: StateListAnimator? = null
+
+  var scale: Float = 1f
     set(value) {
-      getOrCreateBinderMigratedAttributes().focusChangeHandler = value
+      field = value
+      flags =
+          if (value == 1f) {
+            flags and FLAG_SCALE.inv()
+          } else {
+            flags or FLAG_SCALE
+          }
     }
 
-  var touchHandler: EventHandler<TouchEvent>?
-    get() = binderMigratedAttributes?.touchHandler
+  var alpha: Float = 1f
     set(value) {
-      getOrCreateBinderMigratedAttributes().touchHandler = value
+      field = value
+      flags =
+          if (value == 1f) {
+            flags and FLAG_ALPHA.inv()
+          } else {
+            flags or FLAG_ALPHA
+          }
     }
 
-  var interceptTouchHandler: EventHandler<InterceptTouchEvent>?
-    get() = binderMigratedAttributes?.interceptTouchHandler
+  var rotation: Float = 0f
     set(value) {
-      getOrCreateBinderMigratedAttributes().interceptTouchHandler = value
+      field = value
+      flags =
+          if (value == 0f) {
+            flags and FLAG_ROTATION.inv()
+          } else {
+            flags or FLAG_ROTATION
+          }
     }
 
-  var tooltipText: String?
-    get() = binderMigratedAttributes?.tooltipText
+  var rotationX: Float = 0f
     set(value) {
-      getOrCreateBinderMigratedAttributes().tooltipText = value
+      field = value
+      flags = flags or FLAG_ROTATION_X
     }
 
-  var viewId: Int
-    get() = binderMigratedAttributes?.viewId ?: View.NO_ID
+  var rotationY: Float = 0f
     set(value) {
-      getOrCreateBinderMigratedAttributes().viewId = value
+      field = value
+      flags = flags or FLAG_ROTATION_Y
     }
 
-  var viewTag: Any?
-    get() = binderMigratedAttributes?.viewTag
+  var clipChildren: Boolean = true // Default value for ViewGroup
     set(value) {
-      getOrCreateBinderMigratedAttributes().viewTag = value
+      field = value
+      flags = flags or FLAG_CLIP_CHILDREN
     }
 
-  var transitionName: String?
-    get() = binderMigratedAttributes?.transitionName
+  var defaultFocusHighlightEnabled: Boolean = true // Platform default is true
     set(value) {
-      getOrCreateBinderMigratedAttributes().transitionName = value
+      field = value
+      flags = flags or FLAG_DEFAULT_FOCUS_HIGHLIGHT_ENABLED
     }
 
-  var outlineProvider: ViewOutlineProvider?
-    get() = binderMigratedAttributes?.outlineProvider
+  var clipToOutline: Boolean = false
     set(value) {
-      getOrCreateBinderMigratedAttributes().outlineProvider = value
+      field = value
+      flags = flags or FLAG_CLIP_TO_OUTLINE
     }
 
-  var renderEffect: LithoRenderEffect?
-    get() = binderMigratedAttributes?.renderEffect
+  var shadowElevation: Float = 0f
     set(value) {
-      getOrCreateBinderMigratedAttributes().renderEffect = value
-    }
-
-  var background: Drawable?
-    get() = binderMigratedAttributes?.background
-    set(value) {
-      getOrCreateBinderMigratedAttributes().background = value
-    }
-
-  var foreground: Drawable?
-    get() = binderMigratedAttributes?.foreground
-    set(value) {
-      getOrCreateBinderMigratedAttributes().foreground = value
-    }
-
-  var stateListAnimator: StateListAnimator?
-    get() = binderMigratedAttributes?.stateListAnimator
-    set(value) {
-      getOrCreateBinderMigratedAttributes().stateListAnimator = value
-    }
-
-  var scale: Float
-    get() = binderMigratedAttributes?.scale ?: 1f
-    set(value) {
-      getOrCreateBinderMigratedAttributes().scale = value
-    }
-
-  var alpha: Float
-    get() = binderMigratedAttributes?.alpha ?: 1f
-    set(value) {
-      getOrCreateBinderMigratedAttributes().alpha = value
-    }
-
-  var rotation: Float
-    get() = binderMigratedAttributes?.rotation ?: 0f
-    set(value) {
-      getOrCreateBinderMigratedAttributes().rotation = value
-    }
-
-  var rotationX: Float
-    get() = binderMigratedAttributes?.rotationX ?: 0f
-    set(value) {
-      getOrCreateBinderMigratedAttributes().rotationX = value
-    }
-
-  var rotationY: Float
-    get() = binderMigratedAttributes?.rotationY ?: 0f
-    set(value) {
-      getOrCreateBinderMigratedAttributes().rotationY = value
-    }
-
-  var clipChildren: Boolean
-    get() = binderMigratedAttributes?.clipChildren ?: true
-    set(value) {
-      getOrCreateBinderMigratedAttributes().clipChildren = value
-    }
-
-  var defaultFocusHighlightEnabled: Boolean
-    get() = binderMigratedAttributes?.defaultFocusHighlightEnabled ?: true
-    set(value) {
-      getOrCreateBinderMigratedAttributes().defaultFocusHighlightEnabled = value
-    }
-
-  var clipToOutline: Boolean
-    get() = binderMigratedAttributes?.clipToOutline ?: false
-    set(value) {
-      getOrCreateBinderMigratedAttributes().clipToOutline = value
-    }
-
-  var shadowElevation: Float
-    get() = binderMigratedAttributes?.shadowElevation ?: 0f
-    set(value) {
-      getOrCreateBinderMigratedAttributes().shadowElevation = value
+      field = value
+      flags = flags or FLAG_SHADOW_ELEVATION
     }
 
   @get:ColorInt
-  var ambientShadowColor: Int
-    get() = binderMigratedAttributes?.ambientShadowColor ?: Color.BLACK
+  var ambientShadowColor: Int = Color.BLACK
     set(value) {
-      getOrCreateBinderMigratedAttributes().ambientShadowColor = value
+      field = value
+      flags = flags or FLAG_AMBIENT_SHADOW_COLOR
     }
 
   @get:ColorInt
-  var spotShadowColor: Int
-    get() = binderMigratedAttributes?.spotShadowColor ?: Color.BLACK
+  var spotShadowColor: Int = Color.BLACK
     set(value) {
-      getOrCreateBinderMigratedAttributes().spotShadowColor = value
+      field = value
+      flags = flags or FLAG_SPOT_SHADOW_COLOR
     }
 
-  var viewTags: SparseArray<Any>?
-    get() = binderMigratedAttributes?.viewTags
-    set(value) {
-      getOrCreateBinderMigratedAttributes().viewTags = value
-    }
+  var viewTags: SparseArray<Any>? = null
 
   fun addViewTags(viewTags: SparseArray<Any>?) {
-    getOrCreateBinderMigratedAttributes().addViewTags(viewTags)
+    if (this.viewTags == null) {
+      this.viewTags = viewTags
+    } else {
+      this.viewTags = CollectionsUtils.mergeSparseArrays(this.viewTags, viewTags)
+    }
   }
 
   val isClipChildrenSet: Boolean
-    get() = binderMigratedAttributes?.isClipChildrenSet ?: false
+    get() = flags and FLAG_CLIP_CHILDREN != 0
 
   val isDefaultFocusHighlightEnabledSet: Boolean
-    get() = binderMigratedAttributes?.isDefaultFocusHighlightEnabledSet ?: false
+    get() = flags and FLAG_DEFAULT_FOCUS_HIGHLIGHT_ENABLED != 0
 
   val isScaleSet: Boolean
-    get() = binderMigratedAttributes?.isScaleSet ?: false
+    get() = flags and FLAG_SCALE != 0
 
   val isAlphaSet: Boolean
-    get() = binderMigratedAttributes?.isAlphaSet ?: false
+    get() = flags and FLAG_ALPHA != 0
 
   val isRotationSet: Boolean
-    get() = binderMigratedAttributes?.isRotationSet ?: false
+    get() = flags and FLAG_ROTATION != 0
 
   val isRotationXSet: Boolean
-    get() = binderMigratedAttributes?.isRotationXSet ?: false
+    get() = flags and FLAG_ROTATION_X != 0
 
   val isRotationYSet: Boolean
-    get() = binderMigratedAttributes?.isRotationYSet ?: false
+    get() = flags and FLAG_ROTATION_Y != 0
 
   val isTagSet: Boolean
-    get() = binderMigratedAttributes?.isTagSet ?: false
+    get() = flags and FLAG_VIEW_TAG != 0
 
   val isViewIdSet: Boolean
-    get() = binderMigratedAttributes?.isViewIdSet ?: false
+    get() = flags and FLAG_VIEW_ID != 0
 
   // ---- equals / hashCode / copyInto ----
 
@@ -376,8 +295,44 @@ class ViewAttributes {
     if (!equals(layoutDirection, other.layoutDirection)) return false
     if (stateListAnimatorRes != other.stateListAnimatorRes) return false
 
-    // Migrated (delegated to binderMigratedAttributes)
-    if (binderMigratedAttributes != other.binderMigratedAttributes) return false
+    if (!equals(tooltipText, other.tooltipText)) return false
+    if (!equals(outlineProvider, other.outlineProvider)) return false
+    if (!equals(renderEffect, other.renderEffect)) return false
+    if (rotation != other.rotation) return false
+    if (rotationX != other.rotationX) return false
+    if (rotationY != other.rotationY) return false
+    if (scale != other.scale) return false
+    if (shadowElevation != other.shadowElevation) return false
+    if (ambientShadowColor != other.ambientShadowColor) return false
+    if (spotShadowColor != other.spotShadowColor) return false
+    if (viewId != other.viewId) return false
+    if (!equals(viewTag, other.viewTag)) return false
+    if (!equals(viewTags, other.viewTags)) return false
+    if (!equals(transitionName, other.transitionName)) return false
+    if (!equals(visibility, other.visibility)) return false
+    if (layerType != other.layerType) return false
+    if (!equals(layoutPaint, other.layoutPaint)) return false
+
+    if (!DrawableUtils.isEquivalentTo(background, other.background)) return false
+    if (!DrawableUtils.isEquivalentTo(foreground, other.foreground)) return false
+    if (!equals(stateListAnimator, other.stateListAnimator)) return false
+
+    if (!isEquivalentTo(clickHandler, other.clickHandler)) return false
+    if (!isEquivalentTo(longClickHandler, other.longClickHandler)) return false
+    if (!isEquivalentTo(focusChangeHandler, other.focusChangeHandler)) return false
+    if (!isEquivalentTo(touchHandler, other.touchHandler)) return false
+    if (!isEquivalentTo(interceptTouchHandler, other.interceptTouchHandler)) return false
+    if (extraClickListeners != other.extraClickListeners) return false
+
+    if (isFocusable != other.isFocusable) return false
+    if (isClickable != other.isClickable) return false
+    if (isEnabled != other.isEnabled) return false
+    if (isSelected != other.isSelected) return false
+    if (isKeyboardNavigationCluster != other.isKeyboardNavigationCluster) return false
+    if (clipChildren != other.clipChildren) return false
+    if (defaultFocusHighlightEnabled != other.defaultFocusHighlightEnabled) return false
+    if (clipToOutline != other.clipToOutline) return false
+    if (alpha != other.alpha) return false
 
     return true
   }
@@ -394,8 +349,41 @@ class ViewAttributes {
     result = 31 * result + layoutDirection.hashCode()
     result = 31 * result + stateListAnimatorRes
 
-    // Migrated (delegated to binderMigratedAttributes)
-    result = 31 * result + (binderMigratedAttributes?.hashCode() ?: 0)
+    result = 31 * result + viewId.hashCode()
+    result = 31 * result + (viewTag?.hashCode() ?: 0)
+    result = 31 * result + (transitionName?.hashCode() ?: 0)
+    result = 31 * result + (viewTags?.hashCode() ?: 0)
+    result = 31 * result + (outlineProvider?.hashCode() ?: 0)
+    result = 31 * result + (renderEffect?.hashCode() ?: 0)
+    result = 31 * result + (background?.hashCode() ?: 0)
+    result = 31 * result + (foreground?.hashCode() ?: 0)
+    result = 31 * result + (stateListAnimator?.hashCode() ?: 0)
+    result = 31 * result + scale.hashCode()
+    result = 31 * result + alpha.hashCode()
+    result = 31 * result + rotation.hashCode()
+    result = 31 * result + rotationX.hashCode()
+    result = 31 * result + rotationY.hashCode()
+    result = 31 * result + clipChildren.hashCode()
+    result = 31 * result + defaultFocusHighlightEnabled.hashCode()
+    result = 31 * result + clipToOutline.hashCode()
+    result = 31 * result + shadowElevation.hashCode()
+    result = 31 * result + ambientShadowColor
+    result = 31 * result + spotShadowColor
+    result = 31 * result + (tooltipText?.hashCode() ?: 0)
+    result = 31 * result + (clickHandler?.hashCode() ?: 0)
+    result = 31 * result + (longClickHandler?.hashCode() ?: 0)
+    result = 31 * result + (focusChangeHandler?.hashCode() ?: 0)
+    result = 31 * result + (touchHandler?.hashCode() ?: 0)
+    result = 31 * result + (interceptTouchHandler?.hashCode() ?: 0)
+    result = 31 * result + (extraClickListeners?.hashCode() ?: 0)
+    result = 31 * result + isFocusable.hashCode()
+    result = 31 * result + isClickable.hashCode()
+    result = 31 * result + isEnabled.hashCode()
+    result = 31 * result + isSelected.hashCode()
+    result = 31 * result + isKeyboardNavigationCluster.hashCode()
+    result = 31 * result + (visibility?.hashCode() ?: 0)
+    result = 31 * result + layerType
+    result = 31 * result + (layoutPaint?.hashCode() ?: 0)
     return result
   }
 
@@ -410,8 +398,45 @@ class ViewAttributes {
     target.layoutDirection = layoutDirection
     target.stateListAnimatorRes = stateListAnimatorRes
 
-    // Migrated (delegated to binderMigratedAttributes)
-    binderMigratedAttributes?.copyInto(target.getOrCreateBinderMigratedAttributes())
+    tooltipText?.let { target.tooltipText = it }
+    target.viewId = viewId
+    viewTag?.let { target.viewTag = it }
+    transitionName?.let { target.transitionName = it }
+    viewTags?.let { target.viewTags = it }
+    outlineProvider?.let { target.outlineProvider = it }
+    renderEffect?.let { target.renderEffect = it }
+
+    background?.let { target.background = it }
+    foreground?.let { target.foreground = it }
+    stateListAnimator?.let { target.stateListAnimator = it }
+
+    if (isScaleSet) target.scale = scale
+    if (isAlphaSet) target.alpha = alpha
+    if (isRotationSet) target.rotation = rotation
+    if (isRotationXSet) target.rotationX = rotationX
+    if (isRotationYSet) target.rotationY = rotationY
+    if (isClipChildrenSet) target.clipChildren = clipChildren
+    if (isDefaultFocusHighlightEnabledSet)
+        target.defaultFocusHighlightEnabled = defaultFocusHighlightEnabled
+    target.clipToOutline = clipToOutline
+    if (flags and FLAG_SHADOW_ELEVATION != 0) target.shadowElevation = shadowElevation
+    if (flags and FLAG_AMBIENT_SHADOW_COLOR != 0) target.ambientShadowColor = ambientShadowColor
+    if (flags and FLAG_SPOT_SHADOW_COLOR != 0) target.spotShadowColor = spotShadowColor
+    clickHandler?.let { target.clickHandler = it }
+    longClickHandler?.let { target.longClickHandler = it }
+    focusChangeHandler?.let { target.focusChangeHandler = it }
+    touchHandler?.let { target.touchHandler = it }
+    interceptTouchHandler?.let { target.interceptTouchHandler = it }
+    extraClickListeners?.let { target.extraClickListeners = ArrayList(it) }
+    if (isFocusableSet) target.isFocusable = isFocusable
+    if (isClickableSet) target.isClickable = isClickable
+    if (isEnabledSet) target.isEnabled = isEnabled
+    if (isSelectedSet) target.isSelected = isSelected
+    if (isKeyboardNavigationClusterSet)
+        target.isKeyboardNavigationCluster = isKeyboardNavigationCluster
+    visibility?.let { target.visibility = it }
+    target.layerType = layerType
+    layoutPaint?.let { target.layoutPaint = it }
   }
 
   companion object {
@@ -420,6 +445,19 @@ class ViewAttributes {
     private const val FLAG_ENABLED = 1 shl 2
     private const val FLAG_SELECTED = 1 shl 3
     private const val FLAG_KEYBOARD_NAVIGATION_CLUSTER = 1 shl 4
+    private const val FLAG_SCALE = 1 shl 5
+    private const val FLAG_ALPHA = 1 shl 6
+    private const val FLAG_ROTATION = 1 shl 7
+    private const val FLAG_ROTATION_X = 1 shl 8
+    private const val FLAG_ROTATION_Y = 1 shl 9
+    private const val FLAG_CLIP_CHILDREN = 1 shl 10
+    private const val FLAG_CLIP_TO_OUTLINE = 1 shl 11
+    private const val FLAG_SHADOW_ELEVATION = 1 shl 12
+    private const val FLAG_AMBIENT_SHADOW_COLOR = 1 shl 13
+    private const val FLAG_SPOT_SHADOW_COLOR = 1 shl 14
+    private const val FLAG_VIEW_TAG = 1 shl 15
+    private const val FLAG_VIEW_ID = 1 shl 16
+    private const val FLAG_DEFAULT_FOCUS_HIGHLIGHT_ENABLED = 1 shl 17
 
     @JvmStatic
     fun setViewAttributes(
