@@ -1243,7 +1243,8 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
       if (shouldDispatchVisibilityEvent()) {
         if (forceMount) {
           notifyVisibleBoundsChanged(reason)
-        } else if (getLocalVisibleRect(rect)) {
+        }
+        if (getLocalVisibleRect(rect)) {
           processVisibilityOutputs(rect, reason)
         }
       }
@@ -1319,7 +1320,8 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
       if (shouldDispatchVisibilityEvent()) {
         if (forceMount) {
           notifyVisibleBoundsChanged(reason)
-        } else if (getLocalVisibleRect(rect)) {
+        }
+        if (getLocalVisibleRect(rect)) {
           processVisibilityOutputs(rect, reason)
         }
         recursivelySetVisibleHint(true, skipMountingIfNotVisible)

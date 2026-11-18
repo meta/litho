@@ -22,8 +22,12 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import com.facebook.litho.LifecycleStep.StepInfo
+import com.facebook.litho.LithoVisibilityEventsController.LithoVisibilityState
 import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.config.UnmountOnDetach
+import com.facebook.litho.core.height
+import com.facebook.litho.core.width
+import com.facebook.litho.layout.flexbox.Row
 import com.facebook.litho.testing.LithoTestRule
 import com.facebook.litho.testing.LithoTestRuleResizeMode
 import com.facebook.litho.testing.TestDrawableComponent
@@ -35,6 +39,8 @@ import com.facebook.litho.testing.exactly
 import com.facebook.litho.testing.helper.ComponentTestHelper
 import com.facebook.litho.testing.testrunner.LithoTestRunner
 import com.facebook.litho.testing.unspecified
+import com.facebook.litho.visibility.onInvisible
+import com.facebook.litho.visibility.onVisible
 import com.facebook.litho.widget.ComponentWrapperTester
 import com.facebook.litho.widget.HorizontalScroll
 import com.facebook.litho.widget.LayoutSpecLifecycleTester
@@ -43,6 +49,7 @@ import com.facebook.litho.widget.MountSpecLifecycleTester
 import com.facebook.litho.widget.TextDrawable
 import com.facebook.rendercore.extensions.ExtensionState
 import com.facebook.rendercore.extensions.VisibilityChangeReason
+import com.facebook.rendercore.px
 import com.facebook.rendercore.visibility.FocusedVisibleEvent
 import com.facebook.rendercore.visibility.FullImpressionVisibleEvent
 import com.facebook.rendercore.visibility.InvisibleEvent
@@ -1993,6 +2000,66 @@ class VisibilityEventsTest {
     assertThat(lifecycleTracker3.steps)
         .describedAs("Unfocus event should be dispatched")
         .contains(LifecycleStep.ON_UNFOCUSED_EVENT_VISIBLE)
+  }
+
+  @Test
+  fun visibilityRestoresAfterUnreadStateUpdate() = assertVisibilityRestoresAfterUnreadStateUpdate()
+
+  @Test
+  fun controllerVisibilityRestoresAfterUnreadStateUpdate() =
+      assertVisibilityRestoresAfterUnreadStateUpdate(LithoVisibilityEventsControllerDelegate())
+
+  private fun assertVisibilityRestoresAfterUnreadStateUpdate(
+      controller: LithoVisibilityEventsController? = null,
+  ) {
+    var renders = 0
+    val events = mutableListOf<String>()
+    lateinit var unreadState: State<Int>
+    val tree =
+        ComponentTree.create(lithoTestRule.context)
+            .withLithoVisibilityEventsController(controller)
+            .build()
+    val view =
+        lithoTestRule.render(componentTree = tree, widthPx = 10, heightPx = 10) {
+          object : KComponent() {
+            override fun ComponentScope.render(): Component {
+              renders++
+              unreadState = useState { 0 }
+              return Row(
+                  style =
+                      Style.width(10.px)
+                          .height(10.px)
+                          .onVisible { events.add("visible") }
+                          .onInvisible { events.add("invisible") },
+              )
+            }
+          }
+        }
+
+    fun setVisible(isVisible: Boolean) {
+      if (controller == null) {
+        view.lithoView.setVisibilityHint(isVisible)
+      } else {
+        controller.moveToVisibilityState(
+            if (isVisible) LithoVisibilityState.HINT_VISIBLE
+            else LithoVisibilityState.HINT_INVISIBLE,
+        )
+      }
+    }
+
+    lithoTestRule.idle()
+    val initialRenders = renders
+
+    setVisible(false)
+    unreadState.update { it + 1 }
+    lithoTestRule.idle()
+    assertThat(renders).isEqualTo(initialRenders)
+
+    setVisible(true)
+    lithoTestRule.idle()
+    assertThat(events).containsExactly("visible", "invisible", "visible")
+    assertThat(renders).isEqualTo(initialRenders)
+    view.release()
   }
 
   @Test
