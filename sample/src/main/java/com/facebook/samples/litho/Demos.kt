@@ -102,6 +102,7 @@ import com.facebook.samples.litho.kotlin.animations.statebased.AnimationCallback
 import com.facebook.samples.litho.kotlin.animations.statebased.ColorAnimationComponent
 import com.facebook.samples.litho.kotlin.animations.statebased.ExpandableCardComponent
 import com.facebook.samples.litho.kotlin.animations.statebased.FadeToggleComponent
+import com.facebook.samples.litho.kotlin.animations.statebased.FeedPhotoComponent
 import com.facebook.samples.litho.kotlin.animations.statebased.InfiniteAnimationDemosComponent
 import com.facebook.samples.litho.kotlin.animations.statebased.PathMotionComponent
 import com.facebook.samples.litho.kotlin.animations.statebased.SpecComparisonComponent
@@ -310,6 +311,10 @@ class Demos {
                         SingleDemo(
                             name = "Fade Toggle",
                             component = FadeToggleComponent(),
+                        ),
+                        SingleDemo(
+                            name = "Feed Photo Strip",
+                            component = FeedPhotoComponent(),
                         ),
                         SingleDemo(
                             name = "Animated Counter",
