@@ -346,7 +346,8 @@ public class TextMeasurementUtils {
                 heightSpec,
                 maybeTruncated);
         if (maybeTruncated != processedText
-            && keepsAdvanceOffset(useLegacyTextCustomEllipsisOffsetFix, usePerformantTruncation)) {
+            && (keepsAdvanceOffset(useLegacyTextCustomEllipsisOffsetFix, usePerformantTruncation)
+                || textStyle.useLegacyTextCustomEllipsisCut)) {
           // The kept offset is the closest one, so the prefix can be one grapheme too long and
           // Android ellipsizes the custom ellipsis itself. Step back until it fits.
           final BreakIterator graphemes = BreakIterator.getCharacterInstance();
@@ -776,9 +777,13 @@ public class TextMeasurementUtils {
     // test it so are putting it behind the same flag.
     final float ellipsisTarget;
     if (usePerformantTruncation) {
+      // getOffsetForAdvance counts from the run's start, the right edge for RTL, so the RTL target
+      // is the width left for text, as in legacy Text.
       ellipsisTarget =
           isRTL
-              ? ellipsisTextWidth
+              ? (textStyle.useLegacyTextCustomEllipsisCut
+                  ? layoutWidth - ellipsisTextWidth
+                  : ellipsisTextWidth)
               : layoutWidth
                   - ellipsisTextWidth
                   - newLayout.getLineLeft(ellipsizedLineNumber)

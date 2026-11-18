@@ -470,6 +470,12 @@ internal constructor(
     @JvmField var enableFixForTextEllipsisOffset: Boolean = true
 
     /**
+     * Primitive Text finds where to cut for a custom ellipsis with `Paint.getOffsetForAdvance`,
+     * like legacy Text, instead of the much slower `Layout.getOffsetForHorizontal`.
+     */
+    @JvmField var primitiveTextPerformantTruncation: Boolean = false
+
+    /**
      * Fixes RTL custom ellipsis truncation by converting ellipsisTarget to a run-relative advance
      * (layoutWidth - ellipsisTarget) before passing to Paint.getOffsetForAdvance for RTL text.
      * Ignored for text with an RTL layout direction, which always truncates from a run-relative
