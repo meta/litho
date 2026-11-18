@@ -93,7 +93,7 @@ class LithoCollectionItemContentUpdateOnBindTest {
   }
 
   @Test
-  fun `flag off - bind after a content-only update renders the new component synchronously`() {
+  fun `null item override with global false renders a content-only update synchronously`() {
     ComponentsConfiguration.useCommittedLayoutOnCollectionBind = false
     val (item, scope, view) = boundItemShowingA()
     updateToB(item, scope)
@@ -109,7 +109,7 @@ class LithoCollectionItemContentUpdateOnBindTest {
   }
 
   @Test
-  fun `bind after a content-only update keeps the committed layout and renders in the background`() {
+  fun `null item override with global true keeps the committed layout and renders in the background`() {
     ComponentsConfiguration.useCommittedLayoutOnCollectionBind = true
     val (item, scope, view) = boundItemShowingA()
     updateToB(item, scope)
@@ -120,6 +120,34 @@ class LithoCollectionItemContentUpdateOnBindTest {
     assertThat(view.layoutState?.height)
         .describedAs("A is shown until B commits")
         .isEqualTo(HEIGHT_A)
+    drainAndIdle()
+    assertShowsB(item, view)
+  }
+
+  @Test
+  fun `item override true with global false keeps the committed layout on a content-only update`() {
+    ComponentsConfiguration.useCommittedLayoutOnCollectionBind = false
+    val (item, scope, view) = boundItemShowingA(useCommittedLayoutOnBind = true)
+    updateToB(item, scope)
+
+    val bRendersDuringBind = rendersOfBDuring { with(item) { scope.onBindView(view) } }
+
+    assertThat(bRendersDuringBind).describedAs("B must not render inside onBindView").isEqualTo(0)
+    assertThat(view.layoutState?.height).isEqualTo(HEIGHT_A)
+    drainAndIdle()
+    assertShowsB(item, view)
+  }
+
+  @Test
+  fun `item override false with global true renders a content-only update synchronously`() {
+    ComponentsConfiguration.useCommittedLayoutOnCollectionBind = true
+    val (item, scope, view) = boundItemShowingA(useCommittedLayoutOnBind = false)
+    updateToB(item, scope)
+
+    val bRendersDuringBind = rendersOfBDuring { with(item) { scope.onBindView(view) } }
+
+    assertThat(bRendersDuringBind).isEqualTo(1)
+    assertThat(view.layoutState?.height).isEqualTo(HEIGHT_B)
     drainAndIdle()
     assertShowsB(item, view)
   }
@@ -353,10 +381,12 @@ class LithoCollectionItemContentUpdateOnBindTest {
   private fun boundItemShowingA(
       prioritizeBoundRows: Boolean = false,
       effectLog: MutableList<String>? = null,
+      useCommittedLayoutOnBind: Boolean? = null,
   ): Triple<LithoCollectionItem, CollectionLayoutScope, LithoRenderTreeView> {
     val item = createItem(
         CountingRow(LABEL_A, HEIGHT_A, counter, effectLog),
         prioritizeBoundRows = prioritizeBoundRows,
+        useCommittedLayoutOnBind = useCommittedLayoutOnBind,
     )
     val scope = createScope(item)
     val view = newView()
@@ -394,11 +424,13 @@ class LithoCollectionItemContentUpdateOnBindTest {
   private fun createItem(
       component: Component,
       prioritizeBoundRows: Boolean = false,
+      useCommittedLayoutOnBind: Boolean? = null,
   ): LithoCollectionItem = LithoCollectionItem(
       lithoTestRule.context,
       renderInfo = renderInfoOf(component),
       runnableHandlerProvider = handlerProvider,
       prioritizeBoundRows = prioritizeBoundRows,
+      useCommittedLayoutOnBind = useCommittedLayoutOnBind,
   )
 
   private fun createScope(

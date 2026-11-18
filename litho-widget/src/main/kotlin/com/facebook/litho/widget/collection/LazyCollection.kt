@@ -107,6 +107,7 @@ class LazyCollection(
     private val infraOverride: CollectionInfraOverride = CollectionInfraOverride.DEFAULT,
     private val lazyCollectionChildren: LazyCollectionChildren,
     private val saveScrollPosition: Boolean = false,
+    private val useCommittedLayoutOnBind: Boolean? = null,
 ) : KComponent() {
 
   // There's a conflict with Component.handle, so use a different name
@@ -282,6 +283,7 @@ class LazyCollection(
           shouldExcludeFromIncrementalMount = shouldExcludeFromIncrementalMount,
           onBeforeLayoutListener = onBeforeLayout,
           onAfterLayoutListener = combinedOnAfterLayout,
+          useCommittedLayoutOnBind = useCommittedLayoutOnBind,
           componentRenderer = { _: Int, model: CollectionChild ->
             val component: Component? = model.component ?: model.componentFunction?.invoke()
             if (component != null) {

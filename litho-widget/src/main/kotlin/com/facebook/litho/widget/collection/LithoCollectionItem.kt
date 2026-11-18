@@ -47,6 +47,7 @@ class LithoCollectionItem(
     // Lets bound rows post their background render ahead of other work. Only for a handler the
     // collection owns; on a shared layout thread it would jump ahead of other trees.
     private val prioritizeBoundRows: Boolean = false,
+    private val useCommittedLayoutOnBind: Boolean? = null,
     // The collection's registries for its rows' saveable state. An item outside a collection gets
     // its own, which save nothing.
     private val saveableStateRegistries: CollectionSaveableStateRegistries =
@@ -212,7 +213,7 @@ class LithoCollectionItem(
     // A different previous view means a change animation is cross-fading to this view, which must
     // not start from stale content. Dynamic sizing needs the real size from onChildMeasured below.
     val keptCommittedLayout =
-        ComponentsConfiguration.useCommittedLayoutOnCollectionBind &&
+        (useCommittedLayoutOnBind ?: ComponentsConfiguration.useCommittedLayoutOnCollectionBind) &&
             !isDynamicSize &&
             (previousView == null || previousView === view) &&
             renderer.renderAsyncKeepingCommittedLayout(

@@ -120,6 +120,11 @@ inline fun ResourcesScope.LazyList(
     /** Selects which collection infra backs this list. Defaults to the global config. */
     infraOverride: CollectionInfraOverride = CollectionInfraOverride.DEFAULT,
     saveScrollPosition: Boolean = false,
+    /**
+     * Keeps committed layouts on bind on the new collection; null uses
+     * `ComponentsConfiguration.useCommittedLayoutOnCollectionBind`.
+     */
+    useCommittedLayoutOnBind: Boolean? = null,
     crossinline init: LazyListScope.() -> Unit,
 ): Component {
   val lazyListScope = LazyListScope(context).apply { init() }
@@ -183,5 +188,6 @@ inline fun ResourcesScope.LazyList(
       infraOverride = infraOverride,
       lazyCollectionChildren = lazyListScope.children,
       saveScrollPosition = saveScrollPosition,
+      useCommittedLayoutOnBind = useCommittedLayoutOnBind,
   )
 }

@@ -168,6 +168,7 @@ class CollectionRecyclerComponent(
     private val topPadding: Int = 0,
     private val touchInterceptor: TouchInterceptor? = null,
     private val verticalFadingEdgeEnabled: Boolean = false,
+    private val useCommittedLayoutOnBind: Boolean? = null,
 ) : PrimitiveComponent() {
 
   override fun PrimitiveComponentScope.render(): LithoPrimitive {
@@ -262,6 +263,7 @@ class CollectionRecyclerComponent(
         idComparator,
         componentRenderer,
         onChildMeasured,
+        useCommittedLayoutOnBind,
     )
 
     val recyclerEventsController = useState { RecyclerEventsController() }.value
@@ -402,6 +404,7 @@ class CollectionRecyclerComponent(
                 layoutInfo = layoutInfo,
                 runnableHandlerProvider = runnableHandlerProvider,
                 changeset = changeset,
+                useCommittedLayoutOnBind = useCommittedLayoutOnBind,
                 children = children,
                 componentRenderer = componentRendererCallback,
                 contentComparator = contentComparatorCallback,
@@ -711,6 +714,7 @@ private fun buildCollectionItems(
     renderer: (index: Int, model: CollectionChild) -> RenderInfo,
     updateOperation: CollectionUpdateOperation<CollectionChild>,
     onChildMeasured: (LithoCollectionItem, IntSize) -> Unit,
+    useCommittedLayoutOnBind: Boolean?,
     saveableStateRegistries: CollectionSaveableStateRegistries,
 ): List<CollectionItem<*>> {
   val itemsNeedToRefreshRenderInfo = mutableSetOf<Int>()
@@ -726,6 +730,7 @@ private fun buildCollectionItems(
                 runnableHandlerProvider = runnableHandlerProvider,
                 onChildMeasured = onChildMeasured,
                 prioritizeBoundRows = runnableHandlerProvider is PoolingThreadHandlerProvider,
+                useCommittedLayoutOnBind = useCommittedLayoutOnBind,
                 saveableStateRegistries = saveableStateRegistries,
             )
             updatedItems.add(position, item)
@@ -783,6 +788,7 @@ private fun buildCollectionItems(
           runnableHandlerProvider = runnableHandlerProvider,
           onChildMeasured = onChildMeasured,
           prioritizeBoundRows = runnableHandlerProvider is PoolingThreadHandlerProvider,
+          useCommittedLayoutOnBind = useCommittedLayoutOnBind,
           saveableStateRegistries = saveableStateRegistries,
       )
       updatedItems.add(item)
@@ -906,6 +912,7 @@ private class CollectionPrimitiveViewLayoutBehavior(
     private val layoutInfo: LayoutInfo,
     private val runnableHandlerProvider: RunnableHandlerProvider,
     private val changeset: Changeset,
+    private val useCommittedLayoutOnBind: Boolean?,
     private val children: List<CollectionChild>,
     private val componentRenderer: (index: Int, model: CollectionChild) -> RenderInfo,
     private val contentComparator:
@@ -1113,6 +1120,7 @@ private class CollectionPrimitiveViewLayoutBehavior(
                 idComparator,
                 componentRenderer,
                 onChildMeasured,
+                useCommittedLayoutOnBind,
             )
             if (newChangeset.items != null) {
               // Remeasure the list and trigger re-layout if the size doesn't match
@@ -1417,6 +1425,7 @@ private fun generateChangeset(
     idComparator: (previousItem: CollectionChild, nextItem: CollectionChild) -> Boolean,
     componentRenderer: (index: Int, model: CollectionChild) -> RenderInfo,
     onChildMeasured: (LithoCollectionItem, IntSize) -> Unit,
+    useCommittedLayoutOnBind: Boolean?,
 ): Changeset {
 
   val (currentData, currentItems) = latestCommittedData.getData()
@@ -1440,6 +1449,7 @@ private fun generateChangeset(
       renderer = componentRenderer,
       updateOperation = operation,
       onChildMeasured = onChildMeasured,
+      useCommittedLayoutOnBind = useCommittedLayoutOnBind,
       saveableStateRegistries = saveableStateRegistries,
   )
   val rowKeys =
