@@ -608,6 +608,8 @@ internal constructor(
     /** The minimum touch-target size, in dp, used by [useAutoTouchExpansion]. Defaults to 48dp. */
     @JvmField var minTouchTargetSizeDp: Int = 48
 
+    @JvmField var enableTouchDelegateInfoForAccessibility: Boolean = true
+
     /**
      * Policy for interactive components smaller than [minTouchTargetSizeDp].
      * [LogicViolationPolicy.LOG] reports each one via [com.facebook.litho.debug.DebugInfoReporter]

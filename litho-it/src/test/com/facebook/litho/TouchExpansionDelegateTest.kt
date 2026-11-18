@@ -18,10 +18,14 @@ package com.facebook.litho
 
 import android.content.Context
 import android.graphics.Rect
+import android.graphics.Region
+import android.os.Build
 import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.TouchDelegate
 import android.view.View
+import android.view.accessibility.AccessibilityNodeInfo
+import androidx.annotation.RequiresApi
 import androidx.test.core.app.ApplicationProvider
 import com.facebook.litho.core.height
 import com.facebook.litho.core.padding
@@ -35,11 +39,15 @@ import com.facebook.litho.widget.Text
 import com.facebook.rendercore.px
 import com.facebook.yoga.YogaEdge
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.entry
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
+import org.robolectric.util.ReflectionHelpers
+import org.robolectric.util.ReflectionHelpers.ClassParameter
 
 @LooperMode(LooperMode.Mode.LEGACY)
 @RunWith(LithoTestRunner::class)
@@ -324,6 +332,243 @@ class TouchExpansionDelegateTest {
         .isEqualTo(1)
   }
 
+  @Test
+  @RequiresApi(Build.VERSION_CODES.Q)
+  @Config(sdk = [Build.VERSION_CODES.TIRAMISU])
+  fun touchDelegateInfo_reportsExpandedBoundsOfChild() {
+    val lithoView = renderExpandedComponent(ClickListenerCallback())
+    val child = requireNotNull(lithoView.findExpandedTouchTarget(10, 10))
+
+    assertThat(lithoView.touchDelegateTargets())
+        .containsExactly(entry(Rect(5, 5, 25, 25), child.accessibilityViewId()))
+  }
+
+  @Test
+  @RequiresApi(Build.VERSION_CODES.Q)
+  @Config(sdk = [Build.VERSION_CODES.TIRAMISU])
+  fun touchDelegateInfo_reportsEveryExpandedChild() {
+    val lithoView = lithoTestRule.render { TwoExpandedChildren(secondChild = true) }.lithoView
+    // The first child's expansion covers y in [0, 30); the second child's covers y in [10, 40).
+    val first = requireNotNull(lithoView.findExpandedTouchTarget(10, 5))
+    val second = requireNotNull(lithoView.findExpandedTouchTarget(10, 35))
+
+    assertThat(lithoView.touchDelegateTargets())
+        .containsOnly(
+            entry(Rect(0, 0, 30, 30), first.accessibilityViewId()),
+            entry(Rect(0, 10, 30, 40), second.accessibilityViewId()),
+        )
+  }
+
+  @Test
+  @RequiresApi(Build.VERSION_CODES.Q)
+  @Config(sdk = [Build.VERSION_CODES.TIRAMISU])
+  fun touchDelegateInfo_dropsUnmountedChild() {
+    val testLithoView = lithoTestRule.render { TwoExpandedChildren(secondChild = true) }
+    val first = requireNotNull(testLithoView.lithoView.findExpandedTouchTarget(10, 5))
+
+    testLithoView.setRoot(TwoExpandedChildren(secondChild = false))
+
+    assertThat(testLithoView.lithoView.touchExpansionDelegate?.size()).isEqualTo(1)
+    assertThat(testLithoView.lithoView.touchDelegateTargets())
+        .containsExactly(entry(Rect(0, 0, 30, 30), first.accessibilityViewId()))
+  }
+
+  @Test
+  @RequiresApi(Build.VERSION_CODES.Q)
+  @Config(sdk = [Build.VERSION_CODES.TIRAMISU])
+  fun touchDelegateInfo_dropsChildWhoseExpansionIsRemoved() {
+    val testLithoView = lithoTestRule.render { TwoExpandedChildren(secondChild = true) }
+    val first = requireNotNull(testLithoView.lithoView.findExpandedTouchTarget(10, 5))
+
+    testLithoView.setRoot(TwoExpandedChildren(secondChild = true, expandSecondChild = false))
+
+    assertThat(testLithoView.lithoView.touchDelegateTargets())
+        .containsExactly(entry(Rect(0, 0, 30, 30), first.accessibilityViewId()))
+  }
+
+  @Test
+  @RequiresApi(Build.VERSION_CODES.Q)
+  @Config(sdk = [Build.VERSION_CODES.TIRAMISU])
+  fun touchDelegateInfo_isReusedWhileNothingChanges() {
+    val delegate = requireNotNull(renderExpandedComponent(ClickListenerCallback()).touchDelegate)
+
+    assertThat(delegate.touchDelegateInfo).isSameAs(delegate.touchDelegateInfo)
+  }
+
+  @Test
+  @RequiresApi(Build.VERSION_CODES.Q)
+  @Config(sdk = [Build.VERSION_CODES.TIRAMISU])
+  fun touchDelegateInfo_isReusedAfterAnUpdateThatKeepsTheBounds() {
+    val testLithoView = lithoTestRule.render { ExpandedChild(sizePx = 10) }
+    val delegate = requireNotNull(testLithoView.lithoView.touchDelegate)
+    val info = delegate.touchDelegateInfo
+
+    testLithoView.setRoot(ExpandedChild(sizePx = 10))
+
+    assertThat(delegate.touchDelegateInfo).isSameAs(info)
+  }
+
+  @Test
+  @RequiresApi(Build.VERSION_CODES.Q)
+  @Config(sdk = [Build.VERSION_CODES.TIRAMISU])
+  fun touchDelegateInfo_followsChildrenMountedAndUnmountedAfterItWasRead() {
+    val testLithoView = lithoTestRule.render { TwoExpandedChildren(secondChild = true) }
+    val lithoView = testLithoView.lithoView
+    val first = requireNotNull(lithoView.findExpandedTouchTarget(10, 5))
+    assertThat(lithoView.touchDelegateTargets()).hasSize(2)
+
+    testLithoView.setRoot(TwoExpandedChildren(secondChild = false))
+    assertThat(lithoView.touchDelegateTargets())
+        .containsExactly(entry(Rect(0, 0, 30, 30), first.accessibilityViewId()))
+
+    testLithoView.setRoot(TwoExpandedChildren(secondChild = true))
+    val second = requireNotNull(lithoView.findExpandedTouchTarget(10, 35))
+    assertThat(lithoView.touchDelegateTargets())
+        .containsOnly(
+            entry(Rect(0, 0, 30, 30), first.accessibilityViewId()),
+            entry(Rect(0, 10, 30, 40), second.accessibilityViewId()),
+        )
+  }
+
+  @Test
+  @RequiresApi(Build.VERSION_CODES.Q)
+  @Config(sdk = [Build.VERSION_CODES.TIRAMISU])
+  fun touchDelegateInfo_followsBoundsUpdatedWithoutRemountAfterItWasRead() {
+    val testLithoView = lithoTestRule.render { ExpandedChild(sizePx = 10) }
+    val lithoView = testLithoView.lithoView
+    val child = requireNotNull(lithoView.findExpandedTouchTarget(10, 10))
+    val delegate = requireNotNull(lithoView.touchExpansionDelegate)
+    assertThat(lithoView.touchDelegateTargets())
+        .containsExactly(entry(Rect(5, 5, 25, 25), child.accessibilityViewId()))
+
+    testLithoView.setRoot(ExpandedChild(sizePx = 20))
+
+    assertThat(lithoView.touchExpansionDelegate).isSameAs(delegate)
+    assertThat(lithoView.findExpandedTouchTarget(10, 10)).isSameAs(child)
+    assertThat(lithoView.touchDelegateTargets())
+        .containsExactly(entry(Rect(5, 5, 35, 35), child.accessibilityViewId()))
+  }
+
+  @Test
+  @RequiresApi(Build.VERSION_CODES.Q)
+  @Config(sdk = [Build.VERSION_CODES.TIRAMISU])
+  fun touchDelegateInfo_withoutDelegates_reportsHostWithEmptyBounds() {
+    val host = ComponentHost(ApplicationProvider.getApplicationContext<Context>(), null)
+    val info = TouchExpansionDelegate(host).touchDelegateInfo
+
+    assertThat(info.targets()).containsExactly(entry(Rect(), host.accessibilityViewId()))
+  }
+
+  @Test
+  @RequiresApi(Build.VERSION_CODES.Q)
+  @Config(sdk = [Build.VERSION_CODES.TIRAMISU])
+  fun touchDelegateInfo_afterUnmountingAll_reportsHostWithEmptyBounds() {
+    val lithoView = renderExpandedComponent(ClickListenerCallback())
+
+    lithoView.unmountAllItems()
+
+    assertThat(lithoView.touchDelegateTargets())
+        .containsExactly(entry(Rect(), lithoView.accessibilityViewId()))
+  }
+
+  @Test
+  @RequiresApi(Build.VERSION_CODES.Q)
+  @Config(sdk = [Build.VERSION_CODES.TIRAMISU])
+  fun touchExplorationHover_doesNotDispatchToHostWithMetadataEnabledOrDisabled() {
+    for (enabled in listOf(false, true)) {
+      val previous =
+          com.facebook.litho.config.ComponentsConfiguration.enableTouchDelegateInfoForAccessibility
+      try {
+        com.facebook.litho.config.ComponentsConfiguration.enableTouchDelegateInfoForAccessibility =
+            enabled
+        val lithoView = renderExpandedComponent(ClickListenerCallback())
+        val delegate = requireNotNull(lithoView.touchExpansionDelegate)
+        var hostDispatches = 0
+        var childDispatches = 0
+        lithoView.setOnHoverListener { _, _ ->
+          hostDispatches++
+          true
+        }
+        requireNotNull(lithoView.findExpandedTouchTarget(10, 10)).setOnHoverListener { _, _ ->
+          childDispatches++
+          true
+        }
+        assertHoverNotDispatched(delegate)
+        assertThat(hostDispatches).isZero()
+        assertThat(childDispatches).isZero()
+        lithoView.unmountAllItems()
+        assertHoverNotDispatched(delegate)
+        assertThat(hostDispatches).isZero()
+        assertThat(childDispatches).isZero()
+      } finally {
+        com.facebook.litho.config.ComponentsConfiguration.enableTouchDelegateInfoForAccessibility =
+            previous
+      }
+    }
+  }
+
+  @Test
+  @RequiresApi(Build.VERSION_CODES.Q)
+  @Config(sdk = [Build.VERSION_CODES.TIRAMISU])
+  fun touchExplorationHover_emptyDelegateDoesNotDispatchExitToHost() {
+    val host = ComponentHost(ApplicationProvider.getApplicationContext<Context>(), null)
+    var dispatches = 0
+    host.setOnHoverListener { _, _ ->
+      dispatches++
+      true
+    }
+    assertHoverNotDispatched(TouchExpansionDelegate(host))
+    assertThat(dispatches).isZero()
+  }
+
+  @Test
+  @RequiresApi(Build.VERSION_CODES.Q)
+  @Config(sdk = [Build.VERSION_CODES.TIRAMISU])
+  fun touchExplorationHover_platformDelegatePositiveControlDispatchesToTarget() {
+    val target = View(ApplicationProvider.getApplicationContext<Context>())
+    var dispatches = 0
+    target.setOnHoverListener { _, _ ->
+      dispatches++
+      true
+    }
+    val delegate = TouchDelegate(Rect(5, 5, 25, 25), target)
+    for (action in
+        listOf(
+            MotionEvent.ACTION_HOVER_ENTER,
+            MotionEvent.ACTION_HOVER_MOVE,
+            MotionEvent.ACTION_HOVER_EXIT,
+        )) {
+      val event = MotionEvent.obtain(0, 0, action, 10f, 10f, 0)
+      try {
+        assertThat(delegate.onTouchExplorationHoverEvent(event)).isTrue()
+      } finally {
+        event.recycle()
+      }
+    }
+    assertThat(dispatches).isEqualTo(3)
+  }
+
+  @RequiresApi(Build.VERSION_CODES.Q)
+  private fun assertHoverNotDispatched(delegate: TouchExpansionDelegate) {
+    for (action in
+        listOf(
+            MotionEvent.ACTION_HOVER_ENTER,
+            MotionEvent.ACTION_HOVER_MOVE,
+            MotionEvent.ACTION_HOVER_EXIT,
+        )) {
+      for (coordinate in listOf(10f, 100f)) {
+        val event = MotionEvent.obtain(0, 0, action, coordinate, coordinate, 0)
+        try {
+          assertThat(delegate.onTouchExplorationHoverEvent(event)).isFalse()
+          assertThat(event.x).isEqualTo(coordinate)
+          assertThat(event.y).isEqualTo(coordinate)
+        } finally {
+          event.recycle()
+        }
+      }
+    }
+  }
+
   private fun renderExpandedComponent(callback: ClickListenerCallback): LithoView {
     return lithoTestRule
         .render {
@@ -337,6 +582,44 @@ class TouchExpansionDelegateTest {
           }
         }
         .lithoView
+  }
+
+  private class ExpandedChild(private val sizePx: Int) : KComponent() {
+    override fun ComponentScope.render(): Component =
+        Column(style = Style.padding(all = 10.px)) {
+          child(
+              OnClickCallbackComponent(
+                  callback = ClickListenerCallback(),
+                  style = Style.width(sizePx.px).height(sizePx.px).touchExpansion(all = 5.px),
+              ),
+          )
+        }
+  }
+
+  private class TwoExpandedChildren(
+      private val secondChild: Boolean,
+      private val expandSecondChild: Boolean = true,
+  ) : KComponent() {
+    override fun ComponentScope.render(): Component =
+        Column(style = Style.padding(all = 10.px)) {
+          child(
+              OnClickCallbackComponent(
+                  callback = ClickListenerCallback(),
+                  style = Style.width(10.px).height(10.px).touchExpansion(all = 10.px),
+              ),
+          )
+          if (secondChild) {
+            child(
+                OnClickCallbackComponent(
+                    callback = ClickListenerCallback(),
+                    style =
+                        Style.width(10.px).height(10.px).let {
+                          if (expandSecondChild) it.touchExpansion(all = 10.px) else it
+                        },
+                ),
+            )
+          }
+        }
   }
 
   class ClickListenerCallback : View.OnClickListener {
@@ -355,6 +638,30 @@ class TouchExpansionDelegateTest {
   }
 
   companion object {
+    /** The touch delegate info the host puts on its [AccessibilityNodeInfo] once attached. */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun View.touchDelegateTargets(): Map<Rect, Long> =
+        requireNotNull(touchDelegate).touchDelegateInfo.targets()
+
+    /**
+     * Maps each region's bounds to its target's accessibility view id. TouchDelegateInfo keeps only
+     * view ids, and the accessors for them are hidden API.
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun AccessibilityNodeInfo.TouchDelegateInfo.targets(): Map<Rect, Long> =
+        (0 until regionCount).associate { i ->
+          val region = getRegionAt(i)
+          region.bounds to
+              ReflectionHelpers.callInstanceMethod<Long>(
+                  this,
+                  "getAccessibilityIdForRegion",
+                  ClassParameter.from(Region::class.java, region),
+              )!!
+        }
+
+    private fun View.accessibilityViewId(): Long =
+        ReflectionHelpers.callInstanceMethod<Int>(this, "getAccessibilityViewId")!!.toLong()
+
     fun View.emulateClickEvent(x: Int, y: Int) {
       val down =
           MotionEvent.obtain(
