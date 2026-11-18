@@ -20,7 +20,6 @@ import com.facebook.litho.Component
 import com.facebook.litho.ComponentScope
 import com.facebook.litho.KComponent
 import com.facebook.litho.Style
-import com.facebook.litho.animation.FloatTypeConverter
 import com.facebook.litho.animation.alpha
 import com.facebook.litho.animation.scale
 import com.facebook.litho.animation.useAnimatable
@@ -43,8 +42,8 @@ import com.facebook.yoga.YogaJustify
 class SimpleAnimatableKComponent : KComponent() {
 
   override fun ComponentScope.render(): Component? {
-    val scale = useAnimatable(1f, FloatTypeConverter)
-    val alpha = useAnimatable(1f, FloatTypeConverter)
+    val scale = useAnimatable(1f)
+    val alpha = useAnimatable(1f)
 
     val square = Column(
         style =

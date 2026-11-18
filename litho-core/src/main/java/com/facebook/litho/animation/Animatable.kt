@@ -28,6 +28,8 @@ import com.facebook.litho.getUpdatedState
 import com.facebook.litho.onCleanup
 import com.facebook.litho.state.StateId
 import com.facebook.litho.useEffect
+import com.facebook.rendercore.Dimen
+import com.facebook.rendercore.graphics.Color
 import com.facebook.rendercore.thread.utils.ThreadUtils
 
 /** The immutable terminal outcome of an imperative animation command. */
@@ -221,7 +223,7 @@ internal constructor(
    * Publishes the active command's target and ends it [AnimationEnd.Finished] asynchronously.
    *
    * ```kotlin
-   * val alpha = useAnimatable(0.4f, FloatTypeConverter)
+   * val alpha = useAnimatable(0.4f)
    * // From an event handler:
    * alpha.startAnimation(1f, tween(300.ms)) { outcome -> /* handle completion */ }
    * // From a later event handler, complete the command immediately:
@@ -256,6 +258,9 @@ internal constructor(
  *
  * Use this when animation should be triggered directly from a callback instead of being inferred
  * from a target value during render.
+ *
+ * Overloads for [Float], [Int], [Color], and [Dimen] select their built-in converter automatically.
+ * Pass [typeConverter] explicitly for a custom animated type.
  */
 @ExperimentalLithoApi
 @Hook
@@ -303,3 +308,30 @@ fun <T> ComponentScope.useAnimatable(
 
   return animatable
 }
+
+/** Creates a component-owned [Float] animation handle retained across renders. */
+@ExperimentalLithoApi
+@Hook
+fun ComponentScope.useAnimatable(initialValue: Float, label: String = "float"): Animatable<Float> =
+    useAnimatable(initialValue, FloatTypeConverter, label)
+
+/** Creates a component-owned [Int] animation handle retained across renders. */
+@ExperimentalLithoApi
+@Hook
+fun ComponentScope.useAnimatable(initialValue: Int, label: String = "int"): Animatable<Int> =
+    useAnimatable(initialValue, IntTypeConverter, label)
+
+/** Creates a component-owned [Color] animation handle with per-channel interpolation. */
+@ExperimentalLithoApi
+@Hook
+fun ComponentScope.useAnimatable(initialValue: Color, label: String = "color"): Animatable<Color> =
+    useAnimatable(initialValue, ColorTypeConverter, label)
+
+/**
+ * Creates a component-owned [Dimen] animation handle using this component's resource resolver for
+ * dp/sp-to-pixel conversion.
+ */
+@ExperimentalLithoApi
+@Hook
+fun ComponentScope.useAnimatable(initialValue: Dimen, label: String = "dimen"): Animatable<Dimen> =
+    useAnimatable(initialValue, DimenTypeConverter(resourceResolver), label)

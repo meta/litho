@@ -414,9 +414,7 @@ class AnimatableTest {
             Style.width(100.px)
                 .height(100.px)
                 .alpha(
-                    useAnimatable(0f, FloatTypeConverter, label = label)
-                        .also { capturedAnimatable = it }
-                        .value,
+                    useAnimatable(0f, label = label).also { capturedAnimatable = it }.value,
                 ),
     )
   }

@@ -190,7 +190,7 @@ excursion between equal endpoints. A no-op does not need a deferred-start gate t
 thread from event handlers, and pass its `value` directly to a `Style` binding:
 
 ```kotlin
-val alpha = useAnimatable(0.4f, FloatTypeConverter)
+val alpha = useAnimatable(0.4f)
 // In an event handler:
 alpha.startAnimation(1f, tween(300.ms)) { outcome ->
     when (outcome) {
@@ -238,8 +238,8 @@ import com.facebook.litho.animation.wait
 import com.facebook.litho.animation.snapTo
 import com.facebook.litho.animation.useAnimationScope
 
-val opacity = useAnimatable(0f, FloatTypeConverter)
-val position = useAnimatable(120.dp, DimenTypeConverter)
+val opacity = useAnimatable(0f)
+val position = useAnimatable(120.dp)
 val animations = useAnimationScope(playback = playback)
 
 Style.onClick {
