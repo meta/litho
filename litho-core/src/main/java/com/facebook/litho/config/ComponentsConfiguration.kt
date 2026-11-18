@@ -459,6 +459,15 @@ internal constructor(
     @JvmField var usePrimitiveTextInput: Boolean = false
 
     /**
+     * When true, a legacy `TextInput` or `MaterialTextInput` measured on the main thread takes its
+     * measurement `EditText` from the `MountContentPools` pool of
+     * `TextInputMeasureEditTextAllocator` for its context, where
+     * `TextInputMeasureEditTextAllocator.prefill` builds one on the background layout thread, and
+     * the pool is refilled after each take.
+     */
+    @JvmField var prefetchTextInputMeasureEditText: Boolean = false
+
+    /**
      * Gives every mounted TextInput MATCH_PARENT layout params, as its
      * `shouldUseMatchParentLayoutParams` prop does for one input. Litho sizes the EditText itself,
      * so the default WRAP_CONTENT params only make every edit request a layout up to the window

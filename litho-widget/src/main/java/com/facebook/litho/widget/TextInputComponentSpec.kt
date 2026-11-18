@@ -18,6 +18,7 @@ package com.facebook.litho.widget
 
 import android.content.Context
 import android.content.res.ColorStateList
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.Typeface
@@ -427,7 +428,9 @@ internal object TextInputComponentSpec {
   ): EditText {
     // The height should be the measured height of EditText with relevant params
     var textToMeasure = text
-    val forMeasure = ForMeasureEditText(c.androidContext)
+    val forMeasure =
+        TextInputMeasureEditTextAllocator.take(c.androidContext)
+            ?: ForMeasureEditText(c.androidContext)
     // If text contains Spans, we don't want it to be mutable for the measurement case
     if (textToMeasure is Spannable) {
       textToMeasure = textToMeasure.toString()
@@ -1752,6 +1755,9 @@ internal object TextInputComponentSpec {
    */
   internal class ForMeasureEditText(context: Context?) : EditText(context) {
     private var disableAutofill = false
+
+    /** The configuration a pooled view was built under; null if it was not pooled. */
+    internal var builtConfiguration: Configuration? = null
 
     // This view is not intended to be drawn and invalidated
     override fun invalidate(): Unit = Unit
