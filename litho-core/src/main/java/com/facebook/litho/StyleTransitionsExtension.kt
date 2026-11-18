@@ -67,6 +67,7 @@ internal object StyleTransitionsExtension :
     state.manager.setup(
         previousInput?.styleTransitionTargets ?: emptyList(),
         input?.styleTransitionTargets ?: emptyList(),
+        input?.animatableItems,
     )
     updateReflowAnimations(input, lithoTree)
   }
@@ -197,11 +198,8 @@ internal object StyleTransitionsExtension :
   ) {
     val state = extensionState.state
     val renderUnitId = renderUnit.id
-    // A node still present as a current target is being updated in place (a bounds/reflow change or
-    // any re-mount), not recycled — resetting it would wipe a settled or constant declared prop
-    // (e.g. a non-animating alpha) with nothing to restore it. Only a leaving node is reset.
-    val currentTarget = state.currentTargets?.get(renderUnitId)
-    if (currentTarget != null) {
+    // A live node keeps its committed properties, including a transition settled before mount.
+    if (state.currentInput?.animatableItems?.get(renderUnitId) != null) {
       return
     }
     val previousTarget = state.previousTargets?.get(renderUnitId)

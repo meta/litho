@@ -33,6 +33,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.kotlin.mock
 import org.robolectric.Robolectric
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.LooperMode
@@ -303,6 +304,42 @@ class StyleTransitionInterruptionTest {
     animationRule.runNextFrame(150.ms)
     assertThat(view.x).isEqualTo(1f)
     assertThat(view.alpha).isGreaterThan(0.96f).isLessThan(1f)
+  }
+
+  @Test
+  fun continuingAnimationsReconcileWithLinearKeyComparisons() {
+    val manager = StyleTransitionManager()
+    val identities = List(1_000) { CountingIdentity(it) }
+    val spec = transitionSpec { alpha = tween(duration = 1_000.ms) }
+    val previous = ArrayList<StyleTransitionTarget>()
+    val next = ArrayList<StyleTransitionTarget>()
+    for ((index, identity) in identities.withIndex()) {
+      val id = index.toLong()
+      val transitionId = StructuralStyleTransitionId(identity)
+      previous.add(styleTransitionTarget(transitionId, spec, animatableItem(id, 1f, true)))
+      val item = animatableItem(id, 0f, true)
+      next.add(styleTransitionTarget(transitionId, spec, item))
+    }
+    val view = View(activityController.get())
+    manager.setup(previous, next, committedItems = mock())
+    manager.run(StyleTransitionContentResolver { listOf(view) })
+    assertThat(manager.hasRunningAnimationForRenderUnit(0)).isTrue()
+
+    for (identity in identities) identity.comparisons = 0
+    manager.setup(next, next, committedItems = mock())
+    assertThat(identities.sumOf { it.comparisons }).isLessThan(identities.size * 2)
+    manager.reset()
+  }
+
+  private class CountingIdentity(private val id: Int) {
+    var comparisons = 0
+
+    override fun hashCode(): Int = id
+
+    override fun equals(other: Any?): Boolean {
+      comparisons++
+      return other is CountingIdentity && id == other.id
+    }
   }
 
   private fun transitionSpec(block: StyleTransitionScope.() -> Unit): StyleTransitionSpec =

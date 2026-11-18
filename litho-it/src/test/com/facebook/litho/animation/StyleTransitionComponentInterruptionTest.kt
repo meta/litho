@@ -18,10 +18,14 @@ package com.facebook.litho.animation
 
 import android.graphics.Color
 import android.os.Looper.getMainLooper
+import android.view.View
 import com.facebook.litho.Component
 import com.facebook.litho.ComponentScope
+import com.facebook.litho.DynamicValue
 import com.facebook.litho.KComponent
 import com.facebook.litho.Style
+import com.facebook.litho.Value
+import com.facebook.litho.animated.alpha as dynamicAlpha
 import com.facebook.litho.annotations.ExperimentalLithoApi
 import com.facebook.litho.core.height
 import com.facebook.litho.core.width
@@ -130,19 +134,101 @@ class StyleTransitionComponentInterruptionTest {
     assertThat(view.alpha).isGreaterThan(valueAtInterrupt)
   }
 
+  @Test
+  fun undeclaredTransitionMidFlightSnapsToCommittedAlpha() {
+    for (spec in listOf(FadeSpec.NULL, FadeSpec.ABSENT, FadeSpec.NO_TRANSITION)) {
+      assertFadeSettles(spec, targetAlpha = 0f)
+      assertFadeSettles(spec, targetAlpha = 1f)
+      assertFadeSettles(spec, targetAlpha = 0f, width = 200)
+      assertFadeSettles(spec, targetAlpha = 1f, alphaStyle = Style)
+    }
+  }
+
+  @Test
+  fun removingTransitionMidFlightPreservesBoundAlpha() {
+    val value =
+        object : Value<Float> {
+          override val value: Float = 0.4f
+        }
+    assertFadeSettles(FadeSpec.NO_TRANSITION, targetAlpha = 0.4f, alphaStyle = Style.alpha(value))
+
+    val dynamic = DynamicValue(0.4f)
+    assertFadeSettles(
+        FadeSpec.NO_TRANSITION,
+        targetAlpha = 0.4f,
+        alphaStyle = Style.dynamicAlpha(dynamic),
+    ) { view ->
+      dynamic.set(0.6f)
+      assertThat(view.alpha).isEqualTo(0.6f)
+    }
+  }
+
+  private fun assertFadeSettles(
+      spec: FadeSpec,
+      targetAlpha: Float,
+      alphaStyle: Style = Style.viewAlpha(targetAlpha),
+      width: Int = 100,
+      checkBinding: (View) -> Unit = {},
+  ) {
+    fun root(component: Component?) =
+        Column(style = Style.width(200.px).height(100.px)) {
+          if (component != null) child(component)
+        }
+    val testView = lithoTestRule.render {
+      root(FadeComponent(targetAlpha = 1f, bgColor = Color.RED))
+    }
+    shadowOf(getMainLooper()).idle()
+    val view = testView.findViewWithTag(FADE_TAG)
+
+    testView.setRoot(root(FadeComponent(targetAlpha = 0f, bgColor = Color.RED)))
+    shadowOf(getMainLooper()).idle()
+    animationRule.advanceBy(250.ms)
+    assertThat(view.alpha).isEqualTo(0.75f)
+
+    testView.setRoot(root(FadeComponent(targetAlpha, Color.RED, spec, alphaStyle.width(width.px))))
+    shadowOf(getMainLooper()).idle()
+    assertThat(view.width).isEqualTo(width)
+    assertThat(view.alpha)
+        .describedAs("$spec target=$targetAlpha width=$width")
+        .isEqualTo(targetAlpha)
+    animationRule.advanceBy(500.ms)
+    assertThat(view.alpha).isEqualTo(targetAlpha)
+    checkBinding(view)
+
+    testView.setRoot(root(null))
+    shadowOf(getMainLooper()).idle()
+    assertThat(view.parent).isNull()
+    assertThat(view.alpha).isEqualTo(1f)
+    animationRule.advanceBy(500.ms)
+    assertThat(view.alpha).isEqualTo(1f)
+    testView.release()
+  }
+
+  private enum class FadeSpec {
+    ANIMATED,
+    NULL,
+    ABSENT,
+    NO_TRANSITION,
+  }
+
   private class FadeComponent(
-      private val targetAlpha: Float,
+      targetAlpha: Float,
       private val bgColor: Int,
+      private val spec: FadeSpec = FadeSpec.ANIMATED,
+      private val alphaStyle: Style = Style.viewAlpha(targetAlpha),
   ) : KComponent() {
-    override fun ComponentScope.render(): Component = Row(
-        style =
-            Style.width(100.px)
-                .height(100.px)
-                .backgroundColor(bgColor)
-                .viewAlpha(targetAlpha)
-                .transition { alpha = tween(duration = 1_000.ms, easing = Easing.Linear) }
-                .viewTag(FADE_TAG),
-    )
+    override fun ComponentScope.render(): Component {
+      val base = Style.width(100.px).height(100.px).backgroundColor(bgColor) + alphaStyle
+      val style =
+          when (spec) {
+            FadeSpec.ANIMATED ->
+                base.transition { alpha = tween(duration = 1_000.ms, easing = Easing.Linear) }
+            FadeSpec.NULL -> base.transition { alpha = null }
+            FadeSpec.ABSENT -> base.transition { scale = tween(duration = 1_000.ms) }
+            FadeSpec.NO_TRANSITION -> base
+          }
+      return Row(style = style.viewTag(FADE_TAG))
+    }
   }
 
   private class RemountHostComponent(

@@ -16,6 +16,11 @@
 
 package com.facebook.litho.animation
 
+import androidx.collection.LongObjectMap
+import androidx.collection.MutableScatterSet
+import androidx.collection.ScatterSet
+import androidx.collection.emptyScatterSet
+import com.facebook.litho.AnimatableItem
 import com.facebook.litho.OutputUnitType
 
 internal fun interface StyleTransitionContentResolver {
@@ -26,29 +31,66 @@ internal class StyleTransitionManager {
   private val frameAnimation = FrameDrivenAnimation(::onFrame)
   private val runningAnimations = LinkedHashMap<StyleTransitionAnimationKey, RunningAnimation>()
   private var pendingPlans: List<StyleTransitionAnimationPlan> = emptyList()
+  private var pendingPlanKeys: ScatterSet<StyleTransitionAnimationKey> = emptyScatterSet()
 
+  /**
+   * Plans the next commit. [committedItems] resolves a running animation's render unit in the
+   * committed layout. Undeclared animations settle before mount updates, leaving the final write to
+   * the committed binders.
+   */
   fun setup(
       previousTargets: List<StyleTransitionTarget>,
       nextTargets: List<StyleTransitionTarget>,
+      committedItems: LongObjectMap<AnimatableItem>? = null,
   ) {
     pendingPlans =
         StyleTransitionPlanner.createPlans(previousTargets, nextTargets, runningAnimations.keys)
+    pendingPlanKeys =
+        if (pendingPlans.isEmpty()) emptyScatterSet()
+        else
+            MutableScatterSet<StyleTransitionAnimationKey>(pendingPlans.size).apply {
+              for (plan in pendingPlans) add(plan.key)
+            }
+    if (runningAnimations.isNotEmpty() && committedItems != null) {
+      snapUnplannedAnimations(committedItems)
+    }
+  }
+
+  /**
+   * Settles undeclared alpha/scale/rotation animations on the currently mounted content. x/y are
+   * reset to their layout position in [run]; width/height are left to layout.
+   */
+  private fun snapUnplannedAnimations(
+      committedItems: LongObjectMap<AnimatableItem>,
+  ) {
+    val iterator = runningAnimations.entries.iterator()
+    while (iterator.hasNext()) {
+      val (key, running) = iterator.next()
+      when (key.property) {
+        StyleTransitionProperty.X,
+        StyleTransitionProperty.Y,
+        StyleTransitionProperty.WIDTH,
+        StyleTransitionProperty.HEIGHT -> continue
+        else -> Unit
+      }
+      if (key in pendingPlanKeys) {
+        continue
+      }
+      val item = committedItems[running.plan.renderUnitId] ?: continue
+      val targetValue = key.property.animatedProperty.get(item)
+      setProperty(running.plan, running.contents, targetValue)
+      iterator.remove()
+    }
   }
 
   fun run(contentResolver: StyleTransitionContentResolver) {
-    var plannedKeys: MutableSet<StyleTransitionAnimationKey>? = null
     for (plan in pendingPlans) {
-      var keys = plannedKeys
-      if (keys == null) {
-        keys = HashSet()
-        plannedKeys = keys
-      }
-      keys.add(plan.key)
       val contents = contentResolver.getContents(plan)
       if (contents.isEmpty()) {
         runningAnimations.remove(plan.key)
         continue
       }
+      val animationSpec = plan.animationSpec
       val previousAnimation = runningAnimations[plan.key]
       if (previousAnimation != null && previousAnimation.shouldKeepRunningFor(plan)) {
         val currentValue = previousAnimation.currentValue()
@@ -78,9 +120,9 @@ internal class StyleTransitionManager {
                     StyleTransitionProperty.Y,
                     StyleTransitionProperty.WIDTH,
                     StyleTransitionProperty.HEIGHT ->
-                        (plan.animationSpec as? FiniteAnimationSpec<Float>)
-                            ?.withDefaultVisibilityThreshold(0.5f) ?: plan.animationSpec
-                    else -> plan.animationSpec
+                        (animationSpec as? FiniteAnimationSpec<Float>)
+                            ?.withDefaultVisibilityThreshold(0.5f) ?: animationSpec
+                    else -> animationSpec
                   }.createAnimator(
                       currentValue,
                       plan.targetValue,
@@ -98,7 +140,7 @@ internal class StyleTransitionManager {
     val iterator = runningAnimations.entries.iterator()
     while (iterator.hasNext()) {
       val entry = iterator.next()
-      if (plannedKeys?.contains(entry.key) != true) {
+      if (entry.key !in pendingPlanKeys) {
         // A dropped x/y animation leaves a stale translation on the view (e.g. a reflow relayout
         // takes over positioning mid-transform); zero it so the node sits at its layout position.
         // Only x/y — alpha/scale hold a meaningful settled value that must not be reset here.
@@ -113,6 +155,7 @@ internal class StyleTransitionManager {
     }
 
     pendingPlans = emptyList()
+    pendingPlanKeys = emptyScatterSet()
     if (runningAnimations.isNotEmpty()) {
       AnimationController.register(frameAnimation)
     } else {
@@ -124,15 +167,16 @@ internal class StyleTransitionManager {
     AnimationController.unregister(frameAnimation)
     runningAnimations.clear()
     pendingPlans = emptyList()
+    pendingPlanKeys = emptyScatterSet()
   }
 
   /**
    * Resets [content]'s declared properties to their defaults for a node that is leaving, and
    * reconciles the running animations that target [renderUnitId], so a recycled host keeps no stale
-   * transform. Only called for a node that is no longer a current target — a live node updated in
-   * place is skipped by the caller ([StyleTransitionsExtension.onUnbindItem]), since resetting its
-   * settled or constant declared property (e.g. a non-animating alpha) would wipe it with nothing
-   * to restore it.
+   * transform. Only called for a node that is no longer in the committed layout — a live node
+   * updated in place is skipped by the caller ([StyleTransitionsExtension.onUnbindItem]), since
+   * resetting its settled or constant declared property (e.g. a non-animating alpha) would wipe it
+   * with nothing to restore it.
    *
    * A running animation is preserved when [pendingPlans] still holds its key (a same-pass migration
    * to new content that [run] re-binds); its [content] is only detached so a stray frame cannot
@@ -185,14 +229,8 @@ internal class StyleTransitionManager {
     }
   }
 
-  private fun hasPendingPlanForKey(key: StyleTransitionAnimationKey): Boolean {
-    for (plan in pendingPlans) {
-      if (plan.key == key) {
-        return true
-      }
-    }
-    return false
-  }
+  private fun hasPendingPlanForKey(key: StyleTransitionAnimationKey): Boolean =
+      key in pendingPlanKeys
 
   private fun onFrame(frameTimeNanos: Long): Boolean {
     if (runningAnimations.isEmpty()) {
