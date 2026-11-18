@@ -19,4 +19,8 @@
   <style name="LithoScrollView">
     <item name="android:scrollbars">vertical</item>
   </style>
+
+  <style name="LithoTextInputNoDefaultBackground">
+    <item name="android:editTextBackground">@null</item>
+  </style>
 </resources>

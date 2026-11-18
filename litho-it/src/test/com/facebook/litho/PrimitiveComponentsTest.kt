@@ -1529,6 +1529,37 @@ class PrimitiveComponentsTest {
     assertThat(MountContentPools.getContentPoolItemCount(androidContext, allocator)).isZero()
   }
 
+  @Test
+  fun `a preallocation that throws leaves the pool empty and mount builds the content`() {
+    var builds = 0
+    val allocator =
+        ViewAllocator(canPreallocate = true) { context ->
+          builds++
+          if (builds == 1) throw NullPointerException("race while building off the main thread")
+          TextView(context)
+        }
+    val tree =
+        ComponentTree.create(mLithoTestRule.context)
+            .componentsConfiguration(
+                mLithoTestRule.context.lithoConfiguration.componentsConfig.copy(
+                    preAllocationHandler =
+                        PreAllocationHandler.Custom(
+                            RunnableHandler.DefaultHandler(android.os.Looper.getMainLooper()),
+                        ),
+                ),
+            )
+            .build()
+
+    tree.setRootAndSizeSpecSync(FixedSizeViewComponent(allocator), exactly(100), exactly(100))
+    mLithoTestRule.idle()
+
+    val androidContext = mLithoTestRule.context.androidContext
+    assertThat(MountContentPools.getContentPoolItemCount(androidContext, allocator)).isZero()
+
+    val testView = mLithoTestRule.render(componentTree = tree) { FixedSizeViewComponent(allocator) }
+    assertThat(testView.lithoView.getChildAt(0)).isInstanceOf(TextView::class.java)
+  }
+
   @OptIn(ExperimentalLithoApi::class)
   private fun treeWithPoolScope(
       poolScope: PoolScope,

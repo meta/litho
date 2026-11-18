@@ -41,6 +41,7 @@ import android.text.method.TransformationMethod
 import android.text.style.SuggestionRangeSpan
 import android.util.TypedValue
 import android.view.ActionMode
+import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
@@ -360,19 +361,7 @@ class ExperimentalTextInput(
                 measurements = measurements.value,
             ),
         mountBehavior =
-            MountBehavior(
-                ViewAllocator { context ->
-                  val editText = EditTextWithEventHandlers(context)
-                  // Setting a custom editable factory so we can catch and rethrow crashes from
-                  // SpannableStringBuilder#setSpan with additional information. This should cause
-                  // no functional changes.
-                  editText.setEditableFactory(SafeSetSpanEditableFactory())
-                  if (ComponentsConfiguration.textInputUsesMatchParentLayoutParams) {
-                    editText.layoutParams = ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT)
-                  }
-                  editText
-                },
-            ) {
+            MountBehavior(EditTextAllocator) {
               shouldExcludeFromIncrementalMount = excludeFromIncrementalMount
 
               // Controller
@@ -875,6 +864,28 @@ private fun removeNoSuggestionsFlagIfExists(inputType: Int): Int {
  */
 @JvmField val UNSET_DRAWABLE: Drawable = TextInputComponentSpec.UNSET_DRAWABLE
 
+/**
+ * Trees with a preallocation handler build an EditText on their layout thread after each layout
+ * commit, until the pool is full, so a later mount doesn't build it on the main thread.
+ */
+internal val EditTextAllocator: ViewAllocator<EditTextWithEventHandlers> =
+    ViewAllocator(canPreallocate = true) { context ->
+      // Preallocation builds it on a layout thread while mount may load the theme's default
+      // background on the main thread, and that drawable's shared state isn't thread safe. Mount
+      // sets the real background in [setParams].
+      val editText = EditTextWithEventHandlers(
+          ContextThemeWrapper(context, R.style.LithoTextInputNoDefaultBackground),
+      )
+      // Setting a custom editable factory so we can catch and rethrow crashes from
+      // SpannableStringBuilder#setSpan with additional information. This should cause
+      // no functional changes.
+      editText.setEditableFactory(SafeSetSpanEditableFactory())
+      if (ComponentsConfiguration.textInputUsesMatchParentLayoutParams) {
+        editText.layoutParams = ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT)
+      }
+      editText
+    }
+
 /** UI thread only; used in OnMount. */
 private val BackgroundPaddingRect = Rect()
 
@@ -1225,10 +1236,31 @@ internal class EditTextWithEventHandlers(context: Context?) :
 
   private var onWindowFocusChangeListener: ViewTreeObserver.OnWindowFocusChangeListener? = null
 
+  /** False while the View constructor runs: it sets the theme's default background. */
+  private var isConstructed = false
+
   init {
     // Unfortunately we can't just override `void onEditorAction(int actionCode)` as that only
     // covers a subset of all cases where onEditorActionListener is invoked.
     this.setOnEditorActionListener(this)
+    isConstructed = true
+  }
+
+  override fun setBackground(background: Drawable?) {
+    if (isConstructed) {
+      super.setBackground(background)
+      return
+    }
+    // The theme's default background shares its ConstantState with every EditText being built, on
+    // any thread, and races with them (see [ForMeasureEditText]). Preallocation builds this view on
+    // a layout thread while mount may build one on the main thread. Mount sets the real background
+    // in [setParams].
+    try {
+      background?.mutate()
+      super.setBackground(background)
+    } catch (e: NullPointerException) {
+      super.setBackground(null)
+    }
   }
 
   override fun onTextChanged(text: CharSequence, start: Int, lengthBefore: Int, lengthAfter: Int) {

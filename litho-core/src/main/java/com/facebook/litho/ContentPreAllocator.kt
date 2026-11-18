@@ -19,6 +19,7 @@ package com.facebook.litho
 import android.content.Context
 import android.util.Log
 import com.facebook.litho.LithoRenderUnit.Companion.getRenderUnit
+import com.facebook.litho.debug.DebugInfoReporter
 import com.facebook.litho.debug.LithoDebugEvent
 import com.facebook.rendercore.ContentAllocator
 import com.facebook.rendercore.PoolScope
@@ -96,11 +97,23 @@ constructor(
       val componentSimpleName = component.simpleName
 
       ComponentsSystrace.trace({ "mount.preAllocateContent:$componentSimpleName" }) {
-        val preallocated = preAllocator(
-            componentContext.androidContext,
-            treeNode.renderUnit.contentAllocator,
-            treeNode.poolScope,
-        )
+        val preallocated =
+            try {
+              preAllocator(
+                  componentContext.androidContext,
+                  treeNode.renderUnit.contentAllocator,
+                  treeNode.poolScope,
+              )
+            } catch (e: RuntimeException) {
+              // Preallocation is best-effort. Building views off the main thread can hit races that
+              // mount on the main thread doesn't, and mount builds the content if the pool is
+              // empty.
+              DebugInfoReporter.report(PREALLOCATION_FAILED) {
+                this["component"] = componentSimpleName
+                this["exception"] = e.toString()
+              }
+              false
+            }
         Log.d(
             "ContentPreAllocator",
             "Preallocation of $componentSimpleName" + if (preallocated) " succeeded" else " failed",
@@ -117,5 +130,9 @@ constructor(
 
   private fun Component.isSpecGeneratedComponentThatCanPreallocate(): Boolean {
     return this is SpecGeneratedComponent && canPreallocate()
+  }
+
+  private companion object {
+    const val PREALLOCATION_FAILED = "ContentPreAllocator:PreallocationFailed"
   }
 }
