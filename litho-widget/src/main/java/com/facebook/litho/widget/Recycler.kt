@@ -21,6 +21,7 @@ import android.graphics.Color
 import android.view.View
 import androidx.annotation.ColorInt
 import androidx.annotation.IdRes
+import androidx.annotation.RestrictTo
 import androidx.core.view.ViewCompat
 import androidx.recyclerview.widget.DefaultItemAnimator
 import androidx.recyclerview.widget.RecyclerView
@@ -33,6 +34,7 @@ import com.facebook.litho.ResourcesScope
 import com.facebook.litho.Size
 import com.facebook.litho.State
 import com.facebook.litho.Style
+import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.config.PrimitiveRecyclerBinderStrategy
 import com.facebook.litho.eventHandler
 import com.facebook.litho.useState
@@ -44,6 +46,7 @@ import com.facebook.rendercore.dp
 import com.facebook.rendercore.primitives.LayoutBehavior
 import com.facebook.rendercore.primitives.LayoutScope
 import com.facebook.rendercore.primitives.MountBehavior
+import com.facebook.rendercore.primitives.MountConfigurationScope
 import com.facebook.rendercore.primitives.PrimitiveLayoutResult
 import com.facebook.rendercore.primitives.ViewAllocator
 import com.facebook.rendercore.toHeightSpec
@@ -211,6 +214,8 @@ constructor(
             onUnbind { sectionsRecyclerView.resetItemAnimator() }
           }
         }
+
+        bindPausesChildrenAnimatingOut(context.lithoConfiguration.componentsConfig, itemAnimator)
 
         // RecyclerSpec's @OnMount and @OnUnmount
         withDescription("recycler-equivalent-mount") {
@@ -385,6 +390,8 @@ constructor(
           }
         }
 
+        bindPausesChildrenAnimatingOut(context.lithoConfiguration.componentsConfig, itemAnimator)
+
         withDescription("recycler-equivalent-mount") {
           bind(*mountDeps) { sectionsRecyclerView ->
             bindLegacyMountBinder(
@@ -511,6 +518,27 @@ constructor(
  */
 private fun RecyclerView.skipFadeInsAfterAdapterMount() {
   (itemAnimator as? LazyCollectionItemAnimator)?.skipFadeInsInNextLayout(this)
+}
+
+/**
+ * Lists given the default Lazy Collection animator, while its flag is on, pause the children they
+ * keep on screen only to animate them out. Every other list keeps today's visibility timing.
+ */
+@RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+fun MountConfigurationScope<SectionsRecyclerView>.bindPausesChildrenAnimatingOut(
+    componentsConfig: ComponentsConfiguration,
+    itemAnimator: RecyclerView.ItemAnimator?,
+) {
+  val pausesChildrenAnimatingOut =
+      componentsConfig.useDefaultItemAnimatorInLazyCollections &&
+          itemAnimator === LazyCollectionItemAnimator.Default
+  withDescription("recycler-children-animating-out") {
+    bind(pausesChildrenAnimatingOut) { sectionsRecyclerView ->
+      val recyclerView = sectionsRecyclerView.requireLithoRecyclerView()
+      recyclerView.pausesChildrenAnimatingOut = pausesChildrenAnimatingOut
+      onUnbind { recyclerView.pausesChildrenAnimatingOut = false }
+    }
+  }
 }
 
 fun SectionsRecyclerView.requireLithoRecyclerView(): LithoRecyclerView =

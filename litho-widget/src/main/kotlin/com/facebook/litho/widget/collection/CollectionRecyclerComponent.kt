@@ -81,6 +81,7 @@ import com.facebook.litho.widget.SnapUtil.SnapMode
 import com.facebook.litho.widget.ViewportInfo.ViewportChanged
 import com.facebook.litho.widget.bindLegacyAttachBinder
 import com.facebook.litho.widget.bindLegacyMountBinder
+import com.facebook.litho.widget.bindPausesChildrenAnimatingOut
 import com.facebook.litho.widget.requireLithoRecyclerView
 import com.facebook.litho.widget.unbindLegacyAttachBinder
 import com.facebook.litho.widget.unbindLegacyMountBinder
@@ -1609,6 +1610,8 @@ private fun PrimitiveComponentScope.CollectionPrimitiveViewMountBehavior(
         onUnbind { sectionsRecyclerView.resetItemAnimator() }
       }
     }
+
+    bindPausesChildrenAnimatingOut(context.lithoConfiguration.componentsConfig, itemAnimator)
 
     // Unmount only: the mount binder above also unbinds on new props or a new measure.
     withDescription("bring-to-front-reset") {

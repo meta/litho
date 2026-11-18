@@ -21,7 +21,13 @@ import android.graphics.Canvas
 import android.util.AttributeSet
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.View
+import android.view.ViewGroup
+import android.view.ViewTreeObserver
+import androidx.annotation.RestrictTo
 import androidx.recyclerview.widget.RecyclerView
+import com.facebook.litho.BaseMountingView
+import com.facebook.rendercore.extensions.VisibilityChangeReason
 
 /** Extension of [RecyclerView] that allows to add more features needed for [Recycler] */
 open class LithoRecyclerView
@@ -60,6 +66,35 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyle: Int = 0) :
   private var postDispatchDrawListeners: MutableList<PostDispatchDrawListener>? = null
   private var onBeforeLayoutListener: OnBeforeLayoutListener? = null
   private var onAfterLayoutListener: OnAfterLayoutListener? = null
+
+  /**
+   * Whether a child this list keeps on screen only to animate it out is treated as gone: its
+   * components get their invisible events as soon as it starts leaving, and nothing inside it
+   * reports visible until it is back in the list or removed. It still mounts what comes into view.
+   */
+  @get:RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+  @set:RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+  var pausesChildrenAnimatingOut: Boolean = false
+    set(value) {
+      if (field == value) {
+        return
+      }
+      field = value
+      if (value) {
+        updateLeavingChildren()
+      } else {
+        finishAllLeavingChildren()
+      }
+    }
+
+  /** Children animating out, each with the Litho views it started leaving, in start order. */
+  private val leavingChildren = HashMap<View, MutableList<BaseMountingView>>()
+
+  // RecyclerView also lays out outside onLayout (e.g. from scrolls), so check before every draw.
+  private val updateLeavingChildrenBeforeDraw = ViewTreeObserver.OnPreDrawListener {
+    updateLeavingChildren()
+    true
+  }
 
   init {
     setTag(com.facebook.rendercore.R.id.rc_pooling_container, true)
@@ -114,7 +149,90 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyle: Int = 0) :
   override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
     onBeforeLayoutListener?.onBeforeLayout(this)
     super.onLayout(changed, l, t, r, b)
+    updateLeavingChildren()
     onAfterLayoutListener?.onAfterLayout(this)
+  }
+
+  override fun onAttachedToWindow() {
+    super.onAttachedToWindow()
+    viewTreeObserver.addOnPreDrawListener(updateLeavingChildrenBeforeDraw)
+  }
+
+  override fun onDetachedFromWindow() {
+    super.onDetachedFromWindow()
+    viewTreeObserver.removeOnPreDrawListener(updateLeavingChildrenBeforeDraw)
+    finishAllLeavingChildren()
+  }
+
+  override fun onChildDetachedFromWindow(child: View) {
+    super.onChildDetachedFromWindow(child)
+    finishLeaving(child)
+  }
+
+  /**
+   * RecyclerView keeps a child it is animating out as a child its layout manager doesn't list, so
+   * those are the leaving children. One count comparison when nothing animates out.
+   */
+  private fun updateLeavingChildren() {
+    // A detached list may never be attached again, and then nothing would finish a pause.
+    if (!pausesChildrenAnimatingOut || !isAttachedToWindow) {
+      return
+    }
+    val layoutManager = layoutManager
+    if (layoutManager == null) {
+      finishAllLeavingChildren()
+      return
+    }
+    if (layoutManager.childCount == childCount && leavingChildren.isEmpty()) {
+      return
+    }
+    val listed = HashSet<View>(layoutManager.childCount)
+    for (i in 0 until layoutManager.childCount) {
+      layoutManager.getChildAt(i)?.let { listed.add(it) }
+    }
+    for (child in leavingChildren.keys.toList()) {
+      if (child.parent !== this) {
+        finishLeaving(child)
+      } else if (child in listed) {
+        // Back in the list: it was laid out while paused, so nothing has reported it visible yet.
+        finishLeaving(child).forEach {
+          it.notifyVisibleBoundsChanged(VisibilityChangeReason.ANIMATION)
+        }
+      }
+    }
+    // Starting fires invisible events, which can end animations and remove children.
+    val children = List(childCount) { getChildAt(it) }
+    for (child in children) {
+      if (child.parent === this && child !in listed && child !in leavingChildren) {
+        startLeaving(child)
+      }
+    }
+  }
+
+  // Recorded before each start: a start fires invisible events, one of them can end this child's
+  // animation, and finishing it finishes only what was recorded.
+  private fun startLeaving(child: View) {
+    val started = ArrayList<BaseMountingView>()
+    leavingChildren[child] = started
+    for (mountingView in outermostMountingViewsIn(child)) {
+      if (leavingChildren[child] !== started) {
+        return
+      }
+      started.add(mountingView)
+      mountingView.startLeavingParent()
+    }
+  }
+
+  private fun finishLeaving(child: View): List<BaseMountingView> {
+    val started = leavingChildren.remove(child) ?: return emptyList()
+    started.forEach { it.finishLeavingParent() }
+    return started
+  }
+
+  private fun finishAllLeavingChildren() {
+    for (child in leavingChildren.keys.toList()) {
+      finishLeaving(child)
+    }
   }
 
   fun setLeftFadingEnabled(leftFadingEnabled: Boolean) {
@@ -178,5 +296,24 @@ constructor(context: Context, attrs: AttributeSet? = null, defStyle: Int = 0) :
 
     /** Called from [.onInterceptTouchEvent] to determine how touch events should be intercepted */
     fun onInterceptTouchEvent(recyclerView: RecyclerView, ev: MotionEvent): Result
+  }
+
+  private companion object {
+    /** The outermost views hosting Litho content in [view]; everything inside them follows them. */
+    fun outermostMountingViewsIn(view: View): List<BaseMountingView> {
+      val mountingViews = ArrayList<BaseMountingView>()
+      val toVisit = ArrayDeque<View>().apply { add(view) }
+      while (toVisit.isNotEmpty()) {
+        val next = toVisit.removeFirst()
+        if (next is BaseMountingView) {
+          mountingViews.add(next)
+        } else if (next is ViewGroup) {
+          for (i in 0 until next.childCount) {
+            toVisit.add(next.getChildAt(i))
+          }
+        }
+      }
+      return mountingViews
+    }
   }
 }

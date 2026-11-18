@@ -25,6 +25,9 @@ import android.os.Build
 import android.util.AttributeSet
 import android.util.Log
 import android.view.View
+import android.view.ViewGroup
+import android.view.ViewParent
+import androidx.annotation.RestrictTo
 import androidx.annotation.UiThread
 import androidx.annotation.VisibleForTesting
 import androidx.collection.LongObjectMap
@@ -190,6 +193,11 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
   private var pauseMountingWhileVisibilityHintFalse = false
 
   private var visibilityHintIsVisible = false
+
+  /**
+   * Unfinished [startLeavingParent] calls on this view. Above 0, it and everything inside it pause.
+   */
+  private var leavingParentCount = 0
 
   private var skipMountingIfNotVisible = false
 
@@ -541,7 +549,7 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
       }
     } else {
       visibleRectToUse = actualVisibleRect
-      processVisibilityOutputs = requestVisibilityEvents
+      processVisibilityOutputs = requestVisibilityEvents && !isInsideLeavingParent()
     }
 
     if (visibleRectToUse == null) {
@@ -601,7 +609,9 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
       if (treeChanged) {
         val onBeforeMountResult = onBeforeMount()
 
-        layoutState.setShouldProcessVisibilityOutputs(shouldProcessVisibilityEvents)
+        layoutState.setShouldProcessVisibilityOutputs(
+            shouldProcessVisibilityEvents && !isInsideLeavingParent(),
+        )
 
         coordinator.beforeMount(layoutState, visibleRect)
         updateNestedTreeBounds(layoutState)
@@ -702,6 +712,67 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
   // the BaseMountingView is not consistent with what's currently on screen.
   private fun shouldPauseMountingWithVisibilityHintFalse(): Boolean {
     return (pauseMountingWhileVisibilityHintFalse && hasVisibilityHint && !visibilityHintIsVisible)
+  }
+
+  /**
+   * Marks this view as leaving its parent while the parent still draws it, e.g. a list item that
+   * animates out after it was removed. Until the matching [finishLeavingParent]:
+   * - this view and every [BaseMountingView] inside it get their invisible events now, as if they
+   *   were detached;
+   * - they keep mounting what comes into view, so the exit draws in full, but dispatch no
+   *   visibility events, including views attached inside it later, e.g. by a nested list that
+   *   scrolls;
+   * - starts can overlap, e.g. a nested item and the item around it both leaving: the view stays
+   *   paused until every start has its finish.
+   *
+   * Main thread only.
+   */
+  @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+  fun startLeavingParent() {
+    assertMainThread()
+    leavingParentCount++
+    leavingParentCountInAllViews++
+    if (leavingParentCount == 1) {
+      clearVisibilityItemsInside()
+    }
+  }
+
+  /**
+   * Ends one [startLeavingParent]. Once every start has its finish, the view dispatches visibility
+   * events again from its next visible-bounds change. Throws if no start is unfinished.
+   */
+  @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+  fun finishLeavingParent() {
+    assertMainThread()
+    check(leavingParentCount > 0) {
+      "finishLeavingParent() without a matching startLeavingParent()"
+    }
+    leavingParentCount--
+    leavingParentCountInAllViews--
+  }
+
+  private fun isInsideLeavingParent(): Boolean {
+    if (leavingParentCountInAllViews == 0) {
+      return false
+    }
+    var current: ViewParent? = this
+    while (current is View) {
+      if (current is BaseMountingView && current.leavingParentCount > 0) {
+        return true
+      }
+      current = current.parent
+    }
+    return false
+  }
+
+  // Invisible events can end the exit that started here, so stop once it has finished.
+  private fun clearVisibilityItemsInside() {
+    for (mountingView in mountingViewsInside(this)) {
+      if (leavingParentCount == 0) {
+        return
+      }
+      mountingView.clearVisibilityItems(VisibilityChangeReason.ANIMATION)
+    }
   }
 
   /**
@@ -1030,7 +1101,7 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
       currentVisibleArea: Rect?,
       reason: VisibilityChangeReason,
   ) {
-    if (currentLayoutState == null || !isVisibilityProcessingEnabled) {
+    if (currentLayoutState == null || !isVisibilityProcessingEnabled || isInsideLeavingParent()) {
       return
     }
 
@@ -1635,6 +1706,36 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
     const val SIZE_UNSET: Int = -1
     private val TAG: String = BaseMountingView::class.java.simpleName
     private val EMPTY_RECT = Rect()
+
+    /**
+     * Sum of [leavingParentCount] over all views. While it is 0, no view can be inside a leaving
+     * one, so [isInsideLeavingParent] answers without walking up the parents. Main thread only.
+     */
+    private var leavingParentCountInAllViews = 0
+
+    /** [startLeavingParent] calls without their [finishLeavingParent], over all views. */
+    @JvmStatic
+    @get:RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    @get:VisibleForTesting
+    val unfinishedLeavingParentCount: Int
+      get() = leavingParentCountInAllViews
+
+    private fun mountingViewsInside(root: BaseMountingView): List<BaseMountingView> {
+      val mountingViews = ArrayList<BaseMountingView>()
+      val toVisit = ArrayDeque<View>().apply { add(root) }
+      while (toVisit.isNotEmpty()) {
+        val next = toVisit.removeFirst()
+        if (next is BaseMountingView) {
+          mountingViews.add(next)
+        }
+        if (next is ViewGroup) {
+          for (i in 0 until next.childCount) {
+            toVisit.add(next.getChildAt(i))
+          }
+        }
+      }
+      return mountingViews
+    }
 
     private fun performLayoutOnChildrenIfNecessary(host: ComponentHost) {
       val childCount = host.childCount

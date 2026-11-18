@@ -84,6 +84,9 @@ internal constructor(
      * [com.facebook.litho.sections.widget.RecyclerCollectionComponent] has. Only lists whose
      * children all have explicit ids are animated, since generated ids are positional. Each
      * RecyclerView gets its own animator instance.
+     *
+     * Also makes these lists treat an item they only keep on screen to animate out as gone: its
+     * components get their invisible events when its exit starts.
      */
     @JvmField val useDefaultItemAnimatorInLazyCollections: Boolean = false,
     /**
