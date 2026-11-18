@@ -40,4 +40,39 @@
     <item quantity="one" description="Screen reader text for a badge counting one new item. %d is the count."><xliff:g id="count" example="1">%d</xliff:g> new item</item>
     <item quantity="other" description="Screen reader text for a badge counting two or more new items. %d is the count."><xliff:g id="count" example="3">%d</xliff:g> new items</item>
   </plurals>
+  <string name="litho_sample_animation_content_overview_label" description="Tab label for the overview page in the Litho AnimatedContent animation sample">Overview</string>
+  <string name="litho_sample_animation_content_pipeline_label" description="Tab label for the pipeline page in the Litho AnimatedContent animation sample">Pipeline</string>
+  <string name="litho_sample_animation_content_review_label" description="Tab label for the review page in the Litho AnimatedContent animation sample">Review</string>
+  <string name="litho_sample_animation_content_overview_title" description="Title for the overview page in the Litho AnimatedContent animation sample">Release health</string>
+  <string name="litho_sample_animation_content_pipeline_title" description="Title for the pipeline page in the Litho AnimatedContent animation sample">Build and verification</string>
+  <string name="litho_sample_animation_content_review_title" description="Title for the review page in the Litho AnimatedContent animation sample">Launch checklist</string>
+  <string name="litho_sample_animation_content_overview_summary" description="Summary text for the overview page in the Litho AnimatedContent animation sample">A live command center for the rollout, with queue pressure and owner status visible at a glance.</string>
+  <string name="litho_sample_animation_content_pipeline_summary" description="Summary text for the pipeline page in the Litho AnimatedContent animation sample">Capacity is tight, but high priority jobs are being promoted through the verification queue.</string>
+  <string name="litho_sample_animation_content_review_summary" description="Summary text for the review page in the Litho AnimatedContent animation sample">Owner sign-off is almost complete, with privacy and experiment review still open.</string>
+  <string name="litho_sample_animation_content_status_healthy" description="Status pill text indicating the release is healthy in the Litho AnimatedContent animation sample">Healthy</string>
+  <string name="litho_sample_animation_content_status_busy" description="Status pill text indicating the pipeline is busy in the Litho AnimatedContent animation sample">Busy</string>
+  <string name="litho_sample_animation_content_status_review" description="Status pill text indicating the launch is under review in the Litho AnimatedContent animation sample">Review</string>
+  <string name="litho_sample_animation_content_stat_success" description="Metric label for successful release checks in the Litho AnimatedContent animation sample">success</string>
+  <string name="litho_sample_animation_content_stat_alerts" description="Metric label for alert count in the Litho AnimatedContent animation sample">alerts</string>
+  <string name="litho_sample_animation_content_stat_latency" description="Metric label for latency in the Litho AnimatedContent animation sample">latency</string>
+  <string name="litho_sample_animation_content_stat_jobs" description="Metric label for build job count in the Litho AnimatedContent animation sample">jobs</string>
+  <string name="litho_sample_animation_content_stat_queued" description="Metric label for queued work in the Litho AnimatedContent animation sample">queued</string>
+  <string name="litho_sample_animation_content_stat_blocked" description="Metric label for blocked work in the Litho AnimatedContent animation sample">blocked</string>
+  <string name="litho_sample_animation_content_stat_owners" description="Metric label for launch owner count in the Litho AnimatedContent animation sample">owners</string>
+  <string name="litho_sample_animation_content_stat_signed" description="Metric label for signed-off launch owners in the Litho AnimatedContent animation sample">signed</string>
+  <string name="litho_sample_animation_content_stat_pending" description="Metric label for pending launch owners in the Litho AnimatedContent animation sample">pending</string>
+  <string name="litho_sample_animation_content_android_lane_title" description="Timeline row title for an Android verification lane in the Litho AnimatedContent animation sample">Android lane</string>
+  <string name="litho_sample_animation_content_android_lane_subtitle" description="Timeline row subtitle for completed Android smoke tests in the Litho AnimatedContent animation sample">Smoke tests completed</string>
+  <string name="litho_sample_animation_content_feed_ranking_title" description="Timeline row title for feed ranking in the Litho AnimatedContent animation sample">Feed ranking</string>
+  <string name="litho_sample_animation_content_feed_ranking_subtitle" description="Timeline row subtitle for a stable canary group in the Litho AnimatedContent animation sample">Canary group holding steady</string>
+  <string name="litho_sample_animation_content_emulator_pool_title" description="Timeline row title for emulator pool capacity in the Litho AnimatedContent animation sample">Emulator pool</string>
+  <string name="litho_sample_animation_content_emulator_pool_subtitle" description="Timeline row subtitle for waiting on large emulator images in the Litho AnimatedContent animation sample">Waiting on large device images</string>
+  <string name="litho_sample_animation_content_ios_lane_title" description="Timeline row title for an iOS verification lane in the Litho AnimatedContent animation sample">iOS lane</string>
+  <string name="litho_sample_animation_content_ios_lane_subtitle" description="Timeline row subtitle for retrying screenshot tests in the Litho AnimatedContent animation sample">Retrying flaky screenshot suite</string>
+  <string name="litho_sample_animation_content_server_lane_title" description="Timeline row title for a server verification lane in the Litho AnimatedContent animation sample">Server lane</string>
+  <string name="litho_sample_animation_content_server_lane_subtitle" description="Timeline row subtitle for green diff tests in the Litho AnimatedContent animation sample">Diff tests are green</string>
+  <string name="litho_sample_animation_content_privacy_review_title" description="Timeline row title for privacy review in the Litho AnimatedContent animation sample">Privacy review</string>
+  <string name="litho_sample_animation_content_privacy_review_subtitle" description="Timeline row subtitle for a requested privacy note in the Litho AnimatedContent animation sample">Final note requested</string>
+  <string name="litho_sample_animation_content_experiment_owner_title" description="Timeline row title for an experiment owner in the Litho AnimatedContent animation sample">Experiment owner</string>
+  <string name="litho_sample_animation_content_experiment_owner_subtitle" description="Timeline row subtitle for confirmed experiment holdout size in the Litho AnimatedContent animation sample">Holdout size confirmed</string>
 </resources>

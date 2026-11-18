@@ -85,14 +85,14 @@ class AnimatedContainerDemosTest {
   }
 
   @Test
-  fun content_initialRender_showsOverviewCardAndKeyWithoutDetail() {
+  fun content_initialRender_showsOverviewCardAndKeyWithoutPipelineSummary() {
     val testLithoView = renderContent()
 
     assertThat(testLithoView.findViewWithTextOrNull("AnimatedContent")).isNotNull
     assertThat(testLithoView.findViewWithTextOrNull("Release health")).isNotNull
     assertThat(testLithoView.findViewWithTextOrNull("99.2%")).isNotNull
     assertThat(testLithoView.findViewWithTextOrNull("overview")).isNotNull
-    assertThat(testLithoView.findViewWithTextOrNull(PIPELINE_DETAIL)).isNull()
+    assertThat(testLithoView.findViewWithTextOrNull(PIPELINE_SUMMARY)).isNull()
   }
 
   @Test
@@ -105,18 +105,18 @@ class AnimatedContainerDemosTest {
   }
 
   @Test
-  fun content_clickPipeline_showsPipelineCardDetailAndKey() {
+  fun content_clickPipeline_showsPipelineCardSummaryAndKey() {
     val testLithoView = renderContent()
 
     lithoTestRule.act(testLithoView) { clickOnText("Pipeline") }
 
     assertThat(testLithoView.findViewWithTextOrNull("Build and verification")).isNotNull
     assertThat(testLithoView.findViewWithTextOrNull("pipeline")).isNotNull
-    assertThat(testLithoView.findViewWithTextOrNull(PIPELINE_DETAIL)).isNotNull
+    assertThat(testLithoView.findViewWithTextOrNull(PIPELINE_SUMMARY)).isNotNull
   }
 
   @Test
-  fun content_clickReview_showsReviewCardDetailAndKey() {
+  fun content_clickReview_showsReviewCardAndKey() {
     val testLithoView = renderContent()
 
     lithoTestRule.act(testLithoView) { clickOnText("Review") }
@@ -139,8 +139,8 @@ class AnimatedContainerDemosTest {
   }
 
   private companion object {
-    const val PIPELINE_DETAIL =
-        "Android, iOS, and server lanes are running. The longest queue is waiting on emulator capacity."
+    const val PIPELINE_SUMMARY =
+        "Capacity is tight, but high priority jobs are being promoted through the verification queue."
   }
 
   private fun renderVisibility(): TestLithoView =

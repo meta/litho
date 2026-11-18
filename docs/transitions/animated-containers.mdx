@@ -56,7 +56,7 @@ exit = fadeOut() + slideOutVertically()
 
 Drive `AnimatedVisibility` with a `visible` boolean. When `visible` flips to `true` the content mounts and plays its `enter`; when it flips to `false` the content plays its `exit` and only then unmounts.
 
-```kotlin file=sample-kotlin/src/main/java/com/facebook/samples/litho/kotlin/animations/statebased/AnimatedContainerDemos.kt start=visibility_example_start end=visibility_example_end
+```kotlin file=sample-kotlin/src/main/java/com/facebook/samples/litho/kotlin/animations/statebased/AnimatedVisibilityDemoComponent.kt start=visibility_example_start end=visibility_example_end
 ```
 
 The initial content (visible on first render) appears without an enter animation, matching `AndroidX`/Compose `AnimatedVisibility`. Reversing mid-exit (flipping `visible` back to `true` before the exit settles) cancels the unmount.
@@ -65,7 +65,9 @@ The initial content (visible on first render) appears without an enter animation
 
 `AnimatedContent` renders content for a `targetState`. When the state changes to one with a different `contentKey`, the new content enters while the previous content exits, both overlapping in the container until the exit settles. The `transitionSpec` lambda declares the transition by setting `enter` / `exit` on its [`AnimatedContentTransitionScope`](pathname:///javadoc/com/facebook/litho/animation/AnimatedContentTransitionScope.html), and exposes `initialState`/`targetState` so the transition can depend on direction.
 
-```kotlin file=sample-kotlin/src/main/java/com/facebook/samples/litho/kotlin/animations/statebased/AnimatedContainerDemos.kt start=content_example_start end=content_example_end
+The card demo fades between pages and scales in the new content over a steady background. Navigating back reverses the scale direction.
+
+```kotlin file=sample-kotlin/src/main/java/com/facebook/samples/litho/kotlin/animations/statebased/AnimatedContentDemoComponent.kt start=content_example_start end=content_example_end
 ```
 
 `enter` sets how the target content enters and `exit` how the previous content exits; anything you don't set defaults to `None` (an empty `transitionSpec = {}` swaps instantly with no animation). Reusing the same `contentKey` does not animate. The container sizes itself to the **target** content (the incoming content drives the container's size, not the outgoing one).
@@ -100,7 +102,7 @@ Nested animations and unrelated style transitions do not participate. Completion
 
 ## Container-relative slides
 
-`slideIntoContainer(direction)` / `slideOutOfContainer(direction)` slide content across the **container's** bounds, rather than offsetting by the content's own size the way `slideInHorizontally()` and friends do. `direction` is the way the content moves; an optional offset lambda scales the full-slide distance. The [`AnimatedContent` sample](#animatedcontent) above slides each page in the direction of travel:
+`slideIntoContainer(direction)` / `slideOutOfContainer(direction)` slide content across the **container's** bounds, rather than offsetting by the content's own size the way `slideInHorizontally()` and friends do. `direction` is the way the content moves; an optional offset lambda scales the full-slide distance.
 
 ```kotlin
 val enter = fadeIn() + slideIntoContainer(towards) + scaleIn()
