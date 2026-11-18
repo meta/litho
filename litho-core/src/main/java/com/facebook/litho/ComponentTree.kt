@@ -513,6 +513,21 @@ open class ComponentTree protected constructor(builder: Builder) :
     return committedLayoutState
   }
 
+  /**
+   * The size of the committed layout when [root] is the current root and the layout is for it and
+   * compatible with these specs; null otherwise. Lays nothing out.
+   */
+  @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+  @Synchronized
+  fun committedLayoutSizeFor(root: Component, widthSpec: Int, heightSpec: Int): Size? {
+    if (_root !== root) return null
+    val layoutState = committedLayoutState ?: return null
+    if (!isCompatibleComponentAndSpec(layoutState, root.instanceId, widthSpec, heightSpec)) {
+      return null
+    }
+    return Size(layoutState.width, layoutState.height)
+  }
+
   /** Whether this ComponentTree has been mounted at least once. */
   fun hasMounted(): Boolean {
     val treeState = uiTreeState ?: return false

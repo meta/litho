@@ -91,6 +91,13 @@ public class TestComponentTreeHolder extends ComponentTreeHolder {
   }
 
   @Override
+  public synchronized @Nullable Size committedLayoutSizeFor(int widthSpec, int heightSpec) {
+    return isTreeValidForSizeSpecs(widthSpec, heightSpec)
+        ? new Size(SizeSpec.getSize(widthSpec), SizeSpec.getSize(heightSpec))
+        : null;
+  }
+
+  @Override
   public void computeLayoutSync(
       ComponentContext context, int widthSpec, int heightSpec, Size size) {
     mComponentTree = mock(ComponentTree.class);

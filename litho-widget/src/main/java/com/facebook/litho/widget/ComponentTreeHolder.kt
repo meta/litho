@@ -115,6 +115,19 @@ open class ComponentTreeHolder @VisibleForTesting internal constructor(builder: 
       field = renderInfo
     }
 
+  /** Set once the binder has removed this holder; later layout requests do nothing. */
+  @get:Synchronized
+  @get:RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+  var isRemoved: Boolean = false
+    private set
+
+  /** Marks this holder removed, so a layout requested after its removal creates no tree. */
+  @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+  @Synchronized
+  fun markRemoved() {
+    isRemoved = true
+  }
+
   var renderState: Int
     get() = _renderState.get()
     set(renderState) = _renderState.set(renderState)
@@ -238,8 +251,8 @@ open class ComponentTreeHolder @VisibleForTesting internal constructor(builder: 
     val treePropContainer: TreePropContainer?
 
     synchronized(this) {
-      if (renderInfo.rendersView()) {
-        // Nothing to do for views.
+      if (renderInfo.rendersView() || isRemoved) {
+        // Nothing to do for views, or for a holder the binder removed.
         return
       }
       lastRequestedWidthSpec = widthSpec
@@ -260,7 +273,12 @@ open class ComponentTreeHolder @VisibleForTesting internal constructor(builder: 
     )
 
     synchronized(this) {
-      if (componentTree === this._componentTree && component === renderInfo.component) {
+      // The render info may have changed during the layout, even to a view, which has no component.
+      if (
+          componentTree === this._componentTree &&
+              renderInfo.rendersComponent() &&
+              component === renderInfo.component
+      ) {
         _isTreeValid = true
         if (size != null) {
           measuredHeight = size.height
@@ -295,8 +313,8 @@ open class ComponentTreeHolder @VisibleForTesting internal constructor(builder: 
     val treePropContainer: TreePropContainer?
 
     synchronized(this) {
-      if (renderInfo.rendersView()) {
-        // Nothing to do for views.
+      if (renderInfo.rendersView() || isRemoved) {
+        // Nothing to do for views, or for a holder the binder removed.
         return
       }
       lastRequestedWidthSpec = widthSpec
@@ -320,11 +338,26 @@ open class ComponentTreeHolder @VisibleForTesting internal constructor(builder: 
     )
 
     synchronized(this) {
-      if (this._componentTree === componentTree && component === renderInfo.component) {
+      if (
+          this._componentTree === componentTree &&
+              renderInfo.rendersComponent() &&
+              component === renderInfo.component
+      ) {
         _isTreeValid = true
       }
     }
   }
+
+  /**
+   * The size of the layout committed for this holder's current component at these specs, without
+   * laying anything out; null when there is none, for example after a render info update that no
+   * layout has caught up with yet.
+   */
+  @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+  @Synchronized
+  open fun committedLayoutSizeFor(widthSpec: Int, heightSpec: Int): Size? =
+      if (!renderInfo.rendersComponent()) null
+      else _componentTree?.committedLayoutSizeFor(renderInfo.component, widthSpec, heightSpec)
 
   @Synchronized
   fun addMeasureListener(measureListener: MeasureListener?) {
