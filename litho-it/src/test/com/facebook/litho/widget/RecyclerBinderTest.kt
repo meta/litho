@@ -329,7 +329,9 @@ class RecyclerBinderTest {
 
     var holder = checkNotNull(holdersForComponents[components[0].component])
     assertThat(holder.isTreeValid).isTrue
-    assertThat(holder.mLayoutSyncCalled).isTrue
+    // Laid out by the measure, or, when the binder lays items out outside its lock, again by the
+    // range traversal after the measure's apply invalidated that layout.
+    assertThat(holder.mLayoutSyncCalled || holder.mLayoutAsyncCalled).isTrue
 
     for (i in 1..rangeTotal) {
       holder = checkNotNull(holdersForComponents[components[i].component])
@@ -513,7 +515,9 @@ class RecyclerBinderTest {
 
     var holder = checkNotNull(holdersForComponents[components[0].component])
     assertThat(holder.isTreeValid).isTrue
-    assertThat(holder.mLayoutSyncCalled).isTrue
+    // Laid out by the measure, or, when the binder lays items out outside its lock, again by the
+    // range traversal after the measure's apply invalidated that layout.
+    assertThat(holder.mLayoutSyncCalled || holder.mLayoutAsyncCalled).isTrue
 
     for (i in 1..rangeTotal) {
       holder = checkNotNull(holdersForComponents[components[i].component])

@@ -67,6 +67,15 @@ open class ComponentTreeHolder @VisibleForTesting internal constructor(builder: 
 
   private val lithoVisibilityEventsController = builder.lithoVisibilityEventsController
   private val componentsConfiguration = builder.componentsConfiguration
+  /**
+   * Set by a [RecyclerBinder] that lays its items out outside its lock
+   * ([RecyclerBinderConfig.layoutItemsOutsideMeasureLock]) when it takes the holder. The holder
+   * then makes ordered root requests ([ComponentTree.setOrderedRootAndSizeSpec]), versioned by
+   * render info, so its tree ignores a request for an older render info that arrives late, and it
+   * marks its tree valid after a sync layout only for the latest specs it was asked for and a
+   * layout the tree committed.
+   */
+  @Volatile internal var isLaidOutOutsideBinderLock: Boolean = false
   private var visibilityEventsController: ComponentTreeHolderVisibilityEventsController? = null
   private var stateUpdaterDelegator = builder.stateUpdaterDelegator
 
@@ -82,6 +91,8 @@ open class ComponentTreeHolder @VisibleForTesting internal constructor(builder: 
   @GuardedBy("this") private var lastRequestedHeightSpec = UNINITIALIZED
 
   @GuardedBy("this") private var _isTreeValid = false
+  /** Bumped with each render info; the version of this holder's ordered root requests. */
+  @GuardedBy("this") private var renderInfoVersion = 0
   @GuardedBy("this") private var _componentTree: ComponentTree? = null
   @GuardedBy("this") private var lithoSaveableStateRegistry: LithoSaveableStateRegistry? = null
 
@@ -113,6 +124,7 @@ open class ComponentTreeHolder @VisibleForTesting internal constructor(builder: 
     set(renderInfo) {
       invalidateTree()
       field = renderInfo
+      renderInfoVersion++
     }
 
   /** Set once the binder has removed this holder; later layout requests do nothing. */
@@ -249,6 +261,7 @@ open class ComponentTreeHolder @VisibleForTesting internal constructor(builder: 
     val componentTree: ComponentTree
     val component: Component
     val treePropContainer: TreePropContainer?
+    val version: Int
 
     synchronized(this) {
       if (renderInfo.rendersView() || isRemoved) {
@@ -261,16 +274,32 @@ open class ComponentTreeHolder @VisibleForTesting internal constructor(builder: 
       componentTree = ensureComponentTree(context)
       component = renderInfo.component
       treePropContainer = (renderInfo as? TreePropsWrappedRenderInfo)?.treePropContainer
+      version = renderInfoVersion
     }
 
-    componentTree.setRootAndSizeSpecSync(
-        component,
-        widthSpec,
-        heightSpec,
-        size,
-        treePropContainer,
-        forceLayout,
-    )
+    if (isLaidOutOutsideBinderLock) {
+      // The version makes the tree ignore this request once it has seen one for a newer render
+      // info.
+      componentTree.setOrderedRootAndSizeSpec(
+          component,
+          widthSpec,
+          heightSpec,
+          output = size,
+          treePropContainer = treePropContainer,
+          requestVersion = version,
+          isAsync = false,
+          forceLayout = forceLayout,
+      )
+    } else {
+      componentTree.setRootAndSizeSpecSync(
+          component,
+          widthSpec,
+          heightSpec,
+          size,
+          treePropContainer,
+          forceLayout,
+      )
+    }
 
     synchronized(this) {
       // The render info may have changed during the layout, even to a view, which has no component.
@@ -279,6 +308,17 @@ open class ComponentTreeHolder @VisibleForTesting internal constructor(builder: 
               renderInfo.rendersComponent() &&
               component === renderInfo.component
       ) {
+        if (
+            isLaidOutOutsideBinderLock &&
+                (lastRequestedWidthSpec != widthSpec ||
+                    lastRequestedHeightSpec != heightSpec ||
+                    !componentTree.hasCompatibleLayout(widthSpec, heightSpec))
+        ) {
+          // A newer request for other specs, or a layout the tree did not commit: the next range
+          // check requests it again.
+          _isTreeValid = false
+          return
+        }
         _isTreeValid = true
         if (size != null) {
           measuredHeight = size.height
@@ -311,6 +351,7 @@ open class ComponentTreeHolder @VisibleForTesting internal constructor(builder: 
     val componentTree: ComponentTree
     val component: Component
     val treePropContainer: TreePropContainer?
+    val version: Int
 
     synchronized(this) {
       if (renderInfo.rendersView() || isRemoved) {
@@ -323,19 +364,33 @@ open class ComponentTreeHolder @VisibleForTesting internal constructor(builder: 
       componentTree = ensureComponentTree(context)
       component = renderInfo.component
       treePropContainer = (renderInfo as? TreePropsWrappedRenderInfo)?.treePropContainer
+      version = renderInfoVersion
     }
 
     if (measureListener != null) {
       componentTree.addMeasureListener(measureListener)
     }
 
-    componentTree.setRootAndSizeSpecAsync(
-        component,
-        widthSpec,
-        heightSpec,
-        treePropContainer,
-        forceLayout,
-    )
+    if (isLaidOutOutsideBinderLock) {
+      componentTree.setOrderedRootAndSizeSpec(
+          component,
+          widthSpec,
+          heightSpec,
+          output = null,
+          treePropContainer = treePropContainer,
+          requestVersion = version,
+          isAsync = true,
+          forceLayout = forceLayout,
+      )
+    } else {
+      componentTree.setRootAndSizeSpecAsync(
+          component,
+          widthSpec,
+          heightSpec,
+          treePropContainer,
+          forceLayout,
+      )
+    }
 
     synchronized(this) {
       if (

@@ -245,6 +245,19 @@ open class ComponentTree protected constructor(builder: Builder) :
 
   @GuardedBy("this") private var externalRootVersion: Int = INVALID_LAYOUT_VERSION
 
+  /**
+   * The newest version of the requests made through [setOrderedRootAndSizeSpec]. Separate from
+   * [externalRootVersion], so the tree still takes unversioned root changes after an ordered
+   * request.
+   */
+  @GuardedBy("this") private var newestOrderedRequestVersion: Int = NO_REQUEST_VERSION
+
+  /**
+   * Whether the current specs were set by a host view's measure. Tracked only once the tree has
+   * taken an ordered request ([setOrderedRootAndSizeSpec]).
+   */
+  @GuardedBy("this") private var specsSetByMeasure: Boolean = false
+
   // Versioning that gets incremented every time we start a new layout computation. This can
   // be useful for stateful objects shared across layouts that need to check whether for example
   // a measure/onCreateLayout call is being executed in the context of an old layout calculation.
@@ -1811,6 +1824,58 @@ open class ComponentTree protected constructor(builder: Builder) :
     )
   }
 
+  /**
+   * Sets the root and size specs for a caller whose requests can reach the tree out of order, for
+   * example because it issues them from several threads outside a common lock. The tree ignores a
+   * request whose [requestVersion] is older than the newest it has seen through this method.
+   *
+   * Versions must increase monotonically per tree: the caller gives each request a version no lower
+   * than that of any request it created earlier for the same tree. Requests with equal versions all
+   * apply, so one version can stand for one root at several specs. Versions are compared only
+   * within one tree, never across trees.
+   *
+   * An ignored request does nothing: it computes no layout, leaves [output] unchanged and calls no
+   * measure or new-layout listener. A caller must not wait for its result; it can detect an ignored
+   * synchronous request by passing an [output] it can tell apart from a real size.
+   *
+   * An ordered request that reuses the committed layout, because the layout is compatible with its
+   * specs, also makes its specs the tree's specs, so a layout still being computed for older specs
+   * that the committed layout does not fit is not committed. It does not record over specs set by a
+   * host view's measure, and while a state update is being laid out it lays the latest resolve out
+   * at its specs instead of reusing the committed layout.
+   *
+   * Unlike [setVersionedRootAndSizeSpec], which assumes the tree's root is owned by a parent layout
+   * and throws on an unversioned root once a versioned one has been set, this method keeps its
+   * versions separate: unversioned changes ([setRoot], [setSizeSpec], an error boundary's fallback
+   * root) still apply after an ordered request, and are not compared with its version.
+   */
+  @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+  fun setOrderedRootAndSizeSpec(
+      root: Component?,
+      widthSpec: Int,
+      heightSpec: Int,
+      output: Size?,
+      treePropContainer: TreePropContainer?,
+      requestVersion: Int,
+      isAsync: Boolean,
+      forceLayout: Boolean,
+  ) {
+    require(requestVersion >= 0) { "requestVersion must not be negative: $requestVersion" }
+    setRootAndSizeSpecAndWrapper(
+        root = root,
+        widthSpec = widthSpec,
+        heightSpec = heightSpec,
+        isAsync = isAsync,
+        output = output,
+        source = if (isAsync) RenderSource.SET_ROOT_ASYNC else RenderSource.SET_ROOT_SYNC,
+        externalRootVersion = INVALID_LAYOUT_VERSION,
+        extraAttribution = null,
+        treePropContainer = treePropContainer,
+        forceLayout = forceLayout,
+        requestVersion = requestVersion,
+    )
+  }
+
   fun setVersionedRootAndSizeSpecAsync(
       root: Component?,
       widthSpec: Int,
@@ -1896,6 +1961,7 @@ open class ComponentTree protected constructor(builder: Builder) :
       extraAttribution: String?,
       treePropContainer: TreePropContainer?,
       forceLayout: Boolean = false,
+      requestVersion: Int = NO_REQUEST_VERSION,
   ) {
     val resolvedRoot = root ?: EmptyComponent()
 
@@ -1910,6 +1976,7 @@ open class ComponentTree protected constructor(builder: Builder) :
         extraAttribution,
         treePropContainer,
         forceLayout,
+        requestVersion,
     )
   }
 
@@ -1924,6 +1991,7 @@ open class ComponentTree protected constructor(builder: Builder) :
       extraAttribution: String?,
       treePropContainer: TreePropContainer?,
       forceLayout: Boolean,
+      requestVersion: Int = NO_REQUEST_VERSION,
   ) {
     if (isMainThread) {
       ownerSaveableStateBinding?.initializeOnMain()
@@ -1968,6 +2036,14 @@ open class ComponentTree protected constructor(builder: Builder) :
         this.externalRootVersion = externalRootVersion
       }
 
+      if (requestVersion != NO_REQUEST_VERSION) {
+        if (newestOrderedRequestVersion > requestVersion) {
+          // A newer ordered request already reached the tree.
+          return
+        }
+        newestOrderedRequestVersion = requestVersion
+      }
+
       if (currentRoot != null) {
         val committedTreeState = getCommittedTreeStateSync()
         if (committedTreeState != null && committedTreeState.hasUncommittedUpdates()) {
@@ -1991,6 +2067,7 @@ open class ComponentTree protected constructor(builder: Builder) :
       val resolvedWidthSpec = if (widthSpecInitialized) widthSpec else this.widthSpec
       val resolvedHeightSpec = if (heightSpecInitialized) heightSpec else this.heightSpec
       val mostRecentLayoutState = committedLayoutState
+      val isOrderedRequest = requestVersion != NO_REQUEST_VERSION
 
       if (
           !forceLayout &&
@@ -2000,8 +2077,21 @@ open class ComponentTree protected constructor(builder: Builder) :
                   resolvedRoot.instanceId,
                   resolvedWidthSpec,
                   resolvedHeightSpec,
-              )
+              ) &&
+              // A newer resolve (a state update) is still being laid out: recording these specs
+              // could reject its layout, so lay it out at them instead.
+              !(isOrderedRequest && mostRecentLayoutState.resolveResult !== committedResolveResult)
       ) {
+        if (isOrderedRequest && !specsSetByMeasure) {
+          // The reused layout now stands for these specs, so commitLayoutState rejects a pending
+          // layout for older specs that the reused layout does not fit.
+          if (widthSpecInitialized) {
+            this.widthSpec = widthSpec
+          }
+          if (heightSpecInitialized) {
+            this.heightSpec = heightSpec
+          }
+        }
         if (output != null) {
           output.height = mostRecentLayoutState.height
           output.width = mostRecentLayoutState.width
@@ -2024,6 +2114,15 @@ open class ComponentTree protected constructor(builder: Builder) :
 
       if (heightSpecInitialized) {
         this.heightSpec = heightSpec
+      }
+
+      if (
+          newestOrderedRequestVersion != NO_REQUEST_VERSION &&
+              (widthSpecInitialized || heightSpecInitialized)
+      ) {
+        specsSetByMeasure =
+            source == RenderSource.MEASURE_SET_SIZE_SPEC ||
+                source == RenderSource.MEASURE_SET_SIZE_SPEC_ASYNC
       }
 
       if (rootInitialized) {
@@ -3513,6 +3612,8 @@ open class ComponentTree protected constructor(builder: Builder) :
     @JvmField var DEBUG_LOGS: Boolean = false
 
     const val INVALID_LAYOUT_VERSION: Int = -1
+    /** A request that is not ordered (see [setOrderedRootAndSizeSpec]). */
+    private const val NO_REQUEST_VERSION: Int = -1
     const val INVALID_ID: Int = -1
     private const val TAG = "ComponentTree"
     const val SIZE_UNINITIALIZED: Int = -1

@@ -67,6 +67,7 @@ import com.facebook.litho.SizeSpec.getMode
 import com.facebook.litho.SizeSpec.getSize
 import com.facebook.litho.SizeSpec.makeSizeSpec
 import com.facebook.litho.ThreadUtils
+import com.facebook.litho.TreePropContainer
 import com.facebook.litho.annotations.ExperimentalLithoApi
 import com.facebook.litho.choreographercompat.ChoreographerCompat
 import com.facebook.litho.choreographercompat.ChoreographerCompatImpl
@@ -99,6 +100,7 @@ import com.facebook.rendercore.utils.MeasureSpecUtils
 import java.util.ArrayDeque
 import java.util.Deque
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import javax.annotation.concurrent.GuardedBy
 import javax.annotation.concurrent.ThreadSafe
@@ -168,6 +170,14 @@ class RecyclerBinder private constructor(builder: Builder) :
 
   private val hasAsyncBatchesToCheck = AtomicBoolean(false)
   private val isInMeasure = AtomicBoolean(false)
+  /**
+   * With [RecyclerBinderConfig.layoutItemsOutsideMeasureLock], measures can overlap, so the
+   * measures in progress are counted instead of [isInMeasure].
+   */
+  private val measuresInProgress = AtomicInteger(0)
+
+  /** The item sizes the measure applying under the lock computed outside it. */
+  @GuardedBy("this") private var measureLayouts: MeasureLayouts? = null
 
   private val errorHandler: ((Exception) -> Unit)?
 
@@ -844,7 +854,7 @@ class RecyclerBinder private constructor(builder: Builder) :
     ComponentsSystrace.trace({ "collections.applyReadyBatches" }) {
       // Fast check that doesn't acquire lock -- measure() is locking and will post a call to
       // applyReadyBatches when it completes.
-      if (!hasAsyncBatchesToCheck.get() || !_isMeasured.get() || isInMeasure.get()) {
+      if (!hasAsyncBatchesToCheck.get() || !_isMeasured.get() || isMeasuring()) {
         return
       }
 
@@ -938,7 +948,7 @@ class RecyclerBinder private constructor(builder: Builder) :
                       " hasBatchesToCheck=${hasAsyncBatchesToCheck.get()}" +
                       " measured=${_isMeasured.get()}" +
                       " requiresRemeasure=${requiresRemeasure.get()}" +
-                      " inMeasure=${isInMeasure.get()}" +
+                      " inMeasure=${isMeasuring()}" +
                       " measuredSize=${measuredSize?.let { "${it.width}x${it.height}" }}" +
                       " items=${_componentTreeHolders.size}",
               firstBatch = firstBatch,
@@ -1202,6 +1212,9 @@ class RecyclerBinder private constructor(builder: Builder) :
         throw RuntimeException("Trying to do a sync replaceAll when using asynchronous mutations!")
       }
       toRelease = ArrayList(_componentTreeHolders)
+      if (recyclerBinderConfig.layoutItemsOutsideMeasureLock) {
+        toRelease.forEach { it?.markRemoved() }
+      }
       _componentTreeHolders.clear()
       for (renderInfo in renderInfos) {
         _componentTreeHolders.add(createComponentTreeHolder(renderInfo))
@@ -1281,6 +1294,7 @@ class RecyclerBinder private constructor(builder: Builder) :
       parentWidthSpec: Int,
       parentHeightSpec: Int,
       canRemeasure: Boolean,
+      sizeForMeasure: Size? = this.sizeForMeasure,
   ): Size {
     val out = Size()
     val scrollDirection = layoutInfo.getScrollDirection()
@@ -1308,7 +1322,6 @@ class RecyclerBinder private constructor(builder: Builder) :
                 canRemeasure,
             )
 
-    val sizeForMeasure = this.sizeForMeasure
     when (scrollDirection) {
       VERTICAL -> {
         measuredHeight = getSize(parentHeightSpec)
@@ -1660,6 +1673,10 @@ class RecyclerBinder private constructor(builder: Builder) :
       }
       holder = _componentTreeHolders.removeAt(position)
       retainedRangeDirty = true
+      if (recyclerBinderConfig.layoutItemsOutsideMeasureLock) {
+        // A layout planned before the removal must not re-create its tree.
+        holder.markRemoved()
+      }
     }
     internalAdapter.notifyItemRemoved(position)
 
@@ -1717,6 +1734,9 @@ class RecyclerBinder private constructor(builder: Builder) :
         val chunk = minOf(count - removed, _componentTreeHolders.size - position)
         val subList = _componentTreeHolders.subList(position, position + chunk)
         toRelease.addAll(subList)
+        if (recyclerBinderConfig.layoutItemsOutsideMeasureLock) {
+          subList.forEach { it.markRemoved() }
+        }
         subList.clear()
         removed += chunk
       }
@@ -2144,122 +2164,593 @@ class RecyclerBinder private constructor(builder: Builder) :
       )
     }
 
-    isInMeasure.set(true)
+    enterMeasure()
 
     try {
-      synchronized(this) {
-        if (lastWidthSpec != UNINITIALIZED && !requiresRemeasure.get()) {
-          val measuredSize = this.measuredSize
-          val crossAxisCompatible =
-              when (scrollDirection) {
-                VERTICAL ->
-                    measuredSize != null &&
-                        MeasureComparisonUtils.isMeasureSpecCompatible(
-                            lastWidthSpec,
-                            widthSpec,
-                            measuredSize.width,
-                        )
-                else ->
-                    measuredSize != null &&
-                        MeasureComparisonUtils.isMeasureSpecCompatible(
-                            lastHeightSpec,
-                            heightSpec,
-                            measuredSize.height,
-                        )
-              }
-
-          if (crossAxisCompatible && !isMainAxisWrapContent) {
-            // Early return: cross-axis unchanged, main-axis size from spec.
-            // Not valid for wrapContent — main-axis size must be computed from content.
-            when (scrollDirection) {
-              VERTICAL -> {
-                outSize.width = checkNotNull(measuredSize).width
-                outSize.height = getSize(heightSpec)
-              }
-              else -> {
-                outSize.width = getSize(widthSpec)
-                outSize.height = checkNotNull(measuredSize).height
-              }
-            }
-
-            return
-          }
-
-          if (!crossAxisCompatible) {
-            // Cross-axis size changed — invalidate so ViewHolders are rebound
-            // with updated LayoutParams (applies to both wrapContent and non-wrapContent).
-            _isMeasured.set(false)
-            invalidateLayoutData()
-          }
-        }
-        // We have never measured before or the measures are not valid so we need to measure now.
-        lastWidthSpec = widthSpec
-        lastHeightSpec = heightSpec
-
-        if (!hasComputedRange()) {
-          val holderForRangeInfo = getHolderForRangeInfo()
-          if (holderForRangeInfo != null) {
-            initRange(getSize(widthSpec), getSize(heightSpec), holderForRangeInfo)
-          }
-        }
-
-        val initialMeasuredSize = this.getInitialMeasuredSize(widthSpec, heightSpec, canRemeasure)
-
-        // At this point we might still not have a range. In this situation we should return the
-        // best size we can detect from the size spec and update it when the first item comes in.
-        when (scrollDirection) {
-          VERTICAL ->
-              if (!shouldMeasureItemForSize || sizeForMeasure != null) {
-                reMeasureEventEventHandler =
-                    if (isMainAxisWrapContent) reMeasureEventHandler else null
-              } else {
-                reMeasureEventEventHandler = reMeasureEventHandler
-                requiresRemeasure.set(!isMainAxisWrapContent)
-              }
-
-          else -> // HORIZONTAL
-          if (!shouldMeasureItemForSize || sizeForMeasure != null) {
-                reMeasureEventEventHandler =
-                    if (hasDynamicItemHeight || isMainAxisWrapContent) reMeasureEventHandler
-                    else null
-                requiresRemeasure.set(hasDynamicItemHeight)
-              } else {
-                reMeasureEventEventHandler = reMeasureEventHandler
-                requiresRemeasure.set(!isMainAxisWrapContent)
-              }
-        }
-
-        if (isMainAxisWrapContent) {
-          val wrapSize = Size()
-          fillListViewport(initialMeasuredSize.width, initialMeasuredSize.height, wrapSize)
-          outSize.width = wrapSize.width
-          outSize.height = wrapSize.height
-        } else {
-          outSize.width = initialMeasuredSize.width
-          outSize.height = initialMeasuredSize.height
-        }
-
-        measuredSize = Size(outSize.width, outSize.height)
-        _isMeasured.set(true)
-
-        componentWarmer?.setComponentTreeHolderFactory(componentTreeHolderPreparer)
-
-        maybeFillHScrollViewport()
-        updateAsyncInsertOperations()
-        if (estimatedViewportCount != RecyclerView.NO_POSITION) {
-          computeRange(
-              currentFirstVisiblePosition,
-              currentLastVisiblePosition,
-              trigger = CollectionRangeTrigger.INITIAL,
+      if (recyclerBinderConfig.layoutItemsOutsideMeasureLock) {
+        measureWithLayoutsOutsideLock(
+            outSize,
+            widthSpec,
+            heightSpec,
+            reMeasureEventHandler,
+            viaSetSize = false,
+        )
+      } else {
+        synchronized(this) {
+          measureLocked(
+              outSize,
+              widthSpec,
+              heightSpec,
+              reMeasureEventHandler,
+              canRemeasure,
+              scrollDirection,
+              shouldMeasureItemForSize,
           )
         }
       }
     } finally {
-      isInMeasure.set(false)
+      exitMeasure()
       if (hasAsyncOperations) {
         ensureApplyReadyBatches()
       }
     }
+  }
+
+  private fun enterMeasure() {
+    if (recyclerBinderConfig.layoutItemsOutsideMeasureLock) {
+      measuresInProgress.incrementAndGet()
+    } else {
+      isInMeasure.set(true)
+    }
+  }
+
+  private fun exitMeasure() {
+    if (recyclerBinderConfig.layoutItemsOutsideMeasureLock) {
+      measuresInProgress.decrementAndGet()
+    } else {
+      isInMeasure.set(false)
+    }
+  }
+
+  private fun isMeasuring(): Boolean = isInMeasure.get() || measuresInProgress.get() > 0
+
+  /** The body of [measure] that runs under the binder lock. */
+  @GuardedBy("this")
+  private fun measureLocked(
+      outSize: Size,
+      widthSpec: Int,
+      heightSpec: Int,
+      reMeasureEventHandler: EventHandler<ReMeasureEvent>?,
+      canRemeasure: Boolean,
+      scrollDirection: Int,
+      shouldMeasureItemForSize: Boolean,
+  ) {
+    if (lastWidthSpec != UNINITIALIZED && !requiresRemeasure.get()) {
+      val measuredSize = this.measuredSize
+      val crossAxisCompatible = isCrossAxisCompatible(widthSpec, heightSpec, scrollDirection)
+
+      if (crossAxisCompatible && !isMainAxisWrapContent) {
+        // Early return: cross-axis unchanged, main-axis size from spec.
+        // Not valid for wrapContent — main-axis size must be computed from content.
+        when (scrollDirection) {
+          VERTICAL -> {
+            outSize.width = checkNotNull(measuredSize).width
+            outSize.height = getSize(heightSpec)
+          }
+          else -> {
+            outSize.width = getSize(widthSpec)
+            outSize.height = checkNotNull(measuredSize).height
+          }
+        }
+
+        return
+      }
+
+      if (!crossAxisCompatible) {
+        // Cross-axis size changed — invalidate so ViewHolders are rebound
+        // with updated LayoutParams (applies to both wrapContent and non-wrapContent).
+        _isMeasured.set(false)
+        invalidateLayoutData()
+      }
+    }
+    // We have never measured before or the measures are not valid so we need to measure now.
+    lastWidthSpec = widthSpec
+    lastHeightSpec = heightSpec
+
+    if (!hasComputedRange()) {
+      val holderForRangeInfo = getHolderForRangeInfo()
+      if (holderForRangeInfo != null) {
+        initRange(getSize(widthSpec), getSize(heightSpec), holderForRangeInfo)
+      }
+    }
+
+    val initialMeasuredSize = this.getInitialMeasuredSize(widthSpec, heightSpec, canRemeasure)
+
+    // At this point we might still not have a range. In this situation we should return the
+    // best size we can detect from the size spec and update it when the first item comes in.
+    when (scrollDirection) {
+      VERTICAL ->
+          if (!shouldMeasureItemForSize || sizeForMeasure != null) {
+            reMeasureEventEventHandler = if (isMainAxisWrapContent) reMeasureEventHandler else null
+          } else {
+            reMeasureEventEventHandler = reMeasureEventHandler
+            requiresRemeasure.set(!isMainAxisWrapContent)
+          }
+
+      else -> // HORIZONTAL
+      if (!shouldMeasureItemForSize || sizeForMeasure != null) {
+            reMeasureEventEventHandler =
+                if (hasDynamicItemHeight || isMainAxisWrapContent) reMeasureEventHandler else null
+            requiresRemeasure.set(hasDynamicItemHeight)
+          } else {
+            reMeasureEventEventHandler = reMeasureEventHandler
+            requiresRemeasure.set(!isMainAxisWrapContent)
+          }
+    }
+
+    if (isMainAxisWrapContent) {
+      val wrapSize = Size()
+      fillListViewport(initialMeasuredSize.width, initialMeasuredSize.height, wrapSize)
+      outSize.width = wrapSize.width
+      outSize.height = wrapSize.height
+    } else {
+      outSize.width = initialMeasuredSize.width
+      outSize.height = initialMeasuredSize.height
+    }
+
+    measuredSize = Size(outSize.width, outSize.height)
+    _isMeasured.set(true)
+
+    componentWarmer?.setComponentTreeHolderFactory(componentTreeHolderPreparer)
+
+    maybeFillHScrollViewport()
+    updateAsyncInsertOperations()
+    if (estimatedViewportCount != RecyclerView.NO_POSITION) {
+      computeRange(
+          currentFirstVisiblePosition,
+          currentLastVisiblePosition,
+          trigger = CollectionRangeTrigger.INITIAL,
+      )
+    }
+  }
+
+  @GuardedBy("this")
+  private fun isCrossAxisCompatible(
+      widthSpec: Int,
+      heightSpec: Int,
+      scrollDirection: Int,
+  ): Boolean {
+    val measuredSize = this.measuredSize ?: return false
+    return when (scrollDirection) {
+      VERTICAL ->
+          MeasureComparisonUtils.isMeasureSpecCompatible(
+              lastWidthSpec,
+              widthSpec,
+              measuredSize.width,
+          )
+      else ->
+          MeasureComparisonUtils.isMeasureSpecCompatible(
+              lastHeightSpec,
+              heightSpec,
+              measuredSize.height,
+          )
+    }
+  }
+
+  /**
+   * [measure] (or [setSize] when [viaSetSize]) without laying items out under the binder lock. Each
+   * round, under the lock, finds the first item size the locked measure would compute that this
+   * call has not computed yet. If there is none, it runs the locked measure with the computed
+   * sizes. Otherwise it lays that item out without the lock and goes again. A background caller
+   * falls back to the locked measure after [BACKGROUND_MEASURE_RETRY_LIMIT] rounds that made no
+   * progress. Returns false when [viaSetSize] found the size compatible and measured nothing.
+   */
+  private fun measureWithLayoutsOutsideLock(
+      outSize: Size,
+      widthSpec: Int,
+      heightSpec: Int,
+      reMeasureEventHandler: EventHandler<ReMeasureEvent>?,
+      viaSetSize: Boolean,
+  ): Boolean {
+    val isMainThread = ThreadUtils.isMainThread
+    val layouts = MeasureLayouts()
+    val scrollDirection = layoutInfo.getScrollDirection()
+    val retryLimit = if (isMainThread) MAIN_MEASURE_RETRY_LIMIT else BACKGROUND_MEASURE_RETRY_LIMIT
+    while (true) {
+      val next: MeasureLayout
+      val context: ComponentContext
+      synchronized(this) {
+        val handler = if (viaSetSize) reMeasureEventEventHandler else reMeasureEventHandler
+        val canRemeasure = handler != null
+        val shouldMeasureItemForSize =
+            shouldMeasureItemForSize(widthSpec, heightSpec, scrollDirection, canRemeasure)
+        if (
+            viaSetSize && lastWidthSpec != UNINITIALIZED && isCompatibleSize(widthSpec, heightSpec)
+        ) {
+          revalidateLaidOutItems(layouts)
+          return false
+        }
+        if (layouts.retries >= retryLimit) {
+          trace({ "RecyclerBinder.measureUnderLock" }) {
+            measureLocked(
+                outSize,
+                widthSpec,
+                heightSpec,
+                handler,
+                canRemeasure,
+                scrollDirection,
+                shouldMeasureItemForSize,
+            )
+          }
+          revalidateLaidOutItems(layouts)
+          return true
+        }
+        val missing =
+            nextMeasureLayout(layouts, widthSpec, heightSpec, canRemeasure, scrollDirection)
+        layouts.notePlan(missing)
+        if (missing == null) {
+          measureLayouts = layouts
+          try {
+            measureLocked(
+                outSize,
+                widthSpec,
+                heightSpec,
+                handler,
+                canRemeasure,
+                scrollDirection,
+                shouldMeasureItemForSize,
+            )
+          } finally {
+            measureLayouts = null
+          }
+          revalidateLaidOutItems(layouts)
+          return true
+        }
+        next = missing
+        context = checkNotNull(componentContext)
+      }
+      // A size the tree did not write (released tree or future, a request for an older render
+      // info) is not recorded, so the next round asks for it again.
+      val output = Size(UNFILLED_SIZE, UNFILLED_SIZE)
+      // The range item's layout is the binder's first layout, which initRange marks for the startup
+      // logger when it lays it out itself.
+      val markFirstLayout = next.isRangeItem && LithoStartupLogger.isEnabled(startupLogger)
+      if (markFirstLayout) {
+        startupLogger?.markPoint(
+            LithoStartupLogger.FIRST_LAYOUT,
+            LithoStartupLogger.START,
+            startupLoggerAttribution,
+        )
+      }
+      try {
+        trace({ "RecyclerBinder.measureItemOutsideLock" }) {
+          next.holder.computeLayoutSync(context, next.widthSpec, next.heightSpec, output)
+        }
+      } finally {
+        if (markFirstLayout) {
+          startupLogger?.markPoint(
+              LithoStartupLogger.FIRST_LAYOUT,
+              LithoStartupLogger.END,
+              startupLoggerAttribution,
+          )
+        }
+      }
+      if (output.width != UNFILLED_SIZE) {
+        next.width = output.width
+        next.height = output.height
+        layouts.computed.add(next)
+      }
+    }
+  }
+
+  /**
+   * The first item size [measureLocked] would compute synchronously with these specs that [layouts]
+   * does not have, or null when it has them all. Mirrors [measureLocked]'s decisions without
+   * changing anything.
+   */
+  @GuardedBy("this")
+  private fun nextMeasureLayout(
+      layouts: MeasureLayouts,
+      widthSpec: Int,
+      heightSpec: Int,
+      canRemeasure: Boolean,
+      scrollDirection: Int,
+  ): MeasureLayout? {
+    layouts.lookups.clear()
+    var invalidatesLayoutData = false
+    if (lastWidthSpec != UNINITIALIZED && !requiresRemeasure.get()) {
+      val crossAxisCompatible = isCrossAxisCompatible(widthSpec, heightSpec, scrollDirection)
+      if (crossAxisCompatible && !isMainAxisWrapContent) {
+        return null
+      }
+      invalidatesLayoutData = !crossAxisCompatible
+    }
+
+    var sizeForMeasure = if (invalidatesLayoutData) null else this.sizeForMeasure
+    if (!hasManualEstimatedViewportCount && (invalidatesLayoutData || !hasComputedRange())) {
+      val holderRangeInfo = getHolderForRangeInfo()
+      if (holderRangeInfo != null) {
+        val holder = checkNotNull(holderRangeInfo.holders[holderRangeInfo.position])
+        val isMeasured = !invalidatesLayoutData && isMeasured
+        val request =
+            layouts.request(
+                holder,
+                getActualChildrenWidthSpec(holder, measuredSize, widthSpec, isMeasured),
+                getActualChildrenHeightSpec(holder, measuredSize, heightSpec, isMeasured),
+            )
+        sizeForMeasure =
+            layouts.find(request)
+                ?: return request.also { rangeItemRequest ->
+                  rangeItemRequest.isRangeItem = true
+                  if (!layouts.scheduledInitRangeLayouts) {
+                    // As initRange does before its sync layout, so the next items' layouts overlap
+                    // this one; at the specs the apply will use.
+                    layouts.scheduledInitRangeLayouts = true
+                    maybeScheduleOneAsyncLayoutDuringInitRange(
+                        ComponentAsyncInitRangeIterator(
+                            holderRangeInfo.holders,
+                            holderRangeInfo.position,
+                            _componentTreeHolders.lastIndex,
+                            traverseLayoutBackwards,
+                        ),
+                        InitRangeSpecs(measuredSize, widthSpec, heightSpec, isMeasured),
+                        fromDryRun = true,
+                    )
+                  }
+                }
+      }
+    }
+
+    val measured = getInitialMeasuredSize(widthSpec, heightSpec, canRemeasure, sizeForMeasure)
+    if (isMainAxisWrapContent) {
+      val wrapSize = Size()
+      nextFillLayout(layouts, _componentTreeHolders, 0, measured.width, measured.height, wrapSize)
+          ?.let { missing ->
+            return missing
+          }
+      measured.width = wrapSize.width
+      measured.height = wrapSize.height
+    }
+
+    if (hScrollAsyncMode && !hasFilledViewport && !ThreadUtils.isMainThread) {
+      if (_componentTreeHolders.isNotEmpty()) {
+        val firstVisiblePosition =
+            if (isMainAxisWrapContent) 0 else layoutInfo.findFirstVisibleItemPosition()
+        val startIndex =
+            if (firstVisiblePosition != RecyclerView.NO_POSITION) firstVisiblePosition else 0
+        return nextFillLayout(
+            layouts,
+            _componentTreeHolders,
+            startIndex,
+            measured.width,
+            measured.height,
+            null,
+        )
+      } else if (asyncBatches.isNotEmpty()) {
+        val insertsInFirstBatch =
+            asyncBatches.first.operations.filterIsInstance<Insert>().map { it.holder }
+        return nextFillLayout(
+            layouts,
+            insertsInFirstBatch,
+            0,
+            measured.width,
+            measured.height,
+            null,
+        )
+      }
+    }
+    return null
+  }
+
+  /** [computeLayoutsToFillListViewport] without laying anything out; see [nextMeasureLayout]. */
+  @GuardedBy("this")
+  private fun nextFillLayout(
+      layouts: MeasureLayouts,
+      holders: List<ComponentTreeHolder?>,
+      offset: Int,
+      maxWidth: Int,
+      maxHeight: Int,
+      outputSize: Size?,
+  ): MeasureLayout? {
+    val filler = layoutInfo.createViewportFiller(maxWidth, maxHeight) ?: return null
+    val widthSpec = makeSizeSpec(maxWidth, SizeSpec.EXACTLY)
+    val heightSpec = makeSizeSpec(maxHeight, SizeSpec.EXACTLY)
+    var index = offset
+    while (filler.wantsMore() && index < holders.size) {
+      val holder = checkNotNull(holders[index])
+      val renderInfo = holder.renderInfo
+      if (renderInfo.rendersView()) {
+        break
+      }
+      val request =
+          layouts.request(
+              holder,
+              layoutInfo.getChildWidthSpec(widthSpec, renderInfo),
+              layoutInfo.getChildHeightSpec(heightSpec, renderInfo),
+          )
+      val size = layouts.find(request) ?: return request
+      filler.add(renderInfo, size.width, size.height)
+      index++
+    }
+    if (outputSize != null) {
+      val fill = filler.getFill()
+      if (layoutInfo.getScrollDirection() == VERTICAL) {
+        outputSize.width = maxWidth
+        outputSize.height = min(fill, maxHeight)
+      } else {
+        outputSize.width = min(fill, maxWidth)
+        outputSize.height = maxHeight
+      }
+    }
+    return null
+  }
+
+  /**
+   * An item layout [measureLocked] needs: the size, once computed, of [holder]'s [component] with
+   * these tree props and child specs.
+   */
+  private class MeasureLayout(
+      val holder: ComponentTreeHolder,
+      val component: Component,
+      val treePropContainer: TreePropContainer?,
+      val widthSpec: Int,
+      val heightSpec: Int,
+  ) {
+    /** The range item of a first measure (initRange's layout). */
+    var isRangeItem: Boolean = false
+    var width: Int = UNFILLED_SIZE
+    var height: Int = UNFILLED_SIZE
+
+    fun isFor(other: MeasureLayout): Boolean =
+        holder === other.holder &&
+            component === other.component &&
+            treePropContainer === other.treePropContainer &&
+            widthSpec == other.widthSpec &&
+            heightSpec == other.heightSpec
+  }
+
+  /** The item sizes one [measureWithLayoutsOutsideLock] call has computed, and its progress. */
+  private class MeasureLayouts {
+    val computed: ArrayList<MeasureLayout> = ArrayList()
+    /** Holders laid out again because their tree had no layout for a size this call computed. */
+    private val relaidOut: MutableSet<ComponentTreeHolder> = HashSet()
+    /** Whether the last round's miss is such a layout again, which is not a retry. */
+    private var missIsRelayout = false
+    /** The layouts the last round looked up, in order. */
+    val lookups: ArrayList<MeasureLayout> = ArrayList()
+    private var plan: List<MeasureLayout> = emptyList()
+    /** Whether the dry run already scheduled the init range's async layouts. */
+    var scheduledInitRangeLayouts: Boolean = false
+    var retries: Int = 0
+      private set
+
+    fun request(holder: ComponentTreeHolder, widthSpec: Int, heightSpec: Int): MeasureLayout =
+        key(holder, widthSpec, heightSpec).also { lookups.add(it) }
+
+    fun key(holder: ComponentTreeHolder, widthSpec: Int, heightSpec: Int): MeasureLayout {
+      val renderInfo = holder.renderInfo
+      return MeasureLayout(
+          holder,
+          renderInfo.component,
+          (renderInfo as? TreePropsWrappedRenderInfo)?.treePropContainer,
+          widthSpec,
+          heightSpec,
+      )
+    }
+
+    /**
+     * The size [measureLocked] can use for [request], or null if it must be computed first. Once
+     * this call has requested the layout, the size is the one a request would reuse: the tree's
+     * committed layout for the item's component at these specs, with no state update waiting. When
+     * there is none (another thread's request for other specs overtook this call's layout, or a
+     * state update came after it), the item is laid out again, once per call, since the binder
+     * binds it at these specs and a tree without a layout for them is laid out again on main when
+     * its view is measured. After that the call takes the size it computed, so two measures at
+     * different specs, or an item whose state keeps changing, cannot keep it laying out. The size
+     * found is kept on [request] for the apply.
+     */
+    fun find(request: MeasureLayout): Size? {
+      val computedSize = computedSizeFor(request) ?: return null
+      val committedSize = committedSizeFor(request)
+      if (committedSize == null && relaidOut.add(request.holder)) {
+        missIsRelayout = true
+        return null
+      }
+      val size = committedSize ?: computedSize
+      request.width = size.width
+      request.height = size.height
+      return size
+    }
+
+    /**
+     * The size the last round found for [key]. The apply runs in the same lock section as that
+     * round, so it takes the sizes the round planned with.
+     */
+    fun foundSize(key: MeasureLayout): Size? =
+        lookups
+            .lastOrNull { lookup -> lookup.width != UNFILLED_SIZE && lookup.isFor(key) }
+            ?.let { lookup -> Size(lookup.width, lookup.height) }
+
+    private fun computedSizeFor(request: MeasureLayout): Size? =
+        computed
+            .lastOrNull { layout -> layout.isFor(request) }
+            ?.let { layout -> Size(layout.width, layout.height) }
+
+    /**
+     * The size the tree would reuse for a request at these specs: its committed layout for its
+     * current root, with no state update waiting (a request would lay that update out). The root
+     * must be the item's component or the copy the tree made of it for a state update, not, for
+     * example, an error boundary's fallback.
+     */
+    private fun committedSizeFor(request: MeasureLayout): Size? {
+      val tree = request.holder.componentTree ?: return null
+      if (tree.getCommittedTreeStateSync()?.hasUncommittedUpdates() == true) return null
+      val root = tree.root ?: return null
+      if (root !== request.component && !root.isEquivalentTo(request.component)) return null
+      return tree.committedLayoutSizeFor(root, request.widthSpec, request.heightSpec)
+    }
+
+    /**
+     * A round makes progress when the layouts it found begin with the previous round's lookups,
+     * whose last one was the layout computed in between; otherwise it is a retry.
+     */
+    fun notePlan(missing: MeasureLayout?) {
+      val found = if (missing == null) lookups.size else lookups.size - 1
+      val progressed =
+          plan.size <= found && plan.indices.all { index -> plan[index].isFor(lookups[index]) }
+      // A repeated layout happens at most once per holder, so it does not count towards the limit.
+      if (!progressed && !(missing != null && missIsRelayout)) {
+        retries++
+      }
+      missIsRelayout = false
+      plan = ArrayList(lookups)
+    }
+  }
+
+  /**
+   * Requests a layout for each item this call laid out outside the lock whose tree is not valid at
+   * its current child specs. Another thread's request can overtake an unlocked layout and leave the
+   * holder invalid with nothing queued, and an apply that takes the early return runs no range
+   * check that would request it again.
+   */
+  @GuardedBy("this")
+  private fun revalidateLaidOutItems(layouts: MeasureLayouts) {
+    for (holder in layouts.computed.map { layout -> layout.holder }.distinct()) {
+      requestLayoutIfInvalid(
+          holder,
+          getActualChildrenWidthSpec(holder, measuredSize, lastWidthSpec),
+          getActualChildrenHeightSpec(holder, measuredSize, lastHeightSpec),
+      )
+    }
+  }
+
+  /**
+   * [ComponentTreeHolder.computeLayoutSync] for the locked measure: the size computed outside the
+   * lock when the measure applying now has it.
+   */
+  @GuardedBy("this")
+  private fun computeLayoutSyncForMeasure(
+      holder: ComponentTreeHolder,
+      context: ComponentContext,
+      widthSpec: Int,
+      heightSpec: Int,
+      size: Size,
+  ) {
+    // The main thread's mutation path runs initRange without the lock; it lays out as before.
+    val layouts = if (Thread.holdsLock(this)) measureLayouts else null
+    if (layouts != null && holder.renderInfo.rendersComponent()) {
+      val found = layouts.foundSize(layouts.key(holder, widthSpec, heightSpec))
+      if (found != null) {
+        size.width = found.width
+        size.height = found.height
+        return
+      }
+      trace({ "RecyclerBinder.measureItemUnderLock" }) {
+        holder.computeLayoutSync(context, widthSpec, heightSpec, size)
+      }
+      return
+    }
+    holder.computeLayoutSync(context, widthSpec, heightSpec, size)
   }
 
   private val isMeasured: Boolean
@@ -2321,7 +2812,8 @@ class RecyclerBinder private constructor(builder: Builder) :
           break
         }
 
-        holder.computeLayoutSync(
+        computeLayoutSyncForMeasure(
+            holder,
             checkNotNull(componentContext),
             layoutInfo.getChildWidthSpec(widthSpec, renderInfo),
             layoutInfo.getChildHeightSpec(heightSpec, renderInfo),
@@ -2415,16 +2907,30 @@ class RecyclerBinder private constructor(builder: Builder) :
     if (asyncInsertHandler != null) {
       asyncInsertHandler.post(
           {
+            var layoutWidthSpec = widthSpec
+            var layoutHeightSpec = heightSpec
+            if (recyclerBinderConfig.layoutItemsOutsideMeasureLock) {
+              // The specs as they are when the layout runs, not when it was posted.
+              synchronized(this) {
+                layoutWidthSpec = getActualChildrenWidthSpec(holder, measuredSize, lastWidthSpec)
+                layoutHeightSpec = getActualChildrenHeightSpec(holder, measuredSize, lastHeightSpec)
+              }
+            }
             if (needsForcedRelayout) {
               holder.computeLayoutSync(
                   currentComponentContext,
-                  widthSpec,
-                  heightSpec,
+                  layoutWidthSpec,
+                  layoutHeightSpec,
                   Size(),
                   forceLayout = true,
               )
             } else {
-              holder.computeLayoutSync(currentComponentContext, widthSpec, heightSpec, Size())
+              holder.computeLayoutSync(
+                  currentComponentContext,
+                  layoutWidthSpec,
+                  layoutHeightSpec,
+                  Size(),
+              )
             }
           },
           "AsyncInsertLayout",
@@ -2515,26 +3021,64 @@ class RecyclerBinder private constructor(builder: Builder) :
     maybeScheduleOneAsyncLayoutDuringInitRange(asyncRangeIterator)
   }
 
+  /**
+   * The specs a measure's dry run will apply (with
+   * [RecyclerBinderConfig.layoutItemsOutsideMeasureLock]), for the init range layouts it schedules
+   * before the binder has them.
+   */
+  private class InitRangeSpecs(
+      val measuredSize: Size?,
+      val widthSpec: Int,
+      val heightSpec: Int,
+      val isMeasured: Boolean,
+  )
+
   private fun maybeScheduleOneAsyncLayoutDuringInitRange(
       asyncRangeIterator: ComponentAsyncInitRangeIterator,
+      dryRunSpecs: InitRangeSpecs? = null,
+      fromDryRun: Boolean = false,
   ) {
     val nextHolder = asyncRangeIterator.next()
 
-    if (_componentTreeHolders.isEmpty() || nextHolder == null || estimatedViewportCount != UNSET) {
+    if (
+        _componentTreeHolders.isEmpty() ||
+            nextHolder == null ||
+            // The dry run schedules before the apply resets the range.
+            (!fromDryRun && estimatedViewportCount != UNSET)
+    ) {
       // checked null for tests
       return
     }
 
-    val measuredSize: Size?
-    val lastWidthSpec: Int
-    val lastHeightSpec: Int
-    synchronized(this@RecyclerBinder) {
-      measuredSize = this.measuredSize
-      lastWidthSpec = this.lastWidthSpec
-      lastHeightSpec = this.lastHeightSpec
+    val childWidthSpec: Int
+    val childHeightSpec: Int
+    if (dryRunSpecs != null) {
+      childWidthSpec =
+          getActualChildrenWidthSpec(
+              nextHolder,
+              dryRunSpecs.measuredSize,
+              dryRunSpecs.widthSpec,
+              dryRunSpecs.isMeasured,
+          )
+      childHeightSpec =
+          getActualChildrenHeightSpec(
+              nextHolder,
+              dryRunSpecs.measuredSize,
+              dryRunSpecs.heightSpec,
+              dryRunSpecs.isMeasured,
+          )
+    } else {
+      val measuredSize: Size?
+      val lastWidthSpec: Int
+      val lastHeightSpec: Int
+      synchronized(this@RecyclerBinder) {
+        measuredSize = this.measuredSize
+        lastWidthSpec = this.lastWidthSpec
+        lastHeightSpec = this.lastHeightSpec
+      }
+      childWidthSpec = getActualChildrenWidthSpec(nextHolder, measuredSize, lastWidthSpec)
+      childHeightSpec = getActualChildrenHeightSpec(nextHolder, measuredSize, lastHeightSpec)
     }
-    val childWidthSpec = getActualChildrenWidthSpec(nextHolder, measuredSize, lastWidthSpec)
-    val childHeightSpec = getActualChildrenHeightSpec(nextHolder, measuredSize, lastHeightSpec)
     if (nextHolder.isTreeValidForSizeSpecs(childWidthSpec, childHeightSpec)) {
       return
     }
@@ -2547,7 +3091,9 @@ class RecyclerBinder private constructor(builder: Builder) :
               height: Int,
               stateUpdate: Boolean,
           ) {
-            maybeScheduleOneAsyncLayoutDuringInitRange(asyncRangeIterator)
+            // A chain the dry run started keeps its specs: the apply may not have set the binder's
+            // yet. It stops once a range is set.
+            maybeScheduleOneAsyncLayoutDuringInitRange(asyncRangeIterator, dryRunSpecs)
             nextHolder.clearMeasureListener(this)
           }
         }
@@ -2584,8 +3130,12 @@ class RecyclerBinder private constructor(builder: Builder) :
     val holder = checkNotNull(holderRangeInfo.holders[holderRangeInfo.position])
     val childWidthSpec = getActualChildrenWidthSpec(holder, measuredSize, lastWidthSpec)
     val childHeightSpec = getActualChildrenHeightSpec(holder, measuredSize, lastHeightSpec)
+    // A measure that applies with sizes it computed outside the lock laid the range item out there,
+    // and marked that layout.
+    val laidOutOutsideLock = Thread.holdsLock(this) && measureLayouts != null
+    val marksFirstLayout = loggingForStartup && !laidOutOutsideLock
 
-    if (loggingForStartup) {
+    if (marksFirstLayout) {
       startupLogger?.markPoint(
           LithoStartupLogger.FIRST_LAYOUT,
           LithoStartupLogger.START,
@@ -2597,7 +3147,7 @@ class RecyclerBinder private constructor(builder: Builder) :
 
       try {
         val size = Size()
-        holder.computeLayoutSync(componentContext, childWidthSpec, childHeightSpec, size)
+        computeLayoutSyncForMeasure(holder, componentContext, childWidthSpec, childHeightSpec, size)
 
         val rangeSize =
             max(layoutInfo.approximateRangeSize(size.width, size.height, width, height), 1)
@@ -2605,7 +3155,7 @@ class RecyclerBinder private constructor(builder: Builder) :
         sizeForMeasure = size
         estimatedViewportCount = rangeSize
       } finally {
-        if (loggingForStartup) {
+        if (marksFirstLayout) {
           startupLogger?.markPoint(
               LithoStartupLogger.FIRST_LAYOUT,
               LithoStartupLogger.END,
@@ -2656,8 +3206,34 @@ class RecyclerBinder private constructor(builder: Builder) :
    * the binder of the final measured size. The binder might decide to re-compute its children
    * layouts if the measures provided here are not compatible with the ones receive in onMeasure.
    */
-  @Synchronized
   override fun setSize(width: Int, height: Int) {
+    if (recyclerBinderConfig.layoutItemsOutsideMeasureLock) {
+      // Not under the lock: the measure lays its items out without it.
+      enterMeasure()
+      var measured = false
+      try {
+        measured =
+            measureWithLayoutsOutsideLock(
+                Size(),
+                makeSizeSpec(width, SizeSpec.EXACTLY),
+                makeSizeSpec(height, SizeSpec.EXACTLY),
+                reMeasureEventHandler = null,
+                viaSetSize = true,
+            )
+      } finally {
+        exitMeasure()
+        // As in the locked path, only a size that needed a measure applies ready batches.
+        if (measured && hasAsyncOperations) {
+          ensureApplyReadyBatches()
+        }
+      }
+      return
+    }
+    setSizeLocked(width, height)
+  }
+
+  @Synchronized
+  private fun setSizeLocked(width: Int, height: Int) {
     if (
         lastWidthSpec == UNINITIALIZED ||
             !isCompatibleSize(
@@ -3314,6 +3890,7 @@ class RecyclerBinder private constructor(builder: Builder) :
     val holder: ComponentTreeHolder
     val childrenWidthSpec: Int
     val childrenHeightSpec: Int
+    val isInRange: Boolean
 
     synchronized(this) {
       // Someone modified the ComponentsTreeHolders while we were computing this range. We
@@ -3330,9 +3907,15 @@ class RecyclerBinder private constructor(builder: Builder) :
 
       childrenWidthSpec = getActualChildrenWidthSpec(holder, measuredSize, lastWidthSpec)
       childrenHeightSpec = getActualChildrenHeightSpec(holder, measuredSize, lastHeightSpec)
+      isInRange = (index >= rangeStart || holder.renderInfo.isSticky) && index <= rangeEnd
+      if (recyclerBinderConfig.layoutItemsOutsideMeasureLock && isInRange) {
+        // Requested under the lock that read the specs, so no request for older specs follows it.
+        requestLayoutIfInvalid(holder, childrenWidthSpec, childrenHeightSpec)
+        return true
+      }
     }
 
-    if ((index >= rangeStart || holder.renderInfo.isSticky) && index <= rangeEnd) {
+    if (isInRange) {
       if (!holder.isTreeValidForSizeSpecs(childrenWidthSpec, childrenHeightSpec)) {
         holder.computeLayoutAsync(
             checkNotNull(componentContext),
@@ -3378,6 +3961,10 @@ class RecyclerBinder private constructor(builder: Builder) :
       if (shouldTryComputeLayout) {
         childrenWidthSpec = getActualChildrenWidthSpec(holder, measuredSize, lastWidthSpec)
         childrenHeightSpec = getActualChildrenHeightSpec(holder, measuredSize, lastHeightSpec)
+        if (recyclerBinderConfig.layoutItemsOutsideMeasureLock) {
+          requestLayoutIfInvalid(holder, childrenWidthSpec, childrenHeightSpec)
+          return true
+        }
       }
     }
 
@@ -3394,6 +3981,13 @@ class RecyclerBinder private constructor(builder: Builder) :
     }
 
     return true
+  }
+
+  @GuardedBy("this")
+  private fun requestLayoutIfInvalid(holder: ComponentTreeHolder, widthSpec: Int, heightSpec: Int) {
+    if (!holder.isTreeValidForSizeSpecs(widthSpec, heightSpec)) {
+      holder.computeLayoutAsync(checkNotNull(componentContext), widthSpec, heightSpec)
+    }
   }
 
   private fun maybeReleaseOutOfRangeTree(holder: ComponentTreeHolder) {
@@ -3478,6 +4072,7 @@ class RecyclerBinder private constructor(builder: Builder) :
       treeHolder: ComponentTreeHolder,
       measuredSize: Size?,
       lastWidthSpec: Int,
+      isMeasured: Boolean = this.isMeasured,
   ): Int {
     if (isMeasured) {
       check(measuredSize != null)
@@ -3501,6 +4096,7 @@ class RecyclerBinder private constructor(builder: Builder) :
       treeHolder: ComponentTreeHolder,
       measuredSize: Size?,
       lastHeightSpec: Int,
+      isMeasured: Boolean = this.isMeasured,
   ): Int {
     if (hasDynamicItemHeight) {
       if (isMeasured && isMatchingParentSize(treeHolder.renderInfo.parentHeightPercent)) {
@@ -3937,6 +4533,14 @@ class RecyclerBinder private constructor(builder: Builder) :
       if (isCircular) (position % _componentTreeHolders.size) else position
 
   private fun createComponentTreeHolder(renderInfo: RenderInfo): ComponentTreeHolder {
+    val holder = createOrConsumeComponentTreeHolder(renderInfo)
+    if (recyclerBinderConfig.layoutItemsOutsideMeasureLock) {
+      holder.isLaidOutOutsideBinderLock = true
+    }
+    return holder
+  }
+
+  private fun createOrConsumeComponentTreeHolder(renderInfo: RenderInfo): ComponentTreeHolder {
     if (componentWarmer != null) {
       val tag = renderInfo.getCustomAttribute(ComponentWarmer.COMPONENT_WARMER_TAG)
       if (tag is String) {
@@ -4012,6 +4616,16 @@ class RecyclerBinder private constructor(builder: Builder) :
           }
 
           override fun prepareAsync(holder: ComponentTreeHolder) {
+            if (recyclerBinderConfig.layoutItemsOutsideMeasureLock) {
+              synchronized(this@RecyclerBinder) {
+                requestLayoutIfInvalid(
+                    holder,
+                    getActualChildrenWidthSpec(holder, measuredSize, lastWidthSpec),
+                    getActualChildrenHeightSpec(holder, measuredSize, lastHeightSpec),
+                )
+              }
+              return
+            }
             val measuredSize: Size?
             val lastWidthSpec: Int
             val lastHeightSpec: Int
@@ -4391,6 +5005,12 @@ class RecyclerBinder private constructor(builder: Builder) :
     private val UNINITIALIZED = MeasureSpecUtils.unspecified()
     const val UNSET: Int = -1
     const val APPLY_READY_BATCHES_RETRY_LIMIT: Int = 100
+    /** Rounds without progress before a background measure lays its items out under the lock. */
+    private const val BACKGROUND_MEASURE_RETRY_LIMIT = 3
+    /** The same for the main thread: a safety net; the main thread is not expected to reach it. */
+    private const val MAIN_MEASURE_RETRY_LIMIT = 32
+    /** A size [ComponentTreeHolder.computeLayoutSync] did not write. */
+    private const val UNFILLED_SIZE = -1
     private const val MAX_DEBUG_OPERATIONS = 3
     const val ID_CUSTOM_ATTR_KEY: String = "id"
 
