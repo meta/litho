@@ -91,6 +91,8 @@ import com.facebook.samples.litho.kotlin.animations.diffbased.PageIndicatorsComp
 import com.facebook.samples.litho.kotlin.animations.dynamicprops.AllCommonDynamicPropsKComponent
 import com.facebook.samples.litho.kotlin.animations.dynamicprops.AnimateDynamicPropsKComponent
 import com.facebook.samples.litho.kotlin.animations.dynamicprops.CustomDynamicPropsKComponent
+import com.facebook.samples.litho.kotlin.animations.expandablecard.DiffBasedExpandableCardComponent
+import com.facebook.samples.litho.kotlin.animations.expandablecard.StateBasedExpandableCardComponent
 import com.facebook.samples.litho.kotlin.animations.expandableelement.ExpandableElementRootKotlinKComponent
 import com.facebook.samples.litho.kotlin.animations.messages.Message
 import com.facebook.samples.litho.kotlin.animations.statebased.AnimatedContentCounterComponent
@@ -100,7 +102,6 @@ import com.facebook.samples.litho.kotlin.animations.statebased.AnimatedPropertie
 import com.facebook.samples.litho.kotlin.animations.statebased.AnimatedVisibilityDemoComponent
 import com.facebook.samples.litho.kotlin.animations.statebased.AnimationCallbackComponent
 import com.facebook.samples.litho.kotlin.animations.statebased.ColorAnimationComponent
-import com.facebook.samples.litho.kotlin.animations.statebased.ExpandableCardComponent
 import com.facebook.samples.litho.kotlin.animations.statebased.FadeToggleComponent
 import com.facebook.samples.litho.kotlin.animations.statebased.FeedPhotoComponent
 import com.facebook.samples.litho.kotlin.animations.statebased.InfiniteAnimationDemosComponent
@@ -330,7 +331,7 @@ class Demos {
                         ),
                         SingleDemo(
                             name = "Expandable Card",
-                            component = ExpandableCardComponent(),
+                            component = StateBasedExpandableCardComponent(),
                         ),
                         SingleDemo(
                             name = "Staggered Entrance",
@@ -380,6 +381,10 @@ class Demos {
                         SingleDemo(
                             name = "Reflow",
                             component = DiffReflowToggleComponent(),
+                        ),
+                        SingleDemo(
+                            name = "Expandable Card",
+                            component = DiffBasedExpandableCardComponent(),
                         ),
                         SingleDemo(
                             name = "Choreography",

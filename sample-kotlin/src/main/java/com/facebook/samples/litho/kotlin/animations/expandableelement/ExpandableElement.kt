@@ -39,8 +39,8 @@ const val TransitionBottomDetail = "transition_bottom_detail"
 /**
  * Demonstrates Litho's legacy transition API (`useTransition`, `Style.transitionKey`), kept as a
  * reference for existing code. There is no modern version of this demo yet. The closest are
- * [com.facebook.samples.litho.kotlin.animations.statebased.ExpandableCardComponent] and
- * [com.facebook.samples.litho.kotlin.animations.statebased.AnimatedVisibilityDemoComponent].
+ * [com.facebook.samples.litho.kotlin.animations.expandablecard.DiffBasedExpandableCardComponent]
+ * and [com.facebook.samples.litho.kotlin.animations.statebased.AnimatedVisibilityDemoComponent].
  */
 internal class ExpandableElement(
     private val content: Component,

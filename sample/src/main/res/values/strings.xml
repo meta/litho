@@ -97,4 +97,24 @@
   <string name="litho_sample_infinite_showcase_assistant_subtitle" description="Panel subtitle for launch assistant in the product-style Litho infinite animation sample">Collecting latest sign-offs</string>
   <string name="litho_sample_infinite_showcase_forecast_label" description="Panel label for rollout forecast in the product-style Litho infinite animation sample">Rollout forecast</string>
   <string name="litho_sample_infinite_showcase_forecast_status" description="Status text for a loading forecast in the product-style Litho infinite animation sample">Refreshing model</string>
+  <string name="litho_sample_expandable_title" description="Page title for the expandable trip card sample">Weekend escapes</string>
+  <string name="litho_sample_expandable_subtitle" description="Page subtitle for the expandable trip card sample">A little less planning. A little more possibility.</string>
+  <string name="litho_sample_expandable_hint" description="Interaction hint below the expandable trip card">Tap to explore the details. Tap again to tuck them away.</string>
+  <string name="litho_sample_expandable_collection" description="Collection label on the expandable trip card">THE COASTAL COLLECTION</string>
+  <string name="litho_sample_expandable_destination" description="Destination title on the expandable trip card">Big Sur weekend</string>
+  <string name="litho_sample_expandable_location" description="Location on the expandable trip card">California · Pacific Coast Highway</string>
+  <string name="litho_sample_expandable_show" description="Prompt to expand the trip card">Explore the itinerary</string>
+  <string name="litho_sample_expandable_hide" description="Prompt to collapse the trip card">Close the itinerary</string>
+  <string name="litho_sample_expandable_duration_value" description="Duration value in the trip summary">2 days</string>
+  <string name="litho_sample_expandable_duration" description="Label for trip duration">duration</string>
+  <string name="litho_sample_expandable_stops_value" description="Stop count in the trip summary">3 stops</string>
+  <string name="litho_sample_expandable_stops" description="Label for scenic stops">scenic route</string>
+  <string name="litho_sample_expandable_pace_value" description="Pace value in the trip summary">Slow</string>
+  <string name="litho_sample_expandable_pace" description="Label for trip pace">pace</string>
+  <string name="litho_sample_expandable_details_title" description="Heading above the expanded trip itinerary">Take the scenic route.</string>
+  <string name="litho_sample_expandable_summary" description="Summary of the expanded trip itinerary">Ocean air, quiet trails, and nowhere to rush. Your weekend, at a glance.</string>
+  <string name="litho_sample_expandable_day_one_title" description="Title of the first itinerary day">Saturday · Along the coast</string>
+  <string name="litho_sample_expandable_day_one_summary" description="Summary of the first itinerary day">Bixby Bridge &amp; a sunset at Pfeiffer Beach</string>
+  <string name="litho_sample_expandable_day_two_title" description="Title of the second itinerary day">Sunday · Into the redwoods</string>
+  <string name="litho_sample_expandable_day_two_summary" description="Summary of the second itinerary day">A slow morning in the forest at Big Sur</string>
 </resources>
