@@ -1504,7 +1504,7 @@ class RecyclerBinder private constructor(builder: Builder) :
     }
 
     val holder: ComponentTreeHolder
-    val renderInfoWasView: Boolean
+    val requiresRebind: Boolean
     synchronized(this) {
       if (
           handleIndexOutOfBoundsException(
@@ -1519,17 +1519,13 @@ class RecyclerBinder private constructor(builder: Builder) :
         return
       }
       holder = _componentTreeHolders[position]
-      renderInfoWasView = holder.renderInfo.rendersView()
-
       requireNotNull(renderInfo)
       renderInfoViewCreatorController.maybeTrackViewCreator(renderInfo)
-      updateHolder(holder, renderInfo)
+      requiresRebind = updateHolder(holder, renderInfo)
     }
 
-    // If this item is rendered with a view (or was rendered with a view before now) we need to
-    // notify the RecyclerView's adapter that something changed.
-    if (renderInfoWasView || (renderInfo?.rendersView() == true)) {
-      internalAdapter.notifyItemChanged(position)
+    if (requiresRebind) {
+      notifyUpdatedItem(holder, position)
     }
 
     viewportManager.setShouldUpdate(viewportManager.updateAffectsVisibleRange(position, 1))
@@ -1572,14 +1568,10 @@ class RecyclerBinder private constructor(builder: Builder) :
 
         requireNotNull(newRenderInfo)
 
-        // If this item is rendered with a view (or was rendered with a view before now) we still
-        // need to notify the RecyclerView's adapter that something changed.
-        if (newRenderInfo.rendersView() || holder.renderInfo.rendersView()) {
-          internalAdapter.notifyItemChanged(position + i)
-        }
-
         renderInfoViewCreatorController.maybeTrackViewCreator(newRenderInfo)
-        updateHolder(holder, newRenderInfo)
+        if (updateHolder(holder, newRenderInfo)) {
+          notifyUpdatedItem(holder, targetPosition)
+        }
       }
     }
 
@@ -4657,13 +4649,59 @@ class RecyclerBinder private constructor(builder: Builder) :
         }
 
   @UiThread
-  private fun updateHolder(holder: ComponentTreeHolder, renderInfo: RenderInfo) {
+  private fun notifyUpdatedItem(
+      holder: ComponentTreeHolder,
+      position: Int,
+      retryCount: Int = 0,
+  ) {
+    if (recyclerBinderConfig.enableSizeSpecRebind && isRecyclerViewTargetComputingLayout()) {
+      if (retryCount >= SIZE_SPEC_REBIND_RETRY_LIMIT) {
+        ComponentsReporter.emitMessage(
+            ComponentsReporter.LogLevel.ERROR,
+            "RecyclerBinder:SizeSpecRebindRetryLimit",
+            "Dropping row rebind after $retryCount frames -- RecyclerView is stuck in layout. " +
+                "Position: $position, isSubAdapter: $isSubAdapter",
+        )
+        return
+      }
+      ChoreographerCompatImpl.getInstance()
+          .postFrameCallback(
+              object : ChoreographerCompat.FrameCallback() {
+                override fun doFrame(frameTimeNanos: Long) {
+                  val currentPosition =
+                      synchronized(this@RecyclerBinder) {
+                        _componentTreeHolders.indexOf(holder)
+                      }
+                  if (currentPosition != RecyclerView.NO_POSITION) {
+                    notifyUpdatedItem(holder, currentPosition, retryCount + 1)
+                  }
+                }
+              },
+          )
+    } else {
+      internalAdapter.notifyItemChanged(position)
+    }
+  }
+
+  @UiThread
+  private fun updateHolder(holder: ComponentTreeHolder, renderInfo: RenderInfo): Boolean {
     val previousRenderInfo = holder.renderInfo
+    val rendersView = previousRenderInfo.rendersView() || renderInfo.rendersView()
+    val checkSizeSpecs = recyclerBinderConfig.enableSizeSpecRebind && !rendersView
+    val previousWidthSpec =
+        if (checkSizeSpecs) getActualChildrenWidthSpec(holder, measuredSize, lastWidthSpec) else 0
+    val previousHeightSpec =
+        if (checkSizeSpecs) getActualChildrenHeightSpec(holder, measuredSize, lastHeightSpec) else 0
     holder.renderInfo = renderInfo
     if (layoutHandlerFactory?.shouldUpdateLayoutHandler(previousRenderInfo, renderInfo) == true) {
       holder.updateLayoutHandler(layoutHandlerFactory.createLayoutCalculationHandler(renderInfo))
     }
     retainedRangeDirty = true
+    return rendersView ||
+        (checkSizeSpecs &&
+            (previousWidthSpec != getActualChildrenWidthSpec(holder, measuredSize, lastWidthSpec) ||
+                previousHeightSpec !=
+                    getActualChildrenHeightSpec(holder, measuredSize, lastHeightSpec)))
   }
 
   private fun getHolderForRangeInfo(): ComponentTreeHolderRangeInfo? {
@@ -5019,6 +5057,7 @@ class RecyclerBinder private constructor(builder: Builder) :
     private const val MAIN_MEASURE_RETRY_LIMIT = 32
     /** A size [ComponentTreeHolder.computeLayoutSync] did not write. */
     private const val UNFILLED_SIZE = -1
+    private const val SIZE_SPEC_REBIND_RETRY_LIMIT = 100
     private const val MAX_DEBUG_OPERATIONS = 3
     const val ID_CUSTOM_ATTR_KEY: String = "id"
 

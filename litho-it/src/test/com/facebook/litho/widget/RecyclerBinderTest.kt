@@ -63,6 +63,7 @@ import com.facebook.litho.viewcompat.ViewBinder
 import com.facebook.litho.viewcompat.ViewCreator
 import com.facebook.litho.widget.ComponentTreeHolder.ComponentTreeMeasureListenerFactory
 import com.facebook.litho.widget.RecyclerBinder.RenderCompleteRunnable
+import com.facebook.rendercore.ErrorReporter
 import com.facebook.rendercore.LogLevel
 import com.facebook.rendercore.RunnableHandler
 import java.util.concurrent.CountDownLatch
@@ -2704,6 +2705,290 @@ class RecyclerBinderTest {
       val lv = rv.getChildAt(i) as LithoView
       assertThat(lv.measuredWidth).isEqualTo(50)
       assertThat(lv.measuredHeight).isEqualTo(100)
+    }
+  }
+
+  @Test
+  fun testFullPageItemUpdateRefreshesRowSize() {
+    assertFullPageItemSizeUpdates(updateRange = false, async = false)
+  }
+
+  @Test
+  fun testFullPageItemRangeUpdateRefreshesRowSize() {
+    assertFullPageItemSizeUpdates(updateRange = true, async = false)
+  }
+
+  @Test
+  fun testFullPageItemAsyncUpdateRefreshesRowSize() {
+    assertFullPageItemSizeUpdates(updateRange = false, async = true)
+  }
+
+  @Test
+  fun testFullPageItemAsyncRangeUpdateRefreshesRowSize() {
+    assertFullPageItemSizeUpdates(updateRange = true, async = true)
+  }
+
+  @Test
+  fun testFullPageItemUpdatesKeepRowSizeWhenRebindDisabled() {
+    for (updateRange in listOf(false, true)) {
+      for (async in listOf(false, true)) {
+        assertFullPageItemSizeUpdates(updateRange, async, enableSizeSpecRebind = false)
+      }
+    }
+  }
+
+  @Test
+  fun testFullPageItemUpdateDuringLayoutRefreshesRowSize() {
+    ShadowLooper.pauseMainLooper()
+    assertFullPageItemSizeUpdates(updateRange = false, async = false, updateDuringLayout = true)
+  }
+
+  @Test
+  fun testFullPageItemRangeUpdateDuringLayoutRefreshesRowSize() {
+    ShadowLooper.pauseMainLooper()
+    assertFullPageItemSizeUpdates(updateRange = true, async = false, updateDuringLayout = true)
+  }
+
+  @Test
+  fun testDeferredSizeRebindFollowsShiftedRow() {
+    assertDeferredSizeRebindTargetsUpdatedHolder(removeUpdatedRow = false)
+  }
+
+  @Test
+  fun testDeferredSizeRebindSkipsRemovedRow() {
+    assertDeferredSizeRebindTargetsUpdatedHolder(removeUpdatedRow = true)
+  }
+
+  @Test
+  fun testDeferredSizeRebindStopsWhenLayoutRemainsStuck() {
+    assertDeferredSizeRebindRetries(recoverLayout = false)
+  }
+
+  @Test
+  fun testDeferredSizeRebindRecoversAfterMultipleFrames() {
+    assertDeferredSizeRebindRetries(recoverLayout = true)
+  }
+
+  private fun assertDeferredSizeRebindRetries(recoverLayout: Boolean) {
+    ShadowLooper.pauseMainLooper()
+    for (updateRange in listOf(false, true)) {
+      val reporter = TestComponentsReporter()
+      ErrorReporter.provide(reporter)
+      val binder =
+          RecyclerBinder.Builder()
+              .recyclerBinderConfig(RecyclerBinderConfig(enableSizeSpecRebind = true))
+              .build(componentContext)
+      fun row(widthPercent: Float): RenderInfo =
+          ComponentRenderInfo.create()
+              .component(SimpleMountSpecTester(StyleCompat.widthPx(40).heightPx(40).build()))
+              .parentWidthPercent(widthPercent)
+              .build()
+
+      binder.insertItemAt(0, row(50f))
+      binder.notifyChangeSetComplete(true, NO_OP_CHANGE_SET_COMPLETE_CALLBACK)
+      val rv = ComputingLayoutRecyclerView(getApplicationContext())
+      rv.itemAnimator = null
+      binder.mount(rv)
+      val spec = makeSizeSpec(200, EXACTLY)
+      binder.measure(Size(), spec, spec, null)
+      runToEndOfTasks()
+      val changedPositions = mutableListOf<Int>()
+      checkNotNull(rv.adapter)
+          .registerAdapterDataObserver(
+              object : AdapterDataObserver() {
+                override fun onItemRangeChanged(positionStart: Int, itemCount: Int, payload: Any?) {
+                  changedPositions.add(positionStart)
+                }
+              },
+          )
+
+      rv.setComputingLayout(true)
+      if (updateRange) {
+        binder.updateRangeAt(0, listOf(row(100f)))
+      } else {
+        binder.updateItemAt(0, row(100f))
+      }
+      repeat(3) { ShadowLooper.runMainLooperOneTask() }
+      assertThat(changedPositions).isEmpty()
+      assertThat(reporter.loggedMessages).isEmpty()
+      if (recoverLayout) {
+        rv.setComputingLayout(false)
+      }
+      repeat(110) { ShadowLooper.runMainLooperOneTask() }
+      if (recoverLayout) {
+        assertThat(changedPositions).containsExactly(0)
+        assertThat(reporter.loggedMessages).isEmpty()
+      } else {
+        assertThat(changedPositions).isEmpty()
+        assertThat(reporter.loggedCategoryKeys.map { it.second })
+            .containsExactly("RecyclerBinder:SizeSpecRebindRetryLimit")
+        assertThat(reporter.hasMessageType(LogLevel.ERROR)).isTrue()
+        rv.setComputingLayout(false)
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks()
+        assertThat(changedPositions).isEmpty()
+        assertThat(reporter.loggedMessages).hasSize(1)
+      }
+      binder.unmount(rv)
+    }
+  }
+
+  private fun assertDeferredSizeRebindTargetsUpdatedHolder(removeUpdatedRow: Boolean) {
+    ShadowLooper.pauseMainLooper()
+    for (updateRange in listOf(false, true)) {
+      val binder =
+          RecyclerBinder.Builder()
+              .recyclerBinderConfig(RecyclerBinderConfig(enableSizeSpecRebind = true))
+              .build(componentContext)
+      fun row(widthPercent: Float): RenderInfo =
+          ComponentRenderInfo.create()
+              .component(SimpleMountSpecTester(StyleCompat.widthPx(40).heightPx(40).build()))
+              .parentWidthPercent(widthPercent)
+              .build()
+
+      binder.insertRangeAt(0, listOf(row(50f), row(50f), row(50f)))
+      binder.notifyChangeSetComplete(true, NO_OP_CHANGE_SET_COMPLETE_CALLBACK)
+      val rv = ComputingLayoutRecyclerView(getApplicationContext())
+      rv.itemAnimator = null
+      binder.mount(rv)
+      val spec = makeSizeSpec(200, EXACTLY)
+      binder.measure(Size(), spec, spec, null)
+      val changedPositions = mutableListOf<Int>()
+      checkNotNull(rv.adapter)
+          .registerAdapterDataObserver(
+              object : AdapterDataObserver() {
+                override fun onItemRangeChanged(positionStart: Int, itemCount: Int, payload: Any?) {
+                  changedPositions.add(positionStart)
+                }
+              },
+          )
+
+      rv.setComputingLayout(true)
+      if (updateRange) {
+        binder.updateRangeAt(1, listOf(row(100f)))
+      } else {
+        binder.updateItemAt(1, row(100f))
+      }
+      assertThat(changedPositions).isEmpty()
+      rv.setComputingLayout(false)
+      if (removeUpdatedRow) {
+        binder.removeItemAt(1)
+        binder.insertItemAt(1, row(50f))
+      } else {
+        binder.insertItemAt(0, row(50f))
+      }
+      binder.notifyChangeSetComplete(true, NO_OP_CHANGE_SET_COMPLETE_CALLBACK)
+      ShadowLooper.runUiThreadTasks()
+
+      if (removeUpdatedRow) {
+        assertThat(changedPositions).isEmpty()
+      } else {
+        assertThat(changedPositions).containsExactly(2)
+      }
+      binder.unmount(rv)
+    }
+  }
+
+  private fun assertFullPageItemSizeUpdates(
+      updateRange: Boolean,
+      async: Boolean,
+      enableSizeSpecRebind: Boolean = true,
+      updateDuringLayout: Boolean = false,
+  ) {
+    for (orientation in listOf(RecyclerView.VERTICAL, RecyclerView.HORIZONTAL)) {
+      val pageSize = 200
+      val fullPageAttribute = "full_page"
+      val pageLayoutInfo =
+          object : LinearLayoutInfo(componentContext, orientation, false) {
+            override fun getChildHeightSpec(heightSpec: Int, renderInfo: RenderInfo): Int =
+                if (
+                    orientation == RecyclerView.VERTICAL &&
+                        renderInfo.getCustomAttribute(fullPageAttribute) == true
+                ) {
+                  heightSpec
+                } else {
+                  super.getChildHeightSpec(heightSpec, renderInfo)
+                }
+
+            override fun getChildWidthSpec(widthSpec: Int, renderInfo: RenderInfo): Int =
+                if (
+                    orientation == RecyclerView.HORIZONTAL &&
+                        renderInfo.getCustomAttribute(fullPageAttribute) == true
+                ) {
+                  widthSpec
+                } else {
+                  super.getChildWidthSpec(widthSpec, renderInfo)
+                }
+          }
+      pageLayoutInfo.getLayoutManager().isMeasurementCacheEnabled = true
+      val binder =
+          RecyclerBinder.Builder()
+              .layoutInfo(pageLayoutInfo)
+              .recyclerBinderConfig(
+                  RecyclerBinderConfig(enableSizeSpecRebind = enableSizeSpecRebind),
+              )
+              .build(componentContext)
+      fun fullPage(): RenderInfo =
+          ComponentRenderInfo.create()
+              .component(SimpleMountSpecTester(StyleCompat.widthPx(40).heightPx(40).build()))
+              .customAttribute(fullPageAttribute, true)
+              .build()
+
+      binder.insertRangeAt(0, listOf(fullPage(), fullPage()))
+      binder.notifyChangeSetComplete(true, NO_OP_CHANGE_SET_COMPLETE_CALLBACK)
+      val rv = ComputingLayoutRecyclerView(getApplicationContext())
+      rv.itemAnimator = null
+      binder.mount(rv)
+      val sizeSpec = makeSizeSpec(pageSize, EXACTLY)
+      binder.measure(Size(), sizeSpec, sizeSpec, null)
+
+      fun layout() {
+        runToEndOfTasks()
+        ShadowLooper.runUiThreadTasks()
+        rv.requestLayout()
+        rv.measure(sizeSpec, sizeSpec)
+        rv.layout(0, 0, pageSize, pageSize)
+      }
+
+      fun rowSize(view: View): Int =
+          if (orientation == RecyclerView.VERTICAL) view.height else view.width
+
+      fun update(renderInfo: RenderInfo) {
+        rv.setComputingLayout(updateDuringLayout)
+        if (async) {
+          if (updateRange) {
+            binder.updateRangeAtAsync(0, listOf(renderInfo))
+          } else {
+            binder.updateItemAtAsync(0, renderInfo)
+          }
+          binder.notifyChangeSetCompleteAsync(true, NO_OP_CHANGE_SET_COMPLETE_CALLBACK)
+        } else {
+          if (updateRange) {
+            binder.updateRangeAt(0, listOf(renderInfo))
+          } else {
+            binder.updateItemAt(0, renderInfo)
+          }
+          binder.notifyChangeSetComplete(true, NO_OP_CHANGE_SET_COMPLETE_CALLBACK)
+        }
+        rv.setComputingLayout(false)
+        layout()
+      }
+
+      layout()
+      val manager = pageLayoutInfo.getLayoutManager()
+      assertThat(rowSize(checkNotNull(manager.findViewByPosition(0)))).isEqualTo(pageSize)
+
+      update(ComponentRenderInfo.createEmpty())
+      assertThat(rowSize(checkNotNull(manager.findViewByPosition(0))))
+          .isEqualTo(if (enableSizeSpecRebind) 0 else pageSize)
+      if (enableSizeSpecRebind) {
+        val nextRow = checkNotNull(manager.findViewByPosition(1))
+        assertThat(if (orientation == RecyclerView.VERTICAL) nextRow.top else nextRow.left).isZero()
+        assertThat(rowSize(nextRow)).isEqualTo(pageSize)
+      }
+
+      update(fullPage())
+      assertThat(rowSize(checkNotNull(manager.findViewByPosition(0)))).isEqualTo(pageSize)
+      binder.unmount(rv)
     }
   }
 

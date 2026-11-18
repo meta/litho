@@ -169,6 +169,8 @@ data class RecyclerBinderConfig(
      * [ComponentsConfiguration.layoutItemsOutsideMeasureLock] of its configuration.
      */
     @JvmField val layoutItemsOutsideMeasureLock: Boolean? = null,
+    /** Rebind component rows when their effective child size specs change on update. */
+    @JvmField val enableSizeSpecRebind: Boolean = false,
 ) {
 
   init {
@@ -221,6 +223,7 @@ class RecyclerBinderConfigBuilder internal constructor(configuration: RecyclerBi
   private var itemViewCacheSize = configuration.itemViewCacheSize
   private var componentsConfiguration = configuration.componentsConfiguration
   private var enableAsyncInsertLivenessFix = configuration.enableAsyncInsertLivenessFix
+  private var enableSizeSpecRebind = configuration.enableSizeSpecRebind
   private var rangeRatio = configuration.rangeRatio
   private var layoutHandlerFactory = configuration.layoutHandlerFactory
   private var enableStableIds = configuration.enableStableIds
@@ -275,6 +278,10 @@ class RecyclerBinderConfigBuilder internal constructor(configuration: RecyclerBi
     enableAsyncInsertLivenessFix = enabled
   }
 
+  fun enableSizeSpecRebind(enabled: Boolean): RecyclerBinderConfigBuilder = also {
+    enableSizeSpecRebind = enabled
+  }
+
   fun rangeRatio(rangeRatio: Float): RecyclerBinderConfigBuilder = also {
     this.rangeRatio = rangeRatio
   }
@@ -311,6 +318,7 @@ class RecyclerBinderConfigBuilder internal constructor(configuration: RecyclerBi
     return RecyclerBinderConfig(
         componentsConfiguration = componentsConfiguration,
         enableAsyncInsertLivenessFix = enableAsyncInsertLivenessFix,
+        enableSizeSpecRebind = enableSizeSpecRebind,
         isCircular = isCircular,
         lithoViewFactory = lithoViewFactory,
         hScrollAsyncMode = hScrollAsyncMode,
