@@ -63,7 +63,19 @@ object MeasureComparisonUtils {
           oldSizeSpecMode == SizeSpec.UNSPECIFIED &&
           newSizeSpecSize >= oldMeasuredSize
 
-  private fun newMeasureSizeIsStricterAndStillValid(
+  /**
+   * Whether a size measured under an "at most" spec is still what a stricter "at most" spec gives:
+   * the new limit is lower than the old one and the measured size fits it.
+   *
+   * @param oldSizeSpecMode the mode of the spec the size was measured under.
+   * @param newSizeSpecMode the mode of the new spec.
+   * @param oldSizeSpecSize the limit of the spec the size was measured under.
+   * @param newSizeSpecSize the limit of the new spec.
+   * @param oldMeasuredSize the size measured under the old spec.
+   * @return true when both specs are AT_MOST, the new limit is lower, and the size fits it.
+   */
+  @JvmStatic
+  fun newMeasureSizeIsStricterAndStillValid(
       oldSizeSpecMode: Int,
       newSizeSpecMode: Int,
       oldSizeSpecSize: Int,

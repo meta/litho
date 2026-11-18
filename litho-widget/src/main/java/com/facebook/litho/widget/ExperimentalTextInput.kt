@@ -65,8 +65,10 @@ import com.facebook.kotlin.compilerplugins.dataclassgenerate.annotation.DataClas
 import com.facebook.litho.ComponentContext
 import com.facebook.litho.ComponentScope
 import com.facebook.litho.LithoPrimitive
+import com.facebook.litho.MeasureComparisonUtils
 import com.facebook.litho.PrimitiveComponent
 import com.facebook.litho.PrimitiveComponentScope
+import com.facebook.litho.SizeSpec
 import com.facebook.litho.State
 import com.facebook.litho.Style
 import com.facebook.litho.ThreadUtils.assertMainThread
@@ -772,7 +774,8 @@ internal class TextInputLayoutBehavior(
  * - the props, by [TextInputLayoutBehavior.isEquivalentTo];
  * - the configuration: the font scale, density and locale change the text's size but not the props,
  *   and a tree can keep its state across such a change;
- * - the size constraints;
+ * - the size constraints, or a size measured under a taller "at most" height that still fits the
+ *   new one, see [Size.fitsLowerMaxHeight];
  * - the text: the props compare the text holders, not what they hold, so typing changes the text
  *   without changing the props.
  *
@@ -792,8 +795,11 @@ internal class TextInputMeasurements {
     if (current == null || !current.isFor(behavior, configuration)) {
       return null
     }
-    val size = current.sizes.firstOrNull { it.sizeConstraints == sizeConstraints } ?: return null
-    return if (isSameText(size.text, text)) size.result else null
+    val sizes = current.sizes.filter { isSameText(it.text, text) }
+    val size =
+        sizes.firstOrNull { it.sizeConstraints == sizeConstraints }
+            ?: sizes.firstOrNull { it.fitsLowerMaxHeight(sizeConstraints) }
+    return size?.result
   }
 
   fun record(
@@ -832,7 +838,33 @@ internal class TextInputMeasurements {
       val sizeConstraints: SizeConstraints,
       val text: CharSequence?,
       val result: PrimitiveLayoutResult,
-  )
+  ) {
+    /**
+     * An EditText given an "at most" height takes its natural height when that fits. So a height
+     * measured under a taller limit that also fits [other]'s lower limit is what measuring under
+     * [other] gives, as long as the width rule is the same.
+     */
+    fun fitsLowerMaxHeight(other: SizeConstraints): Boolean {
+      // The height spec drops a non-zero minimum, so the minimums are checked here.
+      if (
+          sizeConstraints.minWidth != other.minWidth ||
+              sizeConstraints.maxWidth != other.maxWidth ||
+              sizeConstraints.minHeight != 0 ||
+              other.minHeight != 0
+      ) {
+        return false
+      }
+      val heightSpec = sizeConstraints.toHeightSpec()
+      val otherHeightSpec = other.toHeightSpec()
+      return MeasureComparisonUtils.newMeasureSizeIsStricterAndStillValid(
+          oldSizeSpecMode = SizeSpec.getMode(heightSpec),
+          newSizeSpecMode = SizeSpec.getMode(otherHeightSpec),
+          oldSizeSpecSize = SizeSpec.getSize(heightSpec),
+          newSizeSpecSize = SizeSpec.getSize(otherHeightSpec),
+          oldMeasuredSize = result.height,
+      )
+    }
+  }
 
   /** The sizes measured with one set of props, under one configuration. */
   private class Snapshot(
