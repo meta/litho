@@ -117,17 +117,42 @@ fun Style.rotationY(rotationY: Value<Float>): Style = onBindViewWithValue(
 /**
  * Sets the scale (scaleX and scaleY) of the [View] using a [Value].
  *
- * When unmounted, the scale is reset to 1f.
+ * When unmounted, the scale is reset to 1f. Shares its per-axis binders with [scaleX] and [scaleY],
+ * so a later `scaleX(...)` or `scaleY(...)` on the same [Style] overrides that axis.
  *
  * @param scale the [Value] containing the uniform scale factor.
  */
+@ExperimentalLithoApi fun Style.scale(scale: Value<Float>): Style = scaleX(scale).scaleY(scale)
+
+/**
+ * Sets the X-axis scale of the [View] using a [Value].
+ *
+ * When unmounted, the X-axis scale is reset to 1f.
+ *
+ * @param scaleX the [Value] containing the X-axis scale factor.
+ */
 @ExperimentalLithoApi
-fun Style.scale(scale: Value<Float>): Style = onBindViewWithValue(
-    name = { "scale" },
-    value = scale,
+fun Style.scaleX(scaleX: Value<Float>): Style = onBindViewWithValue(
+    name = { "scaleX" },
+    value = scaleX,
     defaultValue = 1f,
 ) { value ->
   this.scaleX = value
+}
+
+/**
+ * Sets the Y-axis scale of the [View] using a [Value].
+ *
+ * When unmounted, the Y-axis scale is reset to 1f.
+ *
+ * @param scaleY the [Value] containing the Y-axis scale factor.
+ */
+@ExperimentalLithoApi
+fun Style.scaleY(scaleY: Value<Float>): Style = onBindViewWithValue(
+    name = { "scaleY" },
+    value = scaleY,
+    defaultValue = 1f,
+) { value ->
   this.scaleY = value
 }
 
