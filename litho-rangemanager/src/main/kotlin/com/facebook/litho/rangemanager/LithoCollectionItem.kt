@@ -111,6 +111,10 @@ import kotlin.concurrent.withLock
  *   the item into re-laying out a kept tree when constraints change, and into leaving a shown
  *   tree's size to its LithoView; without it, the item keeps its fixed-constraint behavior. Invoked
  *   on the thread preparing or binding the item, so it must be cheap and thread-safe.
+ * @param updatesShownTreeAsync whether new content for a view already showing this item's tree is
+ *   laid out in the background, the view keeping the committed layout until it lands. Off by
+ *   default: [bind] then lays the new content out on the main thread, so the view never shows older
+ *   content. A view new to the tree still binds synchronously.
  */
 class LithoCollectionItem<T>(
     val context: Context,
@@ -132,6 +136,7 @@ class LithoCollectionItem<T>(
     private val visibilityEventsController: LithoVisibilityEventsController? = null,
     private val keepStateAfterRelease: Boolean = true,
     private val sizeConstraintsProvider: ((T) -> SizeConstraints)? = null,
+    private val updatesShownTreeAsync: Boolean = false,
 ) : BindableCollectionItem {
 
   init {
@@ -251,11 +256,27 @@ class LithoCollectionItem<T>(
           }
         } else {
           ComponentsSystrace.trace("LithoCollectionItem.bind.updateIfNeeded") {
-            prepareWithDataIfNeeded(
-                sync = true,
-                // A view already showing this tree has measured it; a view new to it has not.
-                updateSizeConstraints = targetView.componentTree !== componentTree,
-            )
+            // A view already showing this tree has measured it; a view new to it has not.
+            val viewAlreadyShowsTree = targetView.componentTree === componentTree
+            when {
+              !updatesShownTreeAsync ->
+                  // Lays new content out now.
+                  prepareWithDataIfNeeded(
+                      sync = true,
+                      updateSizeConstraints = !viewAlreadyShowsTree,
+                  )
+              viewAlreadyShowsTree ->
+                  // Lays new content out in the background; the view keeps the committed layout
+                  // until it lands.
+                  prepareWithDataIfNeeded(sync = false, updateSizeConstraints = false)
+              else -> {
+                // Lays new content out now. An earlier bind may have left the latest root laying
+                // out in the background, under a key this bind already sees as current: finish it
+                // here, a no-op when it already landed.
+                prepareWithDataIfNeeded(sync = true, updateSizeConstraints = true)
+                componentTree?.let { tree -> tree.setRootSync(tree.root) }
+              }
+            }
           }
         }
         targetView.componentTree = componentTree
