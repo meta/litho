@@ -94,6 +94,7 @@ import com.facebook.litho.config.ComponentsConfiguration
  * @see [EditText]
  * @prop initialText Initial text to display. If set, the value is set on the EditText exactly once:
  *   on initial mount. From then on, the EditText's text property is not modified.
+ * @prop allowPrimitive If false, uses the legacy implementation for the lifetime of this input.
  * @prop hint Hint text to display.
  * @prop inputBackground The background of the EditText itself; this is subtly distinct from the
  *   Litho background prop. The padding of the inputBackground drawable will be applied to the
@@ -182,6 +183,7 @@ internal object TextInputSpec {
   val hintColorStateList: ColorStateList = ColorStateList.valueOf(Color.LTGRAY)
 
   @JvmField @PropDefault val hint: CharSequence = ""
+  @JvmField @PropDefault val allowPrimitive: Boolean = true
   @JvmField @PropDefault val initialText: CharSequence = ""
   @JvmField @PropDefault val shadowColor: Int = Color.GRAY
   @JvmField @PropDefault val textSize: Int = TextComponentSpec.UNSET
@@ -259,9 +261,10 @@ internal object TextInputSpec {
       @Prop(optional = true) isHintOnOneLine: Boolean,
       @Prop(optional = true) externalTextInputController: TextInputController?,
       @State textInputHandle: Handle,
+      @State usePrimitiveTextInput: Boolean,
       @CachedValue textInputController: TextInputController?,
   ): Component {
-    return if (ComponentsConfiguration.usePrimitiveTextInput) {
+    return if (usePrimitiveTextInput) {
       ExperimentalTextInput(
           initialText = initialText ?: "",
           hint = hint ?: "",
@@ -441,8 +444,14 @@ internal object TextInputSpec {
   }
 
   @OnCreateInitialState
-  fun onCreateInitialState(c: ComponentContext?, textInputHandle: StateValue<Handle>) {
+  fun onCreateInitialState(
+      c: ComponentContext?,
+      @Prop(optional = true) allowPrimitive: Boolean,
+      textInputHandle: StateValue<Handle>,
+      usePrimitiveTextInput: StateValue<Boolean>,
+  ) {
     textInputHandle.set(Handle())
+    usePrimitiveTextInput.set(allowPrimitive && ComponentsConfiguration.usePrimitiveTextInput)
   }
 
   @JvmStatic
@@ -450,8 +459,9 @@ internal object TextInputSpec {
   internal fun onCalculateTextInputController(
       c: ComponentContext,
       @Prop(optional = true) externalTextInputController: TextInputController?,
+      @State usePrimitiveTextInput: Boolean,
   ): TextInputController? {
-    return if (ComponentsConfiguration.usePrimitiveTextInput) {
+    return if (usePrimitiveTextInput) {
       externalTextInputController ?: TextInputController()
     } else {
       null
@@ -463,9 +473,10 @@ internal object TextInputSpec {
   fun requestFocus(
       c: ComponentContext,
       @State textInputHandle: Handle,
+      @State usePrimitiveTextInput: Boolean,
       @CachedValue textInputController: TextInputController?,
   ) {
-    if (ComponentsConfiguration.usePrimitiveTextInput) {
+    if (usePrimitiveTextInput) {
       textInputController?.requestFocus()
     } else {
       TextInputComponent.requestFocus(c, textInputHandle)
@@ -477,9 +488,10 @@ internal object TextInputSpec {
   fun requestFocusWithoutKeyboard(
       c: ComponentContext,
       @State textInputHandle: Handle,
+      @State usePrimitiveTextInput: Boolean,
       @CachedValue textInputController: TextInputController?,
   ) {
-    if (ComponentsConfiguration.usePrimitiveTextInput) {
+    if (usePrimitiveTextInput) {
       textInputController?.requestFocusWithoutKeyboard()
     } else {
       TextInputComponent.requestFocusWithoutKeyboard(c, textInputHandle)
@@ -491,9 +503,10 @@ internal object TextInputSpec {
   fun clearFocus(
       c: ComponentContext,
       @State textInputHandle: Handle,
+      @State usePrimitiveTextInput: Boolean,
       @CachedValue textInputController: TextInputController?,
   ) {
-    if (ComponentsConfiguration.usePrimitiveTextInput) {
+    if (usePrimitiveTextInput) {
       textInputController?.clearFocus()
     } else {
       TextInputComponent.clearFocus(c, textInputHandle)
@@ -504,9 +517,10 @@ internal object TextInputSpec {
   fun showCursor(
       c: ComponentContext,
       @State textInputHandle: Handle,
+      @State usePrimitiveTextInput: Boolean,
       @CachedValue textInputController: TextInputController?,
   ) {
-    if (ComponentsConfiguration.usePrimitiveTextInput) {
+    if (usePrimitiveTextInput) {
       textInputController?.showCursor()
     } else {
       TextInputComponent.showCursor(c, textInputHandle)
@@ -517,9 +531,10 @@ internal object TextInputSpec {
   fun hideCursor(
       c: ComponentContext,
       @State textInputHandle: Handle,
+      @State usePrimitiveTextInput: Boolean,
       @CachedValue textInputController: TextInputController?,
   ) {
-    if (ComponentsConfiguration.usePrimitiveTextInput) {
+    if (usePrimitiveTextInput) {
       textInputController?.hideCursor()
     } else {
       TextInputComponent.hideCursor(c, textInputHandle)
@@ -531,9 +546,10 @@ internal object TextInputSpec {
   fun getText(
       c: ComponentContext,
       @State textInputHandle: Handle,
+      @State usePrimitiveTextInput: Boolean,
       @CachedValue textInputController: TextInputController?,
   ): CharSequence? {
-    return if (ComponentsConfiguration.usePrimitiveTextInput) {
+    return if (usePrimitiveTextInput) {
       textInputController?.getText()
     } else {
       TextInputComponent.getText(c, textInputHandle)
@@ -545,9 +561,10 @@ internal object TextInputSpec {
   fun getLineCount(
       c: ComponentContext,
       @State textInputHandle: Handle,
+      @State usePrimitiveTextInput: Boolean,
       @CachedValue textInputController: TextInputController?,
   ): Int? {
-    return if (ComponentsConfiguration.usePrimitiveTextInput) {
+    return if (usePrimitiveTextInput) {
       textInputController?.getLineCount()
     } else {
       TextInputComponent.getLineCount(c, textInputHandle)
@@ -559,9 +576,10 @@ internal object TextInputSpec {
       c: ComponentContext,
       @FromTrigger text: CharSequence?,
       @State textInputHandle: Handle,
+      @State usePrimitiveTextInput: Boolean,
       @CachedValue textInputController: TextInputController?,
   ) {
-    if (ComponentsConfiguration.usePrimitiveTextInput) {
+    if (usePrimitiveTextInput) {
       textInputController?.setText(text)
     } else {
       TextInputComponent.setText(c, textInputHandle, text)
@@ -576,9 +594,10 @@ internal object TextInputSpec {
       @FromTrigger endIndex: Int,
       @FromTrigger skipSelection: Boolean,
       @State textInputHandle: Handle,
+      @State usePrimitiveTextInput: Boolean,
       @CachedValue textInputController: TextInputController?,
   ) {
-    if (ComponentsConfiguration.usePrimitiveTextInput) {
+    if (usePrimitiveTextInput) {
       textInputController?.replaceText(
           text,
           startIndex,
@@ -596,9 +615,10 @@ internal object TextInputSpec {
       c: ComponentContext,
       @FromTrigger keyEvent: KeyEvent?,
       @State textInputHandle: Handle,
+      @State usePrimitiveTextInput: Boolean,
       @CachedValue textInputController: TextInputController?,
   ) {
-    if (ComponentsConfiguration.usePrimitiveTextInput) {
+    if (usePrimitiveTextInput) {
       textInputController?.dispatchKey(keyEvent)
     } else {
       TextInputComponent.dispatchKey(c, textInputHandle, keyEvent)
@@ -612,9 +632,10 @@ internal object TextInputSpec {
       @FromTrigger start: Int,
       @FromTrigger end: Int,
       @State textInputHandle: Handle,
+      @State usePrimitiveTextInput: Boolean,
       @CachedValue textInputController: TextInputController?,
   ) {
-    if (ComponentsConfiguration.usePrimitiveTextInput) {
+    if (usePrimitiveTextInput) {
       textInputController?.setSelection(start, end)
     } else {
       TextInputComponent.setSelection(c, textInputHandle, start, end)
@@ -629,9 +650,10 @@ internal object TextInputSpec {
       @FromTrigger end: Int,
       @FromTrigger flags: Int,
       @State textInputHandle: Handle,
+      @State usePrimitiveTextInput: Boolean,
       @CachedValue textInputController: TextInputController?,
   ) {
-    if (ComponentsConfiguration.usePrimitiveTextInput) {
+    if (usePrimitiveTextInput) {
       textInputController?.setSpan(what, start, end, flags)
     } else {
       TextInputComponent.setSpan(c, textInputHandle, what, start, end, flags)
@@ -643,9 +665,10 @@ internal object TextInputSpec {
       c: ComponentContext,
       @FromTrigger what: Any?,
       @State textInputHandle: Handle,
+      @State usePrimitiveTextInput: Boolean,
       @CachedValue textInputController: TextInputController?,
   ) {
-    if (ComponentsConfiguration.usePrimitiveTextInput) {
+    if (usePrimitiveTextInput) {
       textInputController?.removeSpan(what)
     } else {
       TextInputComponent.removeSpan(c, textInputHandle, what)
@@ -657,9 +680,10 @@ internal object TextInputSpec {
       c: ComponentContext,
       @FromTrigger what: Any?,
       @State textInputHandle: Handle,
+      @State usePrimitiveTextInput: Boolean,
       @CachedValue textInputController: TextInputController?,
   ): Int {
-    return if (ComponentsConfiguration.usePrimitiveTextInput) {
+    return if (usePrimitiveTextInput) {
       textInputController?.getSpanStart(what) ?: -1
     } else {
       TextInputComponent.getSpanStart(c, textInputHandle, what)
