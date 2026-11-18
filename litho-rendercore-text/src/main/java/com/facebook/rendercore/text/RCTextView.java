@@ -138,6 +138,7 @@ public class RCTextView extends ViewGroup {
   private boolean mShouldHandleKeyEvents;
   private boolean mLongClickActivated;
   private float mClickableSpanExpandedOffset;
+  private boolean mTrackLongClickInLocalCoordinates;
   private float mOutlineWidth;
   private int mOutlineColor;
   @Nullable private Path mTouchAreaPath;
@@ -560,6 +561,7 @@ public class RCTextView extends ViewGroup {
     mSelectionHandleColor = textLayout.textStyle.selectionHandleColor;
     mIsExplicitlyTruncated = textLayout.isExplicitlyTruncated;
     mClickableSpanExpandedOffset = textLayout.textStyle.clickableSpanExpandedOffset;
+    mTrackLongClickInLocalCoordinates = textLayout.textStyle.trackLongClickInLocalCoordinates;
     // The color is this view's own state, resolved from the style the same way measurement does,
     // never read from or written to the paint: the paint can be shared, and another view may be
     // drawing with its own color on it right now, for example a view that mounts this one from a
@@ -1365,6 +1367,19 @@ public class RCTextView extends ViewGroup {
   }
 
   private void trackLongClickBoundaryOnMove(MotionEvent event) {
+    if (mTrackLongClickInLocalCoordinates) {
+      final int x = (int) event.getX();
+      final int y = (int) event.getY();
+      if (x < 0 || y < 0 || x >= getWidth() || y >= getHeight()) {
+        resetLongClick();
+        return;
+      }
+      if (mLongClickRunnable != null
+          && mLongClickRunnable.longClickableSpan != getClickableSpanInCoords(x, y)) {
+        resetLongClick();
+      }
+      return;
+    }
     mBounds.setEmpty();
     this.getHitRect(mBounds);
     if (!isWithinBounds(mBounds, event)) {

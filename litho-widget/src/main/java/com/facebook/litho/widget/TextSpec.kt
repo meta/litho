@@ -250,6 +250,7 @@ object TextSpec {
       }
       richTextStyle.useLegacyTextCustomEllipsisCut =
           ComponentsConfiguration.primitiveTextPerformantTruncation
+      richTextStyle.trackLongClickInLocalCoordinates = true
       return RichText(
           // Null text still mounts an empty text view, like legacy: the caller's style, size
           // rounding and content binders then behave the same as for any other Text.

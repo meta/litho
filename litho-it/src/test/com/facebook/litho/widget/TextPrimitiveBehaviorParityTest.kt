@@ -16,17 +16,24 @@
 
 package com.facebook.litho.widget
 
+import android.os.Looper
+import android.os.SystemClock
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.ClickableSpan
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
+import com.facebook.litho.Column
 import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.testing.LithoTestRule
 import com.facebook.litho.testing.TestLithoView
 import com.facebook.litho.testing.assertj.LithoAssertions
 import com.facebook.rendercore.text.ClickableSpanListener
+import com.facebook.rendercore.text.LongClickableSpan
 import com.facebook.rendercore.text.TouchableSpanListener
+import com.facebook.yoga.YogaEdge
+import java.util.concurrent.TimeUnit
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.After
 import org.junit.Before
@@ -35,6 +42,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.GraphicsMode
 
 /**
@@ -124,6 +132,93 @@ class TextPrimitiveBehaviorParityTest(private val usePrimitiveText: Boolean) {
     LithoAssertions.assertThat(testLithoView).doesNotHaveVisibleText(TEXT)
   }
 
+  @Test
+  fun `a long press on a span still opens after a stationary move when the text is offset`() {
+    val testLithoView = renderLongClickableText(paddingStartPx = 40, paddingTopPx = 60)
+
+    // |0   40                      240
+    // 60   [ Like                    ]   text view, offset 40 px right and 60 px down
+    // 100  [__________________________]
+    //         ^ press at (45, 70) in the root, (5, 10) in the text view
+    longPress(testLithoView, x = 45f, y = 70f, moveX = 45f, moveY = 70f)
+
+    assertThat(events).containsExactly(SPAN_LONG_CLICK)
+  }
+
+  @Test
+  fun `a long press on a span is cancelled when the press moves off the span or off the text`() {
+
+    // |0   40                      240
+    // 60   [ Like                    ]   text view, offset 40 px right and 60 px down
+    // 100  [__________________________]
+    //         ^ press at (45, 70), then moves past "Like" to (200, 70), or below the text to (45,
+    // 120)
+    for ((moveX, moveY) in listOf(200f to 70f, 45f to 120f)) {
+      events.clear()
+      val testLithoView = renderLongClickableText(paddingStartPx = 40, paddingTopPx = 60)
+
+      longPress(testLithoView, x = 45f, y = 70f, moveX = moveX, moveY = moveY)
+
+      assertThat(events).describedAs("move to ($moveX, $moveY)").doesNotContain(SPAN_LONG_CLICK)
+    }
+  }
+
+  @Suppress("DEPRECATION")
+  private fun renderLongClickableText(paddingStartPx: Int, paddingTopPx: Int): TestLithoView {
+    val text = SpannableString(LIKE)
+    text.setSpan(
+        object : LongClickableSpan() {
+          override fun onClick(widget: View) {
+            events.add(SPAN_CLICK)
+          }
+
+          override fun onLongClick(view: View): Boolean {
+            events.add(SPAN_LONG_CLICK)
+            return true
+          }
+        },
+        0,
+        LIKE.length,
+        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+    )
+    return lithoTestRule.render {
+      Column.create(context)
+          .paddingPx(YogaEdge.START, paddingStartPx)
+          .paddingPx(YogaEdge.TOP, paddingTopPx)
+          .child(Text.create(context).text(text).textSizePx(20).widthPx(200).heightPx(40))
+          .build()
+    }
+  }
+
+  private fun longPress(
+      testLithoView: TestLithoView,
+      x: Float,
+      y: Float,
+      moveX: Float,
+      moveY: Float,
+  ) {
+    val lithoView = testLithoView.lithoView
+    val downTime = SystemClock.uptimeMillis()
+    lithoView.dispatchTouchEvent(
+        MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, x, y, 0),
+    )
+    lithoView.dispatchTouchEvent(
+        MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_MOVE, moveX, moveY, 0),
+    )
+    shadowOf(Looper.getMainLooper())
+        .idleFor(ViewConfiguration.getLongPressTimeout() + 100L, TimeUnit.MILLISECONDS)
+    lithoView.dispatchTouchEvent(
+        MotionEvent.obtain(
+            downTime,
+            SystemClock.uptimeMillis(),
+            MotionEvent.ACTION_UP,
+            moveX,
+            moveY,
+            0,
+        ),
+    )
+  }
+
   private fun renderClickableText(
       spanListener: ClickableSpanListener? = null,
       touchableSpanListener: TouchableSpanListener? = null,
@@ -171,6 +266,8 @@ class TextPrimitiveBehaviorParityTest(private val usePrimitiveText: Boolean) {
     private const val TAP_X = 1f
     private const val TAP_Y = 1f
     private const val SPAN_CLICK = "span.onClick"
+    private const val SPAN_LONG_CLICK = "span.onLongClick"
+    private const val LIKE = "Like"
     private const val LISTENER_CLICK = "listener.onClick"
 
     @JvmStatic
