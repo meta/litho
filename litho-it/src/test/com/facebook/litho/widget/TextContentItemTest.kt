@@ -19,6 +19,7 @@ package com.facebook.litho.widget
 import android.annotation.SuppressLint
 import android.graphics.Rect
 import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.text.Layout
 import android.text.SpannableString
 import android.text.Spanned
@@ -27,14 +28,19 @@ import android.text.TextPaint
 import android.text.style.StyleSpan
 import android.view.View
 import android.view.ViewGroup
+import com.facebook.litho.Component
 import com.facebook.litho.ComponentHost
+import com.facebook.litho.ComponentScope
 import com.facebook.litho.LayoutTextContentItem
+import com.facebook.litho.Style
+import com.facebook.litho.TextContent
 import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.kotlin.widget.Text
 import com.facebook.litho.layout.flexbox.Column
 import com.facebook.litho.testing.LithoTestRule
 import com.facebook.litho.testing.TestLithoView
 import com.facebook.litho.testing.assertj.LithoAssertions
+import com.facebook.litho.visibility.onVisible
 import com.facebook.rendercore.text.RCTextView
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.After
@@ -103,6 +109,62 @@ class TextContentItemTest(private val usePrimitiveText: Boolean) {
 
     assertThat(span.text).isEqualTo("word")
     assertThat(span.bounds.isEmpty).isFalse()
+  }
+
+  @Test
+  fun `visible Litho Text content reports its text and layout`() {
+    val (content, _) = renderVisible { style -> Text(text = LABEL, style = style) }
+
+    assertThat(TextContent.of(content)?.textList?.map { it.toString() }).containsExactly(LABEL)
+    val layout = TextContent.textLayoutOf(content)
+    assertThat(layout?.text?.toString()).isEqualTo(LABEL)
+    assertThat(layout?.lineCount).isEqualTo(1)
+  }
+
+  @Test
+  fun `unmounted Litho Text content reports nothing`() {
+    val (content, testLithoView) = renderVisible { style -> Text(text = LABEL, style = style) }
+
+    testLithoView.lithoView.unmountAllItems()
+
+    assertThat(TextContent.of(content)?.textList.orEmpty()).isEmpty()
+    assertThat(TextContent.textLayoutOf(content)).isNull()
+  }
+
+  @Test
+  fun `direct RichText content is not Litho Text`() {
+    val (content, _) = renderVisible { style -> RichText(text = LABEL, style = style) }
+
+    assertThat(content).isInstanceOf(RCTextView::class.java)
+    assertThat(TextContent.of(content)).isNull()
+    assertThat(TextContent.textLayoutOf(content)).isNull()
+  }
+
+  @Test
+  fun `non-text content is not text`() {
+    for (content in listOf(null, View(lithoTestRule.context.androidContext), ColorDrawable())) {
+      assertThat(TextContent.of(content)).isNull()
+      assertThat(TextContent.textLayoutOf(content)).isNull()
+    }
+  }
+
+  /** Renders [component] with an onVisible style; returns the content its handler got. */
+  private fun renderVisible(
+      component: ComponentScope.(Style) -> Component,
+  ): Pair<Any?, TestLithoView> {
+    var content: Any? = null
+    var visibleCount = 0
+    val testLithoView = lithoTestRule.render {
+      val text = component(
+          Style.onVisible { event ->
+            visibleCount++
+            content = event.content
+          },
+      )
+      Column { child(text) }
+    }
+    assertThat(visibleCount).isEqualTo(1)
+    return content to testLithoView
   }
 
   private fun renderSpannedText(): TestLithoView {

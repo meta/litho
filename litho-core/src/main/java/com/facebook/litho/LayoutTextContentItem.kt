@@ -34,7 +34,7 @@ import androidx.annotation.VisibleForTesting
  *   once it isn't, as they were before this class was shared.
  */
 class LayoutTextContentItem(
-    private val layout: Layout,
+    internal val layout: Layout,
     override val text: CharSequence,
     override val fullText: CharSequence,
     isExplicitlyTruncated: Boolean,

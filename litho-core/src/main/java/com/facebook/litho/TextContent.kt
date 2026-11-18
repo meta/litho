@@ -18,6 +18,7 @@ package com.facebook.litho
 
 import android.graphics.Rect
 import android.graphics.Typeface
+import android.text.Layout
 import com.facebook.proguard.annotations.DoNotStrip
 
 /**
@@ -90,5 +91,23 @@ interface TextContent {
     val text: String
 
     val bounds: Rect
+  }
+
+  companion object {
+
+    /**
+     * The text of mounted [content] (for example a visibility event's content): Litho's legacy text
+     * drawable, the text view of Litho's primitive Text, or any other [TextContent]. Null for other
+     * content, including the text views of direct RichText users, which are not Litho Text.
+     */
+    @JvmStatic fun of(content: Any?): TextContent? = ComponentHostUtils.asTextContent(content)
+
+    /**
+     * The [Layout] Litho Text draws as [content], under the same rule as [of], whichever text
+     * renderer is on. Null when [content] is not Litho Text or is not laid out.
+     */
+    @JvmStatic
+    fun textLayoutOf(content: Any?): Layout? =
+        (of(content)?.items?.singleOrNull() as? LayoutTextContentItem)?.layout
   }
 }
