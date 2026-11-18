@@ -24,7 +24,9 @@ import com.facebook.litho.KComponent
 import com.facebook.litho.ResourcesScope
 import com.facebook.litho.Style
 import com.facebook.litho.Value
+import com.facebook.litho.animation.AnimationPlayback
 import com.facebook.litho.animation.Easing
+import com.facebook.litho.animation.PlaybackState
 import com.facebook.litho.animation.RepeatMode
 import com.facebook.litho.animation.StartOffset
 import com.facebook.litho.animation.StartOffsetType
@@ -35,6 +37,7 @@ import com.facebook.litho.animation.scale
 import com.facebook.litho.animation.translationX
 import com.facebook.litho.animation.translationY
 import com.facebook.litho.animation.tween
+import com.facebook.litho.animation.useAnimationPlayback
 import com.facebook.litho.animation.useInfiniteAnimationGroup
 import com.facebook.litho.annotations.ExperimentalLithoApi
 import com.facebook.litho.core.height
@@ -66,15 +69,23 @@ import com.facebook.samples.litho.kotlin.primitives.widgets.VerticalScroll
 import com.facebook.yoga.YogaAlign
 import com.facebook.yoga.YogaJustify
 
+/**
+ * Shared playback pauses and resumes every group. Telemetry also uses `shouldRun` to stop its loop
+ * and restart it from the beginning.
+ */
 @OptIn(ExperimentalLithoApi::class)
 class InfiniteAnimationDemosComponent : KComponent() {
 
   override fun ComponentScope.render(): Component {
-    val running = useState { true }
+    val playback = useAnimationPlayback()
 
     return InfiniteDemoSurface {
-      child(ShowcaseHeader(running.value) { running.update { !it } })
-      child(ShowcaseContent(running.value))
+      child(
+          ShowcaseHeader(playback.state == PlaybackState.Playing) {
+            if (playback.state == PlaybackState.Playing) playback.pause() else playback.play()
+          },
+      )
+      child(ShowcaseContent(playback))
     }
   }
 }
@@ -106,33 +117,42 @@ private fun ResourcesScope.ShowcaseHeader(
         )
       },
   )
-  child(RunToggle(running, onClick))
+  child(
+      RunToggle(
+          running = running,
+          labelRes =
+              if (running) R.string.litho_sample_infinite_showcase_pause
+              else R.string.litho_sample_infinite_showcase_resume,
+          onClick = onClick,
+      ),
+  )
 }
 
-private fun ResourcesScope.ShowcaseContent(running: Boolean): Component =
+@OptIn(ExperimentalLithoApi::class)
+private fun ResourcesScope.ShowcaseContent(playback: AnimationPlayback): Component =
     VerticalScroll(style = Style.clipToOutline(false)) {
       Column {
-        child(LaunchCommandCenterComponent(running))
+        child(LaunchCommandCenterComponent(playback))
         child(
             Row(style = Style.margin(top = 12.dp), alignItems = YogaAlign.STRETCH) {
               child(
                   TelemetryRefreshComponent(
-                      running,
+                      playback,
                       Style.flex(grow = 1f).margin(end = 12.dp),
                   ),
               )
-              child(LaunchAssistantComponent(running, Style.flex(grow = 1f)))
+              child(LaunchAssistantComponent(playback, Style.flex(grow = 1f)))
             },
         )
-        child(RolloutForecastComponent(running, Style.margin(top = 12.dp)))
+        child(RolloutForecastComponent(playback, Style.margin(top = 12.dp)))
       }
     }
 
 @OptIn(ExperimentalLithoApi::class)
-private class LaunchCommandCenterComponent(private val running: Boolean) : KComponent() {
+private class LaunchCommandCenterComponent(private val playback: AnimationPlayback) : KComponent() {
 
   override fun ComponentScope.render(): Component {
-    val infinite = useInfiniteAnimationGroup(shouldRun = running, label = "sample/launch-status")
+    val infinite = useInfiniteAnimationGroup(label = "sample/launch-status", playback = playback)
     val scale =
         infinite.animateFloat(
             from = 0.92f,
@@ -240,12 +260,18 @@ private class LaunchCommandCenterComponent(private val running: Boolean) : KComp
 
 @OptIn(ExperimentalLithoApi::class)
 private class TelemetryRefreshComponent(
-    private val running: Boolean,
+    private val playback: AnimationPlayback,
     private val style: Style,
 ) : KComponent() {
 
   override fun ComponentScope.render(): Component {
-    val infinite = useInfiniteAnimationGroup(shouldRun = running, label = "sample/telemetry-sync")
+    val runState = useState { true }
+    val running = runState.value
+    val infinite = useInfiniteAnimationGroup(
+        shouldRun = running,
+        label = "sample/telemetry-sync",
+        playback = playback,
+    )
     val rotation =
         infinite.animateFloat(
             from = 0f,
@@ -266,7 +292,10 @@ private class TelemetryRefreshComponent(
             child(SyncSpinner(rotation))
             child(
                 Text(
-                    stringRes(R.string.litho_sample_infinite_showcase_telemetry_title),
+                    stringRes(
+                        if (running) R.string.litho_sample_infinite_showcase_telemetry_title
+                        else R.string.litho_sample_infinite_showcase_telemetry_stopped_title,
+                    ),
                     textSize = 15.sp,
                     textColor = INK,
                     style = Style.margin(top = 12.dp),
@@ -274,10 +303,29 @@ private class TelemetryRefreshComponent(
             )
             child(
                 Text(
-                    stringRes(R.string.litho_sample_infinite_showcase_telemetry_subtitle),
+                    stringRes(
+                        if (running) R.string.litho_sample_infinite_showcase_telemetry_subtitle
+                        else R.string.litho_sample_infinite_showcase_telemetry_stopped_subtitle,
+                    ),
                     textSize = 12.sp,
                     textColor = MUTED,
                     style = Style.margin(top = 4.dp),
+                ),
+            )
+          },
+      )
+      child(
+          Row(
+              justifyContent = YogaJustify.CENTER,
+              style = Style.widthPercent(100f).margin(top = 12.dp),
+          ) {
+            child(
+                RunToggle(
+                    running = running,
+                    labelRes =
+                        if (running) R.string.litho_sample_infinite_showcase_stop
+                        else R.string.litho_sample_infinite_showcase_restart,
+                    onClick = { runState.update { !it } },
                 ),
             )
           },
@@ -288,12 +336,12 @@ private class TelemetryRefreshComponent(
 
 @OptIn(ExperimentalLithoApi::class)
 private class LaunchAssistantComponent(
-    private val running: Boolean,
+    private val playback: AnimationPlayback,
     private val style: Style,
 ) : KComponent() {
 
   override fun ComponentScope.render(): Component {
-    val infinite = useInfiniteAnimationGroup(shouldRun = running, label = "sample/assistant-dots")
+    val infinite = useInfiniteAnimationGroup(label = "sample/assistant-dots", playback = playback)
     val offsets =
         (0..2).map { index ->
           infinite.animateFloat(
@@ -336,12 +384,12 @@ private class LaunchAssistantComponent(
 
 @OptIn(ExperimentalLithoApi::class)
 private class RolloutForecastComponent(
-    private val running: Boolean,
+    private val playback: AnimationPlayback,
     private val style: Style,
 ) : KComponent() {
 
   override fun ComponentScope.render(): Component {
-    val infinite = useInfiniteAnimationGroup(shouldRun = running, label = "sample/forecast-shimmer")
+    val infinite = useInfiniteAnimationGroup(label = "sample/forecast-shimmer", playback = playback)
     val translateX =
         infinite.animateFloat(
             from = -220f,
@@ -385,13 +433,11 @@ private class RolloutForecastComponent(
                       .background(RoundedRect(0xFFF8FAFC, 18.dp)),
           ) {
             child(ForecastSkeleton())
-            if (running) {
-              child(
-                  ShimmerSweep(
-                      Style.width(220.dp).height(148.dp).translationX(translateX).alpha(sweepAlpha),
-                  ),
-              )
-            }
+            child(
+                ShimmerSweep(
+                    Style.width(220.dp).height(148.dp).translationX(translateX).alpha(sweepAlpha),
+                ),
+            )
           },
       )
     }
@@ -546,6 +592,7 @@ private fun ResourcesScope.SectionLabel(labelRes: Int): Component = Text(
 
 private fun ResourcesScope.RunToggle(
     running: Boolean,
+    labelRes: Int,
     onClick: () -> Unit,
 ): Component = Row(
     alignItems = YogaAlign.CENTER,
@@ -559,13 +606,7 @@ private fun ResourcesScope.RunToggle(
 ) {
   child(
       Text(
-          stringRes(
-              if (running) {
-                R.string.litho_sample_infinite_showcase_pause
-              } else {
-                R.string.litho_sample_infinite_showcase_resume
-              },
-          ),
+          stringRes(labelRes),
           textSize = 13.sp,
           textColor = if (running) Color.WHITE else INK,
       ),

@@ -79,6 +79,8 @@
   <string name="litho_sample_infinite_showcase_subtitle" description="Subtitle for the product-style Litho infinite animation sample">Live rollout command center</string>
   <string name="litho_sample_infinite_showcase_pause" description="Button text to pause animations in the product-style Litho infinite animation sample">Pause</string>
   <string name="litho_sample_infinite_showcase_resume" description="Button text to resume animations in the product-style Litho infinite animation sample">Resume</string>
+  <string name="litho_sample_infinite_showcase_stop" description="Button text to stop the telemetry loop and hold its current position in the Litho infinite animation sample">Stop</string>
+  <string name="litho_sample_infinite_showcase_restart" description="Button text to restart the stopped telemetry loop from the beginning in the Litho infinite animation sample">Restart</string>
   <string name="litho_sample_infinite_showcase_hero_label" description="Small label above the hero title in the product-style Litho infinite animation sample">Release command</string>
   <string name="litho_sample_infinite_showcase_hero_title" description="Hero title for the active rollout in the product-style Litho infinite animation sample">North America rollout</string>
   <string name="litho_sample_infinite_showcase_hero_summary" description="Hero summary text for the product-style Litho infinite animation sample">Production traffic is shifting while health checks, owner updates, and forecast cards refresh in place.</string>
@@ -92,6 +94,8 @@
   <string name="litho_sample_infinite_showcase_telemetry_label" description="Panel label for telemetry refresh in the product-style Litho infinite animation sample">Telemetry</string>
   <string name="litho_sample_infinite_showcase_telemetry_title" description="Panel title for telemetry refresh in the product-style Litho infinite animation sample">Syncing signals</string>
   <string name="litho_sample_infinite_showcase_telemetry_subtitle" description="Panel subtitle for telemetry refresh in the product-style Litho infinite animation sample">Next refresh in 12s</string>
+  <string name="litho_sample_infinite_showcase_telemetry_stopped_title" description="Telemetry panel title when its loop is stopped in the Litho infinite animation sample">Sync stopped</string>
+  <string name="litho_sample_infinite_showcase_telemetry_stopped_subtitle" description="Explains that restarting a stopped telemetry loop begins a new cycle in the Litho infinite animation sample">Restart starts fresh</string>
   <string name="litho_sample_infinite_showcase_assistant_label" description="Panel label for launch assistant in the product-style Litho infinite animation sample">Assistant</string>
   <string name="litho_sample_infinite_showcase_assistant_title" description="Panel title for launch assistant in the product-style Litho infinite animation sample">Drafting owner summary</string>
   <string name="litho_sample_infinite_showcase_assistant_subtitle" description="Panel subtitle for launch assistant in the product-style Litho infinite animation sample">Collecting latest sign-offs</string>
