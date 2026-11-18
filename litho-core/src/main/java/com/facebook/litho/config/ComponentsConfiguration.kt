@@ -277,6 +277,12 @@ internal constructor(
      * Mounted content is kept, and passes that can only unmount still run.
      */
     @JvmField val pauseMountingWhileHidden: Boolean = false,
+    /**
+     * Whether a [com.facebook.litho.widget.RecyclerBinder] whose
+     * [com.facebook.litho.widget.RecyclerBinderConfig.layoutItemsOutsideMeasureLock] is not set
+     * lays its items out outside the binder lock.
+     */
+    @JvmField val layoutItemsOutsideMeasureLock: Boolean = false,
 ) {
 
   companion object {
@@ -744,6 +750,10 @@ internal constructor(
 
     fun useStableIdsInRecyclerBinder(enabled: Boolean): Builder = apply {
       config = config.copy(useStableIdsInRecyclerBinder = enabled)
+    }
+
+    fun layoutItemsOutsideMeasureLock(enabled: Boolean): Builder = apply {
+      config = config.copy(layoutItemsOutsideMeasureLock = enabled)
     }
 
     @JvmOverloads

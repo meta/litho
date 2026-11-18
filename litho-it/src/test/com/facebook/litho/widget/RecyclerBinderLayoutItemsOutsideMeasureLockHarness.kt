@@ -360,10 +360,14 @@ internal class LockTestHolder(
   }
 }
 
-/** One binder, with or without [RecyclerBinderConfig.layoutItemsOutsideMeasureLock]. */
+/**
+ * One binder, with or without [RecyclerBinderConfig.layoutItemsOutsideMeasureLock]. A null [flag]
+ * leaves it unset, so the binder follows [configurationFlag], its
+ * [ComponentsConfiguration.layoutItemsOutsideMeasureLock].
+ */
 internal class LockTestHarness(
     val context: ComponentContext,
-    val flag: Boolean,
+    val flag: Boolean?,
     val wrap: Boolean = false,
     val horizontal: Boolean = false,
     val hScrollAsync: Boolean = false,
@@ -372,6 +376,7 @@ internal class LockTestHarness(
     startupLogger: LithoStartupLogger? = null,
     retainMaximumRange: Boolean = false,
     componentWarmer: ComponentWarmer? = null,
+    configurationFlag: Boolean = false,
 ) {
   val hooks = LockTestHooks()
   private var parkCounter = 0L
@@ -406,8 +411,10 @@ internal class LockTestHarness(
               RecyclerBinderConfig.create()
                   .wrapContent(wrap)
                   .hScrollAsyncMode(hScrollAsync)
-                  .layoutItemsOutsideMeasureLock(flag)
                   .apply {
+                    if (flag != null) {
+                      layoutItemsOutsideMeasureLock(flag)
+                    }
                     if (retainMaximumRange) {
                       recyclingStrategy(RecyclerBinder.RecyclingStrategy.RETAIN_MAXIMUM_RANGE)
                     }
@@ -420,6 +427,7 @@ internal class LockTestHarness(
                                 override fun getRunnableHandler(): RunnableHandler = queue
                               },
                           )
+                          .layoutItemsOutsideMeasureLock(configurationFlag)
                           .build()
                           .let { config ->
                             if (errorEventHandler == null) config

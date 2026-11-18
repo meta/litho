@@ -139,6 +139,11 @@ class RecyclerBinder private constructor(builder: Builder) :
   private val _isMeasured = AtomicBoolean(false)
   private val requiresRemeasure = AtomicBoolean(false)
   private val enableStableIds: Boolean
+  /**
+   * The resolved [RecyclerBinderConfig.layoutItemsOutsideMeasureLock], or
+   * [ComponentsConfiguration.layoutItemsOutsideMeasureLock] if the config leaves it unset.
+   */
+  private val layoutItemsOutsideMeasureLock: Boolean
   private val asyncInsertHandler: RunnableHandler?
   private val lithoVisibilityEventsController: LithoVisibilityEventsController?
 
@@ -1212,7 +1217,7 @@ class RecyclerBinder private constructor(builder: Builder) :
         throw RuntimeException("Trying to do a sync replaceAll when using asynchronous mutations!")
       }
       toRelease = ArrayList(_componentTreeHolders)
-      if (recyclerBinderConfig.layoutItemsOutsideMeasureLock) {
+      if (layoutItemsOutsideMeasureLock) {
         toRelease.forEach { it?.markRemoved() }
       }
       _componentTreeHolders.clear()
@@ -1673,7 +1678,7 @@ class RecyclerBinder private constructor(builder: Builder) :
       }
       holder = _componentTreeHolders.removeAt(position)
       retainedRangeDirty = true
-      if (recyclerBinderConfig.layoutItemsOutsideMeasureLock) {
+      if (layoutItemsOutsideMeasureLock) {
         // A layout planned before the removal must not re-create its tree.
         holder.markRemoved()
       }
@@ -1734,7 +1739,7 @@ class RecyclerBinder private constructor(builder: Builder) :
         val chunk = minOf(count - removed, _componentTreeHolders.size - position)
         val subList = _componentTreeHolders.subList(position, position + chunk)
         toRelease.addAll(subList)
-        if (recyclerBinderConfig.layoutItemsOutsideMeasureLock) {
+        if (layoutItemsOutsideMeasureLock) {
           subList.forEach { it.markRemoved() }
         }
         subList.clear()
@@ -2167,7 +2172,7 @@ class RecyclerBinder private constructor(builder: Builder) :
     enterMeasure()
 
     try {
-      if (recyclerBinderConfig.layoutItemsOutsideMeasureLock) {
+      if (layoutItemsOutsideMeasureLock) {
         measureWithLayoutsOutsideLock(
             outSize,
             widthSpec,
@@ -2197,7 +2202,7 @@ class RecyclerBinder private constructor(builder: Builder) :
   }
 
   private fun enterMeasure() {
-    if (recyclerBinderConfig.layoutItemsOutsideMeasureLock) {
+    if (layoutItemsOutsideMeasureLock) {
       measuresInProgress.incrementAndGet()
     } else {
       isInMeasure.set(true)
@@ -2205,7 +2210,7 @@ class RecyclerBinder private constructor(builder: Builder) :
   }
 
   private fun exitMeasure() {
-    if (recyclerBinderConfig.layoutItemsOutsideMeasureLock) {
+    if (layoutItemsOutsideMeasureLock) {
       measuresInProgress.decrementAndGet()
     } else {
       isInMeasure.set(false)
@@ -2909,7 +2914,7 @@ class RecyclerBinder private constructor(builder: Builder) :
           {
             var layoutWidthSpec = widthSpec
             var layoutHeightSpec = heightSpec
-            if (recyclerBinderConfig.layoutItemsOutsideMeasureLock) {
+            if (layoutItemsOutsideMeasureLock) {
               // The specs as they are when the layout runs, not when it was posted.
               synchronized(this) {
                 layoutWidthSpec = getActualChildrenWidthSpec(holder, measuredSize, lastWidthSpec)
@@ -3207,7 +3212,7 @@ class RecyclerBinder private constructor(builder: Builder) :
    * layouts if the measures provided here are not compatible with the ones receive in onMeasure.
    */
   override fun setSize(width: Int, height: Int) {
-    if (recyclerBinderConfig.layoutItemsOutsideMeasureLock) {
+    if (layoutItemsOutsideMeasureLock) {
       // Not under the lock: the measure lays its items out without it.
       enterMeasure()
       var measured = false
@@ -3908,7 +3913,7 @@ class RecyclerBinder private constructor(builder: Builder) :
       childrenWidthSpec = getActualChildrenWidthSpec(holder, measuredSize, lastWidthSpec)
       childrenHeightSpec = getActualChildrenHeightSpec(holder, measuredSize, lastHeightSpec)
       isInRange = (index >= rangeStart || holder.renderInfo.isSticky) && index <= rangeEnd
-      if (recyclerBinderConfig.layoutItemsOutsideMeasureLock && isInRange) {
+      if (layoutItemsOutsideMeasureLock && isInRange) {
         // Requested under the lock that read the specs, so no request for older specs follows it.
         requestLayoutIfInvalid(holder, childrenWidthSpec, childrenHeightSpec)
         return true
@@ -3961,7 +3966,7 @@ class RecyclerBinder private constructor(builder: Builder) :
       if (shouldTryComputeLayout) {
         childrenWidthSpec = getActualChildrenWidthSpec(holder, measuredSize, lastWidthSpec)
         childrenHeightSpec = getActualChildrenHeightSpec(holder, measuredSize, lastHeightSpec)
-        if (recyclerBinderConfig.layoutItemsOutsideMeasureLock) {
+        if (layoutItemsOutsideMeasureLock) {
           requestLayoutIfInvalid(holder, childrenWidthSpec, childrenHeightSpec)
           return true
         }
@@ -4534,7 +4539,7 @@ class RecyclerBinder private constructor(builder: Builder) :
 
   private fun createComponentTreeHolder(renderInfo: RenderInfo): ComponentTreeHolder {
     val holder = createOrConsumeComponentTreeHolder(renderInfo)
-    if (recyclerBinderConfig.layoutItemsOutsideMeasureLock) {
+    if (layoutItemsOutsideMeasureLock) {
       holder.isLaidOutOutsideBinderLock = true
     }
     return holder
@@ -4616,7 +4621,7 @@ class RecyclerBinder private constructor(builder: Builder) :
           }
 
           override fun prepareAsync(holder: ComponentTreeHolder) {
-            if (recyclerBinderConfig.layoutItemsOutsideMeasureLock) {
+            if (layoutItemsOutsideMeasureLock) {
               synchronized(this@RecyclerBinder) {
                 requestLayoutIfInvalid(
                     holder,
@@ -4822,6 +4827,9 @@ class RecyclerBinder private constructor(builder: Builder) :
             .build()
 
     componentsConfiguration = tempConfiguration
+    layoutItemsOutsideMeasureLock =
+        recyclerBinderConfig.layoutItemsOutsideMeasureLock
+            ?: componentsConfiguration.layoutItemsOutsideMeasureLock
 
     /*
      This is a work-around to use the client explicit config, or if that hasn't happened to resort

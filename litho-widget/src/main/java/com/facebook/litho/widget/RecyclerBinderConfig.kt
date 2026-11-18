@@ -165,9 +165,10 @@ data class RecyclerBinderConfig(
      * with those sizes, so it returns what the locked measure would. A background measure that
      * makes no progress for a few rounds falls back to the locked measure. Range layouts are
      * requested under the lock that read their specs, and each item's tree ignores a root request
-     * that is older than one it has already seen.
+     * that is older than one it has already seen. If not set, the binder follows
+     * [ComponentsConfiguration.layoutItemsOutsideMeasureLock] of its configuration.
      */
-    @JvmField val layoutItemsOutsideMeasureLock: Boolean = false,
+    @JvmField val layoutItemsOutsideMeasureLock: Boolean? = null,
 ) {
 
   init {

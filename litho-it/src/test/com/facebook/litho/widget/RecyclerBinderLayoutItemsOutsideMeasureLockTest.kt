@@ -26,6 +26,7 @@ import com.facebook.litho.LithoStartupLogger
 import com.facebook.litho.PrimitiveComponent
 import com.facebook.litho.PrimitiveComponentScope
 import com.facebook.litho.Size
+import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.testing.testrunner.LithoTestRunner
 import com.facebook.litho.widget.LockTestHarness.Companion.atMost
 import com.facebook.litho.widget.LockTestHarness.Companion.exactly
@@ -68,13 +69,14 @@ class RecyclerBinderLayoutItemsOutsideMeasureLockTest {
   }
 
   private fun createHarness(
-      flag: Boolean = true,
+      flag: Boolean? = true,
       wrap: Boolean = false,
       horizontal: Boolean = false,
       hScrollAsync: Boolean = false,
       asyncInsertQueue: Boolean = false,
       retainMaximumRange: Boolean = false,
       componentWarmer: ComponentWarmer? = null,
+      configurationFlag: Boolean = false,
   ): LockTestHarness = LockTestHarness(
       context,
       flag,
@@ -84,6 +86,7 @@ class RecyclerBinderLayoutItemsOutsideMeasureLockTest {
       asyncInsertQueue,
       retainMaximumRange = retainMaximumRange,
       componentWarmer = componentWarmer,
+      configurationFlag = configurationFlag,
   )
       .also { harness -> harnesses.add(harness) }
 
@@ -465,6 +468,70 @@ class RecyclerBinderLayoutItemsOutsideMeasureLockTest {
             .getInt(tree)
     assertThat(newestOrderedRequestVersion).describedAs("ordered request version").isNotNegative
     harness.assertSettled()
+  }
+
+  /**
+   * Whether a background measure lays its item out without the binder lock, and whether the item's
+   * tree got ordered requests.
+   */
+  private fun laysOutOutsideLock(
+      flag: Boolean?,
+      configurationFlag: Boolean,
+  ): Pair<Boolean, Boolean> {
+    val harness = createHarness(flag = flag, configurationFlag = configurationFlag)
+    harness.insertAll(1, 2, 3)
+    val background = harness.measureBackground(exactly(20), exactly(60))
+    assertThat(background.isParked).isTrue
+    val lockFree = harness.binderLockFree()
+    harness.hooks.parkLayouts = false
+    assertThat(harness.quiesceWithEnvironment()).isTrue
+    harness.assertSettled()
+    val tree = checkNotNull(harness.binder.componentTreeHolders[0].componentTree)
+    val newestOrderedRequestVersion =
+        ComponentTree::class
+            .java
+            .getDeclaredField("newestOrderedRequestVersion")
+            .apply { isAccessible = true }
+            .getInt(tree)
+    return lockFree to (newestOrderedRequestVersion >= 0)
+  }
+
+  /** A binder whose config leaves the flag unset follows its components configuration. */
+  @Test
+  fun `a binder whose config leaves the flag unset follows its ComponentsConfiguration`() {
+    for (configurationFlag in listOf(true, false)) {
+      assertThat(laysOutOutsideLock(flag = null, configurationFlag = configurationFlag))
+          .describedAs("configurationFlag=$configurationFlag")
+          .isEqualTo(configurationFlag to configurationFlag)
+    }
+  }
+
+  /** A value set on the binder's config wins over its components configuration. */
+  @Test
+  fun `a binder's own config value wins over its ComponentsConfiguration`() {
+    for (flag in listOf(true, false)) {
+      assertThat(laysOutOutsideLock(flag = flag, configurationFlag = !flag))
+          .describedAs("flag=$flag")
+          .isEqualTo(flag to flag)
+    }
+  }
+
+  /** Configs, and copies of them, leave the flag unset unless it is set. */
+  @Test
+  fun `configs leave the flag unset by default`() {
+    assertThat(RecyclerBinderConfig().layoutItemsOutsideMeasureLock).isNull()
+    assertThat(RecyclerBinderConfig.create().build().layoutItemsOutsideMeasureLock).isNull()
+    assertThat(
+        RecyclerBinderConfig.create(RecyclerBinderConfig()).build().layoutItemsOutsideMeasureLock,
+    )
+        .isNull()
+    assertThat(
+        RecyclerBinderConfig.create(RecyclerBinderConfig(layoutItemsOutsideMeasureLock = false))
+            .build()
+            .layoutItemsOutsideMeasureLock,
+    )
+        .isFalse
+    assertThat(ComponentsConfiguration.defaultInstance.layoutItemsOutsideMeasureLock).isFalse
   }
 
   /**
