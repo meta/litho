@@ -90,4 +90,16 @@ class AOSPLithoVisibilityEventsControllerOffMainThreadTest {
     assertThat(owner.registry.observerCount).isEqualTo(0)
     assertThat(controller.visibilityState).isEqualTo(LithoVisibilityState.DESTROYED)
   }
+
+  @Test
+  fun `release before the deferred registration lands does not leak the observer`() {
+    val owner = TestOwner()
+    owner.registry.currentState = Lifecycle.State.RESUMED
+
+    val controller = buildOffMainThread(owner)
+    controller.release()
+    idleMain()
+
+    assertThat(owner.registry.observerCount).isEqualTo(0)
+  }
 }

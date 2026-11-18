@@ -49,6 +49,8 @@ constructor(
       else LithoVisibilityState.HINT_INVISIBLE,
   )
 
+  private var released = false
+
   init {
     // LifecycleRegistry only accepts observers from the main thread. Registration replays the
     // owner's current state, so hopping loses nothing.
@@ -67,11 +69,22 @@ constructor(
    * [LithoVisibilityState.DESTROYED]. Take that transition directly instead of registering.
    */
   private fun registerOrMarkDestroyed() {
+    if (released) {
+      return
+    }
     if (lifecycleOwner.lifecycle.currentState == Lifecycle.State.DESTROYED) {
       moveToVisibilityState(LithoVisibilityState.DESTROYED)
     } else {
       lifecycleOwner.lifecycle.addObserver(this)
     }
+  }
+
+  /**
+   * Stops observing [lifecycleOwner], including a registration still queued for the main thread.
+   */
+  internal fun release() {
+    released = true
+    lifecycleOwner.lifecycle.removeObserver(this)
   }
 
   override val visibilityState: LithoVisibilityState

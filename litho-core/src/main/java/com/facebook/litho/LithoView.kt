@@ -323,6 +323,8 @@ constructor(
   private fun cleanupDefaultVisibilityController() {
     defaultLithoVisibilityEventsController?.let { controller ->
       controller.removeListener(lithoVisibilityEventsListener)
+      // A new controller is created on every attach, so stop the old one observing the owner.
+      controller.release()
       defaultLithoVisibilityEventsController = null
       if (!componentTreeHasVisibilityEventsController()) {
         resetVisibilityHint()
