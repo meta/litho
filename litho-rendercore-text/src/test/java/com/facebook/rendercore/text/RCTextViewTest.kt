@@ -474,6 +474,7 @@ class RCTextViewTest {
 
   private fun setupClickableSpanListenerTest(
       shouldSpanBeNull: Boolean = false,
+      clickSpanUnderRelease: Boolean = false,
   ): Pair<ArrayList<String>, RCTextView> {
     val eventsFired = ArrayList<String>()
 
@@ -502,6 +503,7 @@ class RCTextViewTest {
 
     val textStyle = TextStyle()
     textStyle.textSize = 20
+    textStyle.clickSpanUnderRelease = clickSpanUnderRelease
 
     val clickableText = Spannable.Factory.getInstance().newSpannable("Some text.")
     val clickableSpan =
@@ -697,6 +699,37 @@ class RCTextViewTest {
     assertThat(textView.onTouchEvent(upEvent)).isEqualTo(true)
     assertThat(eventsFired.size).isEqualTo(1)
     assertThat(eventsFired).contains("onClick")
+  }
+
+  @Test
+  fun clickSpanUnderRelease_releaseOnPressedSpan_clicksIt() {
+    val (eventsFired, textView) = setupClickableSpanListenerTest(clickSpanUnderRelease = true)
+
+    textView.onTouchEvent(MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 0f, 0f, 0))
+    textView.onTouchEvent(MotionEvent.obtain(0, 0, MotionEvent.ACTION_UP, 0f, 0f, 0))
+
+    assertThat(eventsFired).containsExactly("onClick")
+  }
+
+  @Test
+  fun clickSpanUnderRelease_releaseOutsideView_clicksNothing() {
+    val (eventsFired, textView) = setupClickableSpanListenerTest(clickSpanUnderRelease = true)
+
+    textView.onTouchEvent(MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 0f, 0f, 0))
+    textView.onTouchEvent(MotionEvent.obtain(0, 0, MotionEvent.ACTION_UP, 9000f, 9000f, 0))
+
+    assertThat(eventsFired).isEmpty()
+  }
+
+  @Test
+  fun clickSpanUnderRelease_releaseOnTextOffTheSpan_clicksNothing() {
+    val (eventsFired, textView) = setupClickableSpanListenerTest(clickSpanUnderRelease = true)
+
+    // The span covers only "S"; x = 60 is further along "Some text." on the same line.
+    textView.onTouchEvent(MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 0f, 0f, 0))
+    textView.onTouchEvent(MotionEvent.obtain(0, 0, MotionEvent.ACTION_UP, 60f, 5f, 0))
+
+    assertThat(eventsFired).isEmpty()
   }
 
   @Test

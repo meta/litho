@@ -99,6 +99,42 @@ class TextPrimitiveBehaviorParityTest(private val usePrimitiveText: Boolean) {
   }
 
   @Test
+  fun `releasing off the pressed span clicks nothing`() {
+    // |0      40                 200
+    // [ #tag  and some plain text  ]   text view, 200 x 40
+    //   ^ press at (5, 10), then release on " and" at (150, 10) or below the text at (5, 120)
+    for ((upX, upY) in listOf(150f to 10f, 5f to 120f)) {
+      events.clear()
+      val testLithoView = renderHashtagText()
+
+      tap(testLithoView, downX = 5f, downY = 10f, upX = upX, upY = upY)
+
+      assertThat(events).describedAs("release at ($upX, $upY)").isEmpty()
+    }
+  }
+
+  @Test
+  fun `releasing on the pressed span clicks it`() {
+    val testLithoView = renderHashtagText()
+
+    tap(testLithoView, downX = 5f, downY = 10f, upX = 15f, upY = 12f)
+
+    assertThat(events).containsExactly(SPAN_CLICK)
+  }
+
+  @Test
+  fun `a still tap next to a span clicks it when the span has an expanded touch area`() {
+    // |0      40                 200
+    // [ #tag  and some plain text  ]   text view, 200 x 40; "#tag" ends near x = 40
+    //            ^ press and release at (50, 10): off "#tag", within 20 px of it
+    val testLithoView = renderHashtagText(clickableSpanExpandedOffsetPx = 20f)
+
+    tap(testLithoView, downX = 50f, downY = 10f, upX = 50f, upY = 10f)
+
+    assertThat(events).containsExactly(SPAN_CLICK)
+  }
+
+  @Test
   fun `touchable span listener receives touch events on spans`() {
     val touchedActions = mutableListOf<Int>()
     val testLithoView = renderClickableText(
@@ -243,6 +279,33 @@ class TextPrimitiveBehaviorParityTest(private val usePrimitiveText: Boolean) {
     }
   }
 
+  @Suppress("DEPRECATION")
+  private fun renderHashtagText(clickableSpanExpandedOffsetPx: Float = 0f): TestLithoView {
+    val text = SpannableString(HASHTAG_TEXT)
+    text.setSpan(
+        object : ClickableSpan() {
+          override fun onClick(widget: View) {
+            events.add(SPAN_CLICK)
+          }
+        },
+        0,
+        HASHTAG.length,
+        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+    )
+    return lithoTestRule.render {
+      Column.create(context)
+          .child(
+              Text.create(context)
+                  .text(text)
+                  .textSizePx(20)
+                  .clickableSpanExpandedOffsetPx(clickableSpanExpandedOffsetPx)
+                  .widthPx(200)
+                  .heightPx(40),
+          )
+          .build()
+    }
+  }
+
   private fun recordingSpanListener(consume: Boolean): ClickableSpanListener =
       object : ClickableSpanListener {
         override fun onClick(span: ClickableSpan, view: View): Boolean {
@@ -257,6 +320,18 @@ class TextPrimitiveBehaviorParityTest(private val usePrimitiveText: Boolean) {
     lithoView.dispatchTouchEvent(motionEvent(MotionEvent.ACTION_UP))
   }
 
+  private fun tap(
+      testLithoView: TestLithoView,
+      downX: Float,
+      downY: Float,
+      upX: Float,
+      upY: Float,
+  ) {
+    val lithoView = testLithoView.lithoView
+    lithoView.dispatchTouchEvent(MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, downX, downY, 0))
+    lithoView.dispatchTouchEvent(MotionEvent.obtain(0, 0, MotionEvent.ACTION_UP, upX, upY, 0))
+  }
+
   private fun motionEvent(action: Int): MotionEvent =
       MotionEvent.obtain(0, 0, action, TAP_X, TAP_Y, 0)
 
@@ -268,6 +343,8 @@ class TextPrimitiveBehaviorParityTest(private val usePrimitiveText: Boolean) {
     private const val SPAN_CLICK = "span.onClick"
     private const val SPAN_LONG_CLICK = "span.onLongClick"
     private const val LIKE = "Like"
+    private const val HASHTAG = "#tag"
+    private const val HASHTAG_TEXT = "#tag and some plain text"
     private const val LISTENER_CLICK = "listener.onClick"
 
     @JvmStatic

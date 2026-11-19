@@ -124,6 +124,12 @@ class TextStyle : Cloneable {
   @JvmField var trackLongClickInLocalCoordinates: Boolean = false
 
   /**
+   * On release, click the span under the finger, as legacy Litho Text does, instead of the span
+   * that was pressed. Releasing off every span, or outside the view, clicks nothing.
+   */
+  @JvmField var clickSpanUnderRelease: Boolean = false
+
+  /**
    * The layout direction the host resolved for this text (e.g. Litho's Yoga direction), or `null`
    * to use the locale's. When set, it replaces the locale for the default FIRSTSTRONG text
    * direction and for [TextAlignment.LAYOUT_START]/[TextAlignment.LAYOUT_END], and
@@ -220,6 +226,7 @@ class TextStyle : Cloneable {
               truncationStyle == other.truncationStyle &&
               useLegacyTextCustomEllipsisCut == other.useLegacyTextCustomEllipsisCut &&
               trackLongClickInLocalCoordinates == other.trackLongClickInLocalCoordinates &&
+              clickSpanUnderRelease == other.clickSpanUnderRelease &&
               resolvedLayoutDirectionRtl == other.resolvedLayoutDirectionRtl &&
               _textColor == other._textColor)
 
@@ -381,6 +388,7 @@ class TextStyle : Cloneable {
     append("trackLongClickInLocalCoordinates=")
         .append(trackLongClickInLocalCoordinates)
         .append(", ")
+    append("clickSpanUnderRelease=").append(clickSpanUnderRelease).append(", ")
     append("resolvedLayoutDirectionRtl=").append(resolvedLayoutDirectionRtl).append(", ")
     append("textColor=").append(textColor).append(", ")
     append("textColorStateList=").append(textColorStateList)
