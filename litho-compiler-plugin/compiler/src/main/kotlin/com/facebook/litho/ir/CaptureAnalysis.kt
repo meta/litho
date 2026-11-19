@@ -16,7 +16,6 @@
 
 package com.facebook.litho.ir
 
-import com.facebook.kotlin.compilercompat.compatDispatchReceiver
 import com.facebook.kotlin.compilercompat.compatExtensionReceiver
 import com.facebook.kotlin.compilercompat.valueArgumentsCountCompat
 import com.facebook.litho.common.AutoDepsConfig
@@ -631,7 +630,7 @@ class CaptureAnalysis(
     @OptIn(DeprecatedForRemovalCompilerApi::class) // compatExtensionReceiver
     fun IrExpression.pathReceivers(): List<IrExpression> =
         when (this) {
-          is IrCall -> listOfNotNull(compatDispatchReceiver, compatExtensionReceiver)
+          is IrCall -> listOfNotNull(dispatchReceiver, compatExtensionReceiver)
           is IrGetField -> listOfNotNull(receiver)
           else -> emptyList()
         }

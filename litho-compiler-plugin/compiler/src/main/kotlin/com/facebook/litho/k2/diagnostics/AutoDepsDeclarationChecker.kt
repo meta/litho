@@ -16,13 +16,14 @@
 
 package com.facebook.litho.k2.diagnostics
 
-import com.facebook.kotlin.compilercompat.FirRegularClassCheckerCompat
 import com.facebook.kotlin.compilercompat.FirSimpleFunctionCheckerCompat
 import com.facebook.litho.common.LithoNames
 import org.jetbrains.kotlin.KtSourceElement
 import org.jetbrains.kotlin.diagnostics.DiagnosticReporter
 import org.jetbrains.kotlin.diagnostics.reportOn
+import org.jetbrains.kotlin.fir.analysis.checkers.MppCheckerKind
 import org.jetbrains.kotlin.fir.analysis.checkers.context.CheckerContext
+import org.jetbrains.kotlin.fir.analysis.checkers.declaration.FirRegularClassChecker
 import org.jetbrains.kotlin.fir.declarations.DirectDeclarationsAccess
 import org.jetbrains.kotlin.fir.declarations.FirNamedFunction
 import org.jetbrains.kotlin.fir.declarations.FirRegularClass
@@ -44,7 +45,12 @@ import org.jetbrains.kotlin.fir.types.isSomeFunctionType
 class AutoDepsFunctionChecker : FirSimpleFunctionCheckerCompat(::checkAutoDepsFunction)
 
 /** The same checks for `@AutoDeps` classes, whose parameters live on the primary constructor. */
-class AutoDepsClassChecker : FirRegularClassCheckerCompat(::checkAutoDepsClass)
+class AutoDepsClassChecker : FirRegularClassChecker(MppCheckerKind.Common) {
+  context(context: CheckerContext, reporter: DiagnosticReporter)
+  override fun check(declaration: FirRegularClass) {
+    checkAutoDepsClass(declaration, context, reporter)
+  }
+}
 
 private fun checkAutoDepsFunction(
     declaration: FirNamedFunction,

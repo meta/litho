@@ -16,12 +16,13 @@
 
 package com.facebook.litho.k2.diagnostics
 
-import com.facebook.kotlin.compilercompat.FirFunctionCallCheckerCompat
 import com.facebook.litho.common.LithoNames
 import org.jetbrains.kotlin.diagnostics.DiagnosticReporter
 import org.jetbrains.kotlin.diagnostics.reportOn
 import org.jetbrains.kotlin.fir.FirSession
+import org.jetbrains.kotlin.fir.analysis.checkers.MppCheckerKind
 import org.jetbrains.kotlin.fir.analysis.checkers.context.CheckerContext
+import org.jetbrains.kotlin.fir.analysis.checkers.expression.FirFunctionCallChecker
 import org.jetbrains.kotlin.fir.declarations.FirNamedFunction
 import org.jetbrains.kotlin.fir.declarations.hasAnnotation
 import org.jetbrains.kotlin.fir.expressions.FirFunctionCall
@@ -51,12 +52,9 @@ import org.jetbrains.kotlin.utils.addToStdlib.lastIsInstanceOrNull
  * [Litho Hook Usage](https://fblitho.com/docs/state-and-side-effects/hooks-intro/#rules-for-hooks)
  * for more details.
  */
-class LithoFirHookUsageChecker : FirFunctionCallCheckerCompat() {
-  override fun check(
-      expression: FirFunctionCall,
-      context: CheckerContext,
-      reporter: DiagnosticReporter,
-  ) {
+class LithoFirHookUsageChecker : FirFunctionCallChecker(MppCheckerKind.Common) {
+  context(context: CheckerContext, reporter: DiagnosticReporter)
+  override fun check(expression: FirFunctionCall) {
     val symbol = expression.calleeReference.symbol ?: return
     if (!symbol.hasAnnotation(LithoNames.Hook, context.session)) return
     if (context.hasInvalidParent()) {
