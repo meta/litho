@@ -18,6 +18,10 @@ package com.facebook.litho
 
 import android.app.Activity
 
+@Deprecated(
+    "Use com.facebook.litho.surface.lithoHost (LithoHost.kt in litho-surface) for an Activity's " +
+        "content instead.",
+)
 fun Activity.setContent(component: Component) {
   setContentView(LithoView.create(this, component))
 }

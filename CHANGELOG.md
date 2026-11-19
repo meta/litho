@@ -5,6 +5,8 @@
 _release-date_
 
 * [NEW] Add new `useFirstDrawReporter` hook together with `Style.reportFirstContentDraw` for executing actions when related Component is fully rendered on the screen. Can be used to mark the end of TTRC or TTI markers.
+* [NEW] Add a `LithoView(componentTree)` constructor, deprecated as well: it's a convenience for code that hasn't moved to `setLithoContent` or `lithoHost` yet. The view uses the tree's Android `Context`, so a tree no longer needs its Context passed again, as `LithoView.create(context, componentTree)` does.
+* [Deprecated] Every `LithoView.create` overload, and `Activity.setContent`. Use `lithoHost` (`LithoHost.kt` in litho-surface) for a Fragment's or Activity's content, and `setLithoContent` (`LithoSurface.kt` in litho-surface) for other views.
 * [BREAKING] Remove `LegacyLithoViewRule` from `com.facebook.litho.testing`, please use `LithoTestRule` and `TestLithoView` instead.
 * [BREAKING] Replace `ComponentsConfiguration.useIncrementalMountGapWorker` and `enableGapWorkerIncrementalUnmount` with a single `gapWorkerMode: GapWorkerMode` (default `OFF`). Migrate `useIncrementalMountGapWorker(true)` to `gapWorkerMode(GapWorkerMode.PREMOUNT)`, or `COST_AWARE_PREMOUNT` / `COST_AWARE_PREMOUNT_WITH_INCREMENTAL_UNMOUNT`. `IncrementalMountExtensionConfigs.useGapWorker` and `useCostAwareGapWorkerPremount` are removed: the tree's mode alone decides the route.
 * [BREAKING] Remove the Unit-returning `Style.onPerformAccessibilityAction`, `Style.onRequestSendAccessibilityEvent` and `Style.onPerformActionForVirtualView`, please use `onPerformAccessibilityActionWithResult`, `onRequestSendAccessibilityEventWithResult` and `onPerformActionForVirtualViewWithResult` instead.

@@ -98,6 +98,20 @@ constructor(
       attrs: AttributeSet? = null,
   ) : this(ComponentContext(context), attrs)
 
+  /**
+   * Creates a [LithoView] that shows [componentTree], with the tree's Android [Context]. The view
+   * gets a [ComponentContext] of its own rather than [ComponentTree.context], which belongs to the
+   * tree.
+   *
+   * A convenience for code that hasn't moved to `setLithoContent` or `lithoHost` yet.
+   */
+  @Deprecated(LITHO_SURFACE_DEPRECATION)
+  constructor(
+      componentTree: ComponentTree,
+  ) : this(ComponentContext(componentTree.context.androidContext)) {
+    this.componentTree = componentTree
+  }
+
   internal fun forceRelayout() {
     forceLayout = true
     requestLayout()
@@ -837,6 +851,11 @@ constructor(
     private const val LITHO_VISIBILITY_EVENTS_CONTROLLER_FOUND =
         "lithoView:LithoVisibilityEventsControllerFound"
 
+    private const val LITHO_SURFACE_DEPRECATION =
+        "Use com.facebook.litho.surface.lithoHost (LithoHost.kt in litho-surface) for a Fragment's " +
+            "or Activity's content, and com.facebook.litho.surface.setLithoContent (LithoSurface.kt " +
+            "in litho-surface) for other views."
+
     const val VISIBLE = View.VISIBLE
 
     private val layoutSize = IntArray(2)
@@ -848,6 +867,7 @@ constructor(
      * @param component The root component to draw.
      * @return [LithoView] able to render a [Component] hierarchy.
      */
+    @Deprecated(LITHO_SURFACE_DEPRECATION)
     @JvmStatic
     fun create(context: Context, component: Component?): LithoView {
       val lithoView = LithoView(context)
@@ -855,6 +875,7 @@ constructor(
       return lithoView
     }
 
+    @Deprecated(LITHO_SURFACE_DEPRECATION)
     @JvmStatic
     fun create(
         context: Context,
@@ -870,6 +891,7 @@ constructor(
      * @param component The root component to draw.
      * @return [LithoView] able to render a [Component] hierarchy.
      */
+    @Deprecated(LITHO_SURFACE_DEPRECATION)
     @JvmStatic
     fun create(context: ComponentContext, component: Component?): LithoView {
       val lithoView = LithoView(context)
@@ -881,6 +903,7 @@ constructor(
      * Creates a new LithoView and sets a new ComponentTree on it. The ComponentTree is subscribed
      * to the given LithoVisibilityEventsController instance.
      */
+    @Deprecated(LITHO_SURFACE_DEPRECATION)
     @JvmStatic
     fun create(
         context: ComponentContext,
@@ -898,11 +921,13 @@ constructor(
     }
 
     /** Create a new [LithoView] instance and initialize it with a custom [ComponentTree]. */
+    @Deprecated(LITHO_SURFACE_DEPRECATION)
     @JvmStatic
     fun create(context: Context, componentTree: ComponentTree): LithoView =
         create(ComponentContext(context), componentTree)
 
     /** Create a new [LithoView] instance and initialize it with a custom [ComponentTree]. */
+    @Deprecated(LITHO_SURFACE_DEPRECATION)
     @JvmStatic
     fun create(context: ComponentContext, componentTree: ComponentTree): LithoView {
       val lithoView = LithoView(context)

@@ -297,6 +297,18 @@ class LithoViewTest {
     assertThat(lithoView.rootComponent).isInstanceOf(EmptyComponent::class.java)
   }
 
+  @Test
+  @Suppress("DEPRECATION")
+  fun constructor_withComponentTree_showsTheTreeWithItsContext() {
+    val tree =
+        ComponentTree.create(ComponentContext(getApplicationContext<Context>()), initialComponent)
+            .build()
+    lithoView = LithoView(tree)
+    assertThat(lithoView.componentTree).isSameAs(tree)
+    assertThat(lithoView.context).isSameAs(tree.context.androidContext)
+    assertThat(lithoView.componentContext).isNotSameAs(tree.context)
+  }
+
   private class RecyclerViewLayoutManagerOverrideParams(
       _widthMeasureSpec: Int,
       _heightMeasureSpec: Int,
