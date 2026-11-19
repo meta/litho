@@ -868,6 +868,158 @@ class RecyclerBinderTest {
   }
 
   @Test
+  fun testDeferOutOfRangeTreeRelease_registersScrollStateListener() {
+    val recyclerView = mock(RecyclerView::class.java)
+    createDeferredReleaseBinder().mount(recyclerView)
+
+    verify(recyclerView, times(2)).addOnScrollListener(any(OnScrollListener::class.java))
+  }
+
+  @Test
+  fun testDeferOutOfRangeTreeRelease_keepsTreesWhileScrollingAndReleasesAtIdle() {
+    ShadowLooper.pauseMainLooper()
+    val binder = createDeferredReleaseBinder()
+    val components = prepareLoadedBinder(binder, 100)
+    val recyclerView = mock(RecyclerView::class.java)
+    binder.mount(recyclerView)
+    val firstHolder = checkNotNull(holdersForComponents[components[0].component])
+
+    binder.deferredTreeReleaseScrollListener.onScrollStateChanged(
+        recyclerView,
+        RecyclerView.SCROLL_STATE_SETTLING,
+    )
+    binder.onNewVisibleRange(40, 42)
+
+    assertThat(firstHolder.isTreeValid).isTrue
+    assertThat(firstHolder.mDidAcquireStateHandler).isFalse
+
+    binder.deferredTreeReleaseScrollListener.onScrollStateChanged(
+        recyclerView,
+        RecyclerView.SCROLL_STATE_IDLE,
+    )
+    assertThat(firstHolder.mDidAcquireStateHandler).isFalse
+
+    ShadowLooper.idleMainLooper()
+    assertThat(firstHolder.isTreeValid).isFalse
+    assertThat(firstHolder.mDidAcquireStateHandler).isTrue
+  }
+
+  @Test
+  fun testDeferOutOfRangeTreeRelease_keepsTreesThatComeBackIntoRangeBeforeIdle() {
+    ShadowLooper.pauseMainLooper()
+    val binder = createDeferredReleaseBinder()
+    val components = prepareLoadedBinder(binder, 100)
+    val recyclerView = mock(RecyclerView::class.java)
+    binder.mount(recyclerView)
+    val firstHolder = checkNotNull(holdersForComponents[components[0].component])
+    val farHolder = checkNotNull(holdersForComponents[components[40].component])
+
+    binder.deferredTreeReleaseScrollListener.onScrollStateChanged(
+        recyclerView,
+        RecyclerView.SCROLL_STATE_DRAGGING,
+    )
+    binder.onNewVisibleRange(40, 42)
+    binder.onNewVisibleRange(0, 2)
+    binder.deferredTreeReleaseScrollListener.onScrollStateChanged(
+        recyclerView,
+        RecyclerView.SCROLL_STATE_IDLE,
+    )
+    ShadowLooper.idleMainLooper()
+
+    assertThat(firstHolder.isTreeValid).isTrue
+    assertThat(firstHolder.mDidAcquireStateHandler).isFalse
+    assertThat(farHolder.mDidAcquireStateHandler).isTrue
+  }
+
+  @Test
+  fun testDeferOutOfRangeTreeRelease_releasesDeferredTreesOnUnmount() {
+    ShadowLooper.pauseMainLooper()
+    val binder = createDeferredReleaseBinder()
+    val components = prepareLoadedBinder(binder, 100)
+    val recyclerView = mock(RecyclerView::class.java)
+    binder.mount(recyclerView)
+    val firstHolder = checkNotNull(holdersForComponents[components[0].component])
+
+    binder.deferredTreeReleaseScrollListener.onScrollStateChanged(
+        recyclerView,
+        RecyclerView.SCROLL_STATE_DRAGGING,
+    )
+    binder.onNewVisibleRange(40, 42)
+    binder.unmount(recyclerView)
+    ShadowLooper.idleMainLooper()
+
+    assertThat(firstHolder.mDidAcquireStateHandler).isTrue
+  }
+
+  @Test
+  fun testDeferOutOfRangeTreeRelease_doesNotRecreateTreesAfterDetach() {
+    ShadowLooper.pauseMainLooper()
+    // Real holders, since the test holder doesn't drop its tree on releaseTree().
+    val holders = ArrayList<ComponentTreeHolder>()
+    val noOpLayoutHandler = mock(RunnableHandler::class.java)
+    val binder =
+        RecyclerBinder.Builder()
+            .layoutInfo(layoutInfo)
+            .componentTreeHolderFactory(
+                object : RecyclerBinder.ComponentTreeHolderFactory {
+                  override fun create(
+                      renderInfo: RenderInfo,
+                      layoutHandler: RunnableHandler?,
+                      componentTreeMeasureListenerFactory: ComponentTreeMeasureListenerFactory?,
+                      componentsConfiguration: ComponentsConfiguration,
+                      lifecycleProvider: LithoVisibilityEventsController?,
+                  ): ComponentTreeHolder =
+                      ComponentTreeHolder.create(componentsConfiguration)
+                          .renderInfo(renderInfo)
+                          .layoutHandler(noOpLayoutHandler)
+                          .build()
+                          .also { holders.add(it) }
+                },
+            )
+            .recyclerBinderConfig(
+                RecyclerBinderConfig.create()
+                    .rangeRatio(RANGE_RATIO)
+                    .deferOutOfRangeTreeReleaseUntilScrollIdle(true)
+                    .build(),
+            )
+            .build(componentContext)
+    binder.insertRangeAt(
+        0,
+        List<RenderInfo>(100) { ComponentRenderInfo.create().component(EmptyComponent()).build() },
+    )
+    binder.notifyChangeSetComplete(true, NO_OP_CHANGE_SET_COMPLETE_CALLBACK)
+    binder.measure(
+        Size(),
+        makeSizeSpec(200, EXACTLY),
+        makeSizeSpec(200, EXACTLY),
+        null,
+    )
+    val recyclerView = mock(RecyclerView::class.java)
+    binder.mount(recyclerView)
+
+    binder.deferredTreeReleaseScrollListener.onScrollStateChanged(
+        recyclerView,
+        RecyclerView.SCROLL_STATE_SETTLING,
+    )
+    binder.onNewVisibleRange(40, 42)
+    binder.unmount(recyclerView)
+    binder.detach()
+    ShadowLooper.idleMainLooper()
+
+    assertThat(holders.filter { it.componentTree != null }).isEmpty()
+  }
+
+  private fun createDeferredReleaseBinder(): RecyclerBinder =
+      recyclerBinderBuilder
+          .recyclerBinderConfig(
+              RecyclerBinderConfig.create()
+                  .rangeRatio(RANGE_RATIO)
+                  .deferOutOfRangeTreeReleaseUntilScrollIdle(true)
+                  .build(),
+          )
+          .build(componentContext)
+
+  @Test
   fun testMoveRange_withRetainMaximumRangeRecyclingStrategy() {
     val recyclerBinder =
         recyclerBinderBuilder

@@ -165,6 +165,12 @@ class RecyclerBinder private constructor(builder: Builder) :
         recyclingStrategy == RecyclingStrategy.RETAIN_MAXIMUM_RANGE ||
             recyclingStrategy == RecyclingStrategy.RETAIN_MAXIMUM_RANGE_OPTIMIZED
 
+  /** See [RecyclerBinderConfig.deferOutOfRangeTreeReleaseUntilScrollIdle]. */
+  private val deferOutOfRangeTreeReleaseUntilScrollIdle: Boolean
+    get() =
+        recyclerBinderConfig.deferOutOfRangeTreeReleaseUntilScrollIdle &&
+            recyclingStrategy == RecyclingStrategy.DEFAULT
+
   private val componentsConfiguration: ComponentsConfiguration
 
   private val currentChangeSetThreadId = AtomicLong(-1)
@@ -224,10 +230,49 @@ class RecyclerBinder private constructor(builder: Builder) :
       iterator = componentTreeHoldersToRelease.iterator()
       componentTreeHoldersToRelease = ArrayDeque()
     }
+    if (isScrollingForTreeRelease) {
+      hasDeferredOutOfRangeRelease = true
+      return@Runnable
+    }
     while (iterator.hasNext()) {
       val holder = iterator.next()
       maybeAcquireStateAndReleaseTree(holder)
     }
+  }
+
+  // Only set while the mounted view scrolls with deferOutOfRangeTreeReleaseUntilScrollIdle on.
+  @ThreadConfined(ThreadConfined.UI) private var isScrollingForTreeRelease = false
+  @ThreadConfined(ThreadConfined.UI) private var hasDeferredOutOfRangeRelease = false
+
+  private val releaseDeferredOutOfRangeTreesRunnable = Runnable {
+    if (hasDeferredOutOfRangeRelease && !isScrollingForTreeRelease) {
+      hasDeferredOutOfRangeRelease = false
+      computeRange(currentFirstVisiblePosition, currentLastVisiblePosition)
+    }
+  }
+
+  @JvmField
+  @VisibleForTesting
+  val deferredTreeReleaseScrollListener: RecyclerView.OnScrollListener =
+      object : RecyclerView.OnScrollListener() {
+        override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+          isScrollingForTreeRelease = newState != RecyclerView.SCROLL_STATE_IDLE
+          maybePostDeferredOutOfRangeRelease()
+        }
+      }
+
+  @UiThread
+  private fun maybePostDeferredOutOfRangeRelease() {
+    if (hasDeferredOutOfRangeRelease && !isScrollingForTreeRelease) {
+      mainThreadHandler.removeCallbacks(releaseDeferredOutOfRangeTreesRunnable)
+      mainThreadHandler.post(releaseDeferredOutOfRangeTreesRunnable)
+    }
+  }
+
+  @UiThread
+  private fun cancelDeferredOutOfRangeRelease() {
+    mainThreadHandler.removeCallbacks(releaseDeferredOutOfRangeTreesRunnable)
+    hasDeferredOutOfRangeRelease = false
   }
 
   private val postDispatchDrawListener: PostDispatchDrawListener = PostDispatchDrawListener {
@@ -637,6 +682,12 @@ class RecyclerBinder private constructor(builder: Builder) :
     // For a list that comes back with its state, as after a tree replacement.
     saveableStateRegistry?.retainActiveValues()
     saveableStateRegistry?.detachFromParent()
+    // A deferred release would recompute the range and lay out the trees released below again.
+    if (ThreadUtils.isMainThread) {
+      cancelDeferredOutOfRangeRelease()
+    } else {
+      mainThreadHandler.post { cancelDeferredOutOfRangeRelease() }
+    }
     if (lithoVisibilityEventsController != null) {
       return
     }
@@ -3313,6 +3364,10 @@ class RecyclerBinder private constructor(builder: Builder) :
     view.layoutManager = layoutManager
     view.adapter = internalAdapter
     view.addOnScrollListener(viewportManager.scrollListener)
+    if (deferOutOfRangeTreeReleaseUntilScrollIdle) {
+      isScrollingForTreeRelease = view.scrollState != RecyclerView.SCROLL_STATE_IDLE
+      view.addOnScrollListener(deferredTreeReleaseScrollListener)
+    }
 
     if (layoutManager is NeedsBgPaddingInfo) {
       (layoutManager as NeedsBgPaddingInfo).setBgPaddingInfo(
@@ -3443,6 +3498,11 @@ class RecyclerBinder private constructor(builder: Builder) :
     }
 
     view.removeOnScrollListener(viewportManager.scrollListener)
+    if (deferOutOfRangeTreeReleaseUntilScrollIdle) {
+      view.removeOnScrollListener(deferredTreeReleaseScrollListener)
+      isScrollingForTreeRelease = false
+      maybePostDeferredOutOfRangeRelease()
+    }
 
     // Remove any pending callbacks that this RecyclerBinder posted to the RecyclerView. If the
     // view is detached (e.g. recycled into Litho's MountContentPools), View.post()/postOnAnimation
@@ -3989,7 +4049,11 @@ class RecyclerBinder private constructor(builder: Builder) :
 
   private fun maybeReleaseOutOfRangeTree(holder: ComponentTreeHolder) {
     if (ThreadUtils.isMainThread) {
-      maybeAcquireStateAndReleaseTree(holder)
+      if (isScrollingForTreeRelease) {
+        hasDeferredOutOfRangeRelease = true
+      } else {
+        maybeAcquireStateAndReleaseTree(holder)
+      }
     } else {
       synchronized(releaseTreeRunnableLock) {
         componentTreeHoldersToRelease.addLast(holder)

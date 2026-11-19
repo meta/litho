@@ -171,6 +171,15 @@ data class RecyclerBinderConfig(
     @JvmField val layoutItemsOutsideMeasureLock: Boolean? = null,
     /** Rebind component rows when their effective child size specs change on update. */
     @JvmField val enableSizeSpecRebind: Boolean = false,
+    /**
+     * Temporary rollout flag. When true and [recyclingStrategy] is
+     * [RecyclerBinder.RecyclingStrategy.DEFAULT], a range computed on the main thread while the
+     * mounted [androidx.recyclerview.widget.RecyclerView] is scrolling does not release the trees
+     * of items that left the range. Once the list is idle, the binder recomputes the range in a
+     * separate main-thread message and releases the items that are still out of it. Suits paged
+     * lists, where the list goes idle after every page.
+     */
+    @JvmField val deferOutOfRangeTreeReleaseUntilScrollIdle: Boolean = false,
 ) {
 
   init {
@@ -233,6 +242,8 @@ class RecyclerBinderConfigBuilder internal constructor(configuration: RecyclerBi
   private var recyclingStrategy = configuration.recyclingStrategy
   private var resolvePaginationTargetOnCommit = configuration.resolvePaginationTargetOnCommit
   private var layoutItemsOutsideMeasureLock = configuration.layoutItemsOutsideMeasureLock
+  private var deferOutOfRangeTreeReleaseUntilScrollIdle =
+      configuration.deferOutOfRangeTreeReleaseUntilScrollIdle
 
   fun isCircular(isCircular: Boolean): RecyclerBinderConfigBuilder = also {
     this.isCircular = isCircular
@@ -314,6 +325,11 @@ class RecyclerBinderConfigBuilder internal constructor(configuration: RecyclerBi
     this.layoutItemsOutsideMeasureLock = enabled
   }
 
+  fun deferOutOfRangeTreeReleaseUntilScrollIdle(enabled: Boolean): RecyclerBinderConfigBuilder =
+      also {
+        this.deferOutOfRangeTreeReleaseUntilScrollIdle = enabled
+      }
+
   fun build(): RecyclerBinderConfig {
     return RecyclerBinderConfig(
         componentsConfiguration = componentsConfiguration,
@@ -336,6 +352,7 @@ class RecyclerBinderConfigBuilder internal constructor(configuration: RecyclerBi
         recyclingStrategy = recyclingStrategy,
         resolvePaginationTargetOnCommit = resolvePaginationTargetOnCommit,
         layoutItemsOutsideMeasureLock = layoutItemsOutsideMeasureLock,
+        deferOutOfRangeTreeReleaseUntilScrollIdle = deferOutOfRangeTreeReleaseUntilScrollIdle,
     )
   }
 }
