@@ -388,6 +388,18 @@ class DepChangeTest {
     assertThat(changes[0].describe().length).isLessThan(200)
   }
 
+  @Test
+  fun `keeps supplementary characters whole in the diff window`() {
+    val emoji = "😀"
+    val prefix = emoji.repeat(80)
+
+    val changes = describeDepChanges(arrayOf(prefix + "A"), arrayOf(prefix + "B"))
+
+    assertThat(changes).hasSize(1)
+    assertThat(changes[0].diffBefore).isEqualTo(emoji.repeat(30) + "A")
+    assertThat(changes[0].diffAfter).isEqualTo(emoji.repeat(30) + "B")
+  }
+
   private data class Point(val x: Int, val y: Int)
 
   private data class Handlers(@Suppress("unused") val onTap: () -> Unit)

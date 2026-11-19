@@ -174,8 +174,8 @@ private const val DIFF_CONTEXT = 30
  * other supplementary characters) into a lone surrogate.
  */
 private fun diffWindow(before: String, after: String): DiffWindow {
-  val b = before.codePoints().toArray()
-  val a = after.codePoints().toArray()
+  val b = codePointArray(before)
+  val a = codePointArray(after)
   val min = minOf(b.size, a.size)
   var i = 0
   while (i < min && b[i] == a[i]) {
@@ -194,6 +194,18 @@ private fun diffWindow(before: String, after: String): DiffWindow {
       codePointsToString(a, lo, minOf(a.size, ja + 1 + DIFF_CONTEXT, lo + MAX_VALUE_LENGTH)),
       churn,
   )
+}
+
+/** The code points of [s]. `String.codePoints()` is API 24+, so it would crash on Android 6. */
+private fun codePointArray(s: String): IntArray {
+  val out = IntArray(s.codePointCount(0, s.length))
+  var offset = 0
+  for (k in out.indices) {
+    val codePoint = s.codePointAt(offset)
+    out[k] = codePoint
+    offset += Character.charCount(codePoint)
+  }
+  return out
 }
 
 /** The code points of [cp] from [from] (inclusive) to [to] (exclusive) as a string. */
