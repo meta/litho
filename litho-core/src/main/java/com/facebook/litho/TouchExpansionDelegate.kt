@@ -28,6 +28,7 @@ import android.view.ViewConfiguration
 import android.view.accessibility.AccessibilityNodeInfo.TouchDelegateInfo
 import androidx.annotation.RequiresApi
 import androidx.annotation.VisibleForTesting
+import androidx.collection.MutableScatterMap
 import androidx.collection.SparseArrayCompat
 import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.rendercore.MountItem
@@ -118,7 +119,7 @@ class TouchExpansionDelegate(host: ComponentHost?) : TouchDelegate(IGNORED_RECT,
           return it.info
         }
     val boundsSnapshot = IntArray(delegates.size() * BOUNDS_SIZE)
-    val targetMap = HashMap<Region, View>(delegates.size())
+    val targetMap = MutableScatterMap<Region, View>(delegates.size())
     for (i in 0 until delegates.size()) {
       val delegate = delegates.valueAt(i)
       val bounds = delegate?.getDelegateBounds()
@@ -130,8 +131,10 @@ class TouchExpansionDelegate(host: ComponentHost?) : TouchDelegate(IGNORED_RECT,
     }
     // TouchDelegateInfo rejects an empty map and View reads this result without a null check, so
     // fall back to the platform's info (the host with empty bounds), which matches no point.
+    // TouchDelegateInfo copies the map into its own, so a read-only view of this one is enough.
     val info =
-        if (targetMap.isEmpty()) super.getTouchDelegateInfo() else TouchDelegateInfo(targetMap)
+        if (targetMap.isEmpty()) super.getTouchDelegateInfo()
+        else TouchDelegateInfo(targetMap.asMap())
     touchDelegateInfoCache = TouchDelegateInfoCache(info, boundsSnapshot)
     return info
   }
