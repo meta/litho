@@ -89,6 +89,7 @@ internal constructor(
     private val resizeMode: LithoTestRuleResizeMode,
     private val idleTask: () -> Unit,
     private val attachToRealWindow: Boolean = false,
+    private val onLithoViewChanged: (TestLithoView, LithoView) -> Unit,
 ) {
   val componentTree: ComponentTree
     get() {
@@ -109,14 +110,11 @@ internal constructor(
 
   val lithoView: LithoView
     get() {
-      if (_lithoView == null) {
-        _lithoView = LithoView(context)
+      val view = _lithoView ?: LithoView(context).also(::useLithoView)
+      if (view.componentTree == null) {
+        view.componentTree = componentTree
       }
-
-      if (_lithoView?.componentTree == null) {
-        _lithoView?.componentTree = componentTree
-      }
-      return _lithoView ?: throw AssertionError("Set to null by another thread")
+      return view
     }
 
   val rootComponent: Component?
@@ -135,14 +133,17 @@ internal constructor(
   private var _lithoView: LithoView? = null
   private var _componentTree: ComponentTree? = null
 
+  internal fun usesLithoView(view: LithoView): Boolean = _lithoView === view
+
   /** Sets a new [LithoView] which should be used to render. */
   fun useLithoView(lithoView: LithoView): TestLithoView {
-    _lithoView = lithoView
     if (lithoView.componentContext !== context) {
       throw RuntimeException(
           "You must use the same ComponentContext for the LithoView as what is on the LithoTestRule @Rule!",
       )
     }
+    _lithoView = lithoView
+    onLithoViewChanged(this, lithoView)
     lithoView.componentTree.let {
       if (it == null && _componentTree != null) {
         lithoView.componentTree = _componentTree
@@ -241,6 +242,27 @@ internal constructor(
     val lithoView: LithoView = lithoView
     lithoView.layout(0, 0, lithoView.measuredWidth, lithoView.measuredHeight)
     return this
+  }
+
+  /**
+   * Runs the measure/layout pass that a real window would normally run after `requestLayout()`.
+   * Only applies to attached, laid-out [LithoTestRuleResizeMode.AUTO] views. Views in a
+   * [real window][attachToRealWindow] are skipped: the window measures and positions them, and its
+   * traversal runs when the main looper is drained. Returns whether it ran.
+   */
+  internal fun runPendingTraversal(): Boolean {
+    val view = _lithoView ?: return false
+    if (
+        resizeMode != LithoTestRuleResizeMode.AUTO ||
+            !view.isAttached ||
+            view.isAttachedToWindow ||
+            !view.isLaidOut ||
+            !view.isLayoutRequested
+    ) {
+      return false
+    }
+    measure().layout()
+    return true
   }
 
   /**

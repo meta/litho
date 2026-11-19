@@ -82,6 +82,7 @@ constructor(
 ) : TestRule {
   lateinit var context: ComponentContext
   private val threadLooperController: BaseThreadLooperController = ThreadLooperController()
+  private val testLithoViews = mutableListOf<TestLithoView>()
 
   init {
     LithoDebugConfigurations.isDebugModeEnabled = true
@@ -101,6 +102,7 @@ constructor(
           threadLooperController.init()
           base.evaluate()
         } finally {
+          testLithoViews.clear()
           threadLooperController.clean()
           // A Factory installed by the test outlives clear(), which only empties the pool maps.
           MountContentPools.setMountContentPoolFactory(null)
@@ -167,6 +169,10 @@ constructor(
         resizeMode = resizeMode,
         idleTask = { idle() },
         attachToRealWindow = attachToRealWindow,
+        onLithoViewChanged = { owner, view ->
+          testLithoViews.removeAll { it.usesLithoView(view) }
+          testLithoViews += owner
+        },
     )
     componentTree?.let { testLithoView.useComponentTree(componentTree) }
     lithoView?.let { testLithoView.useLithoView(lithoView) }
@@ -236,17 +242,44 @@ constructor(
    * Throws [IllegalStateException] if quiescence is not reached within [MAX_IDLE_PASSES] passes,
    * which indicates a component is continuously enqueuing layout work (an application bug).
    *
-   * Use this after any action that triggers async layout or visibility events.
+   * Use this after any action that triggers async layout or visibility events. It doesn't run the
+   * layout pass a view requests; use [idleAndLayout] for that.
    */
-  fun idle() {
+  fun idle(): Unit = drainTasks(runTraversals = false)
+
+  /**
+   * Like [idle], and also runs the measure/layout pass a real window would run for views that
+   * requested layout, including nested ones such as collection items. Repeats until no work or
+   * layout request is left, with the same pass limit as [idle].
+   *
+   * Applies to laid-out views in [LithoTestRuleResizeMode.AUTO]; [LithoTestRuleResizeMode.MANUAL]
+   * views still need explicit [TestLithoView.measure] and [TestLithoView.layout] calls. Views in a
+   * real window (see [attachToRealWindow]) are laid out by the window's own traversal, which the
+   * main-looper drain runs, and are sized by the window rather than the test size specs.
+   */
+  fun idleAndLayout(): Unit = drainTasks(runTraversals = true)
+
+  private fun drainTasks(runTraversals: Boolean) {
     var passes = 0
-    while (!threadLooperController.isIdle() || !shadowOf(Looper.getMainLooper()).isIdle) {
+    while (
+        !threadLooperController.isIdle() ||
+            !shadowOf(Looper.getMainLooper()).isIdle ||
+            (runTraversals && runPendingTraversals())
+    ) {
       check(++passes <= MAX_IDLE_PASSES) {
-        "idle() did not reach quiescence after $MAX_IDLE_PASSES passes — possible infinite layout loop"
+        "Did not reach quiescence after $MAX_IDLE_PASSES passes — possible infinite layout loop"
       }
       threadLooperController.runToEndOfTasksSync()
       shadowOf(Looper.getMainLooper()).idle()
     }
+  }
+
+  private fun runPendingTraversals(): Boolean {
+    var ran = false
+    for (testLithoView in testLithoViews) {
+      ran = testLithoView.runPendingTraversal() || ran
+    }
+    return ran
   }
 
   fun finishAsyncUpdates() {

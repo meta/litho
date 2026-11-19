@@ -31,10 +31,12 @@ import com.facebook.litho.layout.flexbox.Column
 import com.facebook.litho.layout.flexbox.Row
 import com.facebook.litho.testing.LithoAnimationTestRule
 import com.facebook.litho.testing.LithoTestRule
+import com.facebook.litho.testing.LithoTestRuleResizeMode
 import com.facebook.litho.testing.testrunner.LithoTestRunner
 import com.facebook.litho.useEffect
 import com.facebook.litho.view.alpha
 import com.facebook.litho.view.viewTag
+import com.facebook.litho.widget.collection.LazyList
 import com.facebook.rendercore.px
 import kotlin.time.Duration.Companion.milliseconds
 import org.assertj.core.api.Assertions.assertThat
@@ -47,11 +49,8 @@ import org.robolectric.annotation.LooperMode
 /**
  * Tests for the same-frame animation invalidation path (`enableAnimationFrameInvalidation`).
  *
- * The probe is deliberate: [animationRule] is constructed with an empty `afterFrame`, so frames are
- * driven without pumping the main looper. A bind-only animated value that updates the mounted view
- * after [LithoAnimationTestRule.runNextFrame] with no `idle()` proves the value was applied during
- * the frame callback rather than via a deferred sync-state runnable. With the flag off these
- * assertions would fail, because the update would still be sitting on the looper.
+ * [animationRule] leaves `afterFrame` empty, so bind-only assertions verify that mounted values
+ * update synchronously during the frame callback.
  */
 @OptIn(ExperimentalLithoApi::class)
 @LooperMode(LooperMode.Mode.PAUSED)
@@ -66,8 +65,20 @@ class AnimationFrameInvalidationTest {
       ),
   )
 
-  // Empty afterFrame: no looper pump after each frame, so a passing assertion proves the bind-only
-  // update was applied in-frame.
+  @Rule
+  @JvmField
+  val manualResizeLithoTestRule = LithoTestRule(
+      lithoTestRule.componentsConfiguration,
+      resizeMode = LithoTestRuleResizeMode.MANUAL,
+  )
+
+  @Rule
+  @JvmField
+  val realWindowLithoTestRule = LithoTestRule(
+      lithoTestRule.componentsConfiguration,
+      attachToRealWindow = true,
+  )
+
   @Rule @JvmField val animationRule = LithoAnimationTestRule()
 
   private var capturedAnimatable: Animatable<Float>? = null
@@ -210,6 +221,84 @@ class AnimationFrameInvalidationTest {
     // Driving the traversal consumes the marker and applies the value in one layout/mount pass.
     testView.measure().layout()
     assertThat(testView.lithoView.alpha).isGreaterThan(0f).isLessThan(1f)
+  }
+
+  @Test
+  fun layoutPathAnimation_waitsForIdleAndLayoutAndSettles() {
+    val testView = lithoTestRule.render { ResolveAlphaComponent(target = 0f) }
+    lithoTestRule.idle()
+
+    testView.setRoot(ResolveAlphaComponent(target = 1f))
+    lithoTestRule.idle()
+
+    animationRule.runNextFrame()
+    animationRule.runNextFrame()
+    lithoTestRule.idle()
+    assertThat(testView.lithoView.alpha).isEqualTo(0f)
+
+    lithoTestRule.idleAndLayout()
+    assertThat(testView.lithoView.alpha).isGreaterThan(0f).isLessThan(1f)
+
+    repeat(10) {
+      if (animationRule.hasScheduledFrames()) {
+        animationRule.runNextFrame()
+        lithoTestRule.idleAndLayout()
+      }
+    }
+    assertThat(testView.lithoView.alpha).isEqualTo(1f)
+    assertThat(animationRule.hasScheduledFrames()).isFalse()
+  }
+
+  @Test
+  fun layoutPathFrame_inRealWindow_isAppliedByWindowTraversal() {
+    val testView = realWindowLithoTestRule.render { ResolveAlphaComponent(target = 0f) }
+    testView.setRoot(ResolveAlphaComponent(target = 1f))
+    realWindowLithoTestRule.idleAndLayout()
+
+    animationRule.runNextFrame()
+    animationRule.runNextFrame()
+    assertThat(testView.lithoView.isLayoutRequested).isTrue()
+    assertThat(testView.lithoView.alpha).isEqualTo(0f)
+
+    realWindowLithoTestRule.idleAndLayout()
+    assertThat(testView.lithoView.isLayoutRequested).isFalse()
+    assertThat(testView.lithoView.alpha).isGreaterThan(0f).isLessThan(1f)
+  }
+
+  @Test
+  fun layoutPathFrame_inManualResizeMode_waitsForExplicitMeasure() {
+    val testView = manualResizeLithoTestRule.render { ResolveAlphaComponent(target = 0f) }
+    testView.setRoot(ResolveAlphaComponent(target = 1f))
+    manualResizeLithoTestRule.idle()
+    testView.measure().layout()
+
+    animationRule.runNextFrame()
+    animationRule.runNextFrame()
+    manualResizeLithoTestRule.idleAndLayout()
+    assertThat(testView.lithoView.alpha).isEqualTo(0f)
+
+    testView.measure().layout()
+    assertThat(testView.lithoView.alpha).isGreaterThan(0f).isLessThan(1f)
+  }
+
+  @Test
+  fun layoutPathFrame_inCollectionChild_isAppliedByIdleAndLayout() {
+    val testView =
+        lithoTestRule.render(widthPx = 200, heightPx = 300) {
+          LazyList { child(ImperativeResolveAlphaComponent()) }
+        }
+    lithoTestRule.idleAndLayout()
+    val child = testView.findViewWithTag(ALPHA_CHILD_TAG)
+    assertThat(child.alpha).isEqualTo(0f)
+
+    checkNotNull(capturedAnimatable).startAnimation(1f, tween(100.milliseconds))
+    animationRule.runNextFrame()
+    animationRule.runNextFrame()
+    lithoTestRule.idle()
+    assertThat(child.alpha).isEqualTo(0f)
+
+    lithoTestRule.idleAndLayout()
+    assertThat(child.alpha).isGreaterThan(0f).isLessThan(1f)
   }
 
   @Test
@@ -433,6 +522,15 @@ class AnimationFrameInvalidationTest {
                   get() = animated.value.also { onValueRead.invoke(it) }
               }
       return Row(style = Style.width(100.px).height(100.px).alpha(value))
+    }
+  }
+
+  private inner class ImperativeResolveAlphaComponent : KComponent() {
+    override fun ComponentScope.render(): Component {
+      val animated = useAnimatable(0f, FloatTypeConverter).also { capturedAnimatable = it }.value
+      return Row(
+          style = Style.width(100.px).height(100.px).alpha(animated.value).viewTag(ALPHA_CHILD_TAG),
+      )
     }
   }
 

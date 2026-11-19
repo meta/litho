@@ -31,7 +31,16 @@ import org.junit.runners.model.Statement
  * [advanceBy] and [advanceTo] advance wall time: if an animation is scheduled but has not received
  * its first frame yet, the rule first dispatches a frame at the current test time, then advances to
  * the requested time. Tests that need Litho or Robolectric work flushed after each frame can
- * provide [afterFrame], for example `shadowOf(getMainLooper()).idle()`.
+ * provide [afterFrame], for example `LithoAnimationTestRule { lithoTestRule.idleAndLayout() }`.
+ *
+ * Animation updates can require an Android measure/layout pass. [LithoTestRule.idleAndLayout] runs
+ * those passes, including for nested trees. [LithoTestRule.idle] alone drains pending Litho and
+ * main-looper work and can leave those updates pending. [LithoTestRuleResizeMode.MANUAL] views
+ * still require explicit measure().layout() anyway.
+ *
+ * To verify synchronous bind-only frame invalidation, leave [afterFrame] empty and assert the
+ * mounted property immediately after [runNextFrame], before calling `idle()`, `idleAndLayout()`,
+ * `measure()` or `layout()`: flushing deferred work can hide a regression in the synchronous path.
  */
 class LithoAnimationTestRule(
     private val afterFrame: () -> Unit = {},

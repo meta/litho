@@ -347,11 +347,14 @@ you advance animation time directly instead of waiting for real frames.
 
 ```kotlin
 @get:Rule
-val animationRule = LithoAnimationTestRule { shadowOf(getMainLooper()).idle() }
+val animationRule = LithoAnimationTestRule { lithoTestRule.idleAndLayout() }
 ```
 
-The optional `afterFrame` callback is useful in Robolectric tests where Litho or
-main-looper work should be flushed after each frame.
+The optional `afterFrame` callback flushes work after each frame. When render, layout
+or an effect reads an animated value, the frame's update can require a layout pass.
+`LithoTestRule.idleAndLayout()` runs that pass, including for nested trees such
+as collection items; `idle()` alone drains pending Litho and main-looper work and can
+leave the update pending. Views in manual resize mode still need `measure().layout()`.
 
 ```kotlin
 testView.setRoot(FadeComponent(visible = true))
@@ -369,16 +372,19 @@ assertThat(animationRule.hasScheduledFrames()).isFalse()
 hooks, `useAnimatable`, and `Style.transition {}` because they all receive
 frames through the shared `AnimationController`.
 
-| Method | Behavior |
-|--------|----------|
-| `runNextFrame(frameDelay)` | Dispatches one frame. New duration-based animations start on this frame. |
-| `advanceBy(duration)` | Advances elapsed animation time by `duration`, bootstrapping scheduled animations. |
-| `advanceTo(frameTime)` | Advances animation time to an absolute test timestamp. |
-| `hasScheduledFrames()` | Reports whether a frame is scheduled, including completion delivery. |
+| Method                     | Behavior                                                                           |
+| -------------------------- | ---------------------------------------------------------------------------------- |
+| `runNextFrame(frameDelay)` | Dispatches one frame. New duration-based animations start on this frame.           |
+| `advanceBy(duration)`      | Advances elapsed animation time by `duration`, bootstrapping scheduled animations. |
+| `advanceTo(frameTime)`     | Advances animation time to an absolute test timestamp.                             |
+| `hasScheduledFrames()`     | Reports whether a frame is scheduled, including completion delivery.               |
 
 Cancellation stops owned motion, but pending waits may schedule a final frame to deliver cancellation
 callbacks, including after unmount. If a frame is scheduled, use `runNextFrame()` to drain those
 callbacks before checking that the controller is idle.
+
+To assert a bind-only property updates within the frame, keep `afterFrame` empty
+and assert right after `runNextFrame()`.
 
 ### Playback and deferred start
 

@@ -212,6 +212,57 @@ class LithoTestRuleTest {
   }
 
   @Test
+  fun `idleAndLayout uses the latest size specs when a LithoView is reused`() {
+    val first = lithoTestRule.render(widthPx = 100, heightPx = 100) { Text("test") }
+    val current =
+        lithoTestRule.render(lithoView = first.lithoView, widthPx = 200, heightPx = 300) {
+          Text("test")
+        }
+
+    current.lithoView.requestLayout()
+    lithoTestRule.idleAndLayout()
+
+    assertThat(current.lithoView.width).isEqualTo(200)
+    assertThat(current.lithoView.height).isEqualTo(300)
+  }
+
+  @Test
+  fun `idleAndLayout uses the latest size specs when a wrapper switches LithoViews`() {
+    val first = lithoTestRule.render(widthPx = 100, heightPx = 100) { Text("test") }
+    val current = lithoTestRule.render(widthPx = 200, heightPx = 300) { Text("test") }
+    current.useLithoView(first.lithoView).measure().layout()
+
+    current.lithoView.requestLayout()
+    lithoTestRule.idleAndLayout()
+
+    assertThat(current.lithoView.width).isEqualTo(200)
+    assertThat(current.lithoView.height).isEqualTo(300)
+  }
+
+  @Test
+  fun `idle leaves layout requests pending and idleAndLayout lays out every rendered view`() {
+    val first = lithoTestRule.render(widthPx = 100, heightPx = 100) { Text("first") }
+    val second = lithoTestRule.render(widthPx = 200, heightPx = 200) { Text("second") }
+    first.setSizePx(110, 120)
+    second.setSizePx(210, 220)
+    first.lithoView.requestLayout()
+    second.lithoView.requestLayout()
+
+    lithoTestRule.idle()
+    assertThat(first.lithoView.width).isEqualTo(100)
+    assertThat(first.lithoView.height).isEqualTo(100)
+    assertThat(second.lithoView.width).isEqualTo(200)
+    assertThat(second.lithoView.height).isEqualTo(200)
+
+    lithoTestRule.idleAndLayout()
+
+    assertThat(first.lithoView.width).isEqualTo(110)
+    assertThat(first.lithoView.height).isEqualTo(120)
+    assertThat(second.lithoView.width).isEqualTo(210)
+    assertThat(second.lithoView.height).isEqualTo(220)
+  }
+
+  @Test
   fun `provided android context is used as render context`() {
     val testLithoView = lithoTestRuleWithContextSpecified.render { Text("test") }
     assertThat(testLithoView.lithoView.context)
