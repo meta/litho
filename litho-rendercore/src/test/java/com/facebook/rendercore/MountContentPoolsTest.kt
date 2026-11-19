@@ -76,6 +76,7 @@ class MountContentPoolsTest {
   fun cleanup() {
     setMountContentPoolFactory(null)
     RenderCoreConfig.holdReleasedViewGroupsUntilDrawn = false
+    RenderCoreConfig.discardReleasedViewGroups = false
     ErrorReporter.provide(DefaultErrorReporter())
   }
 
@@ -393,6 +394,43 @@ class MountContentPoolsTest {
     Assertions.assertThat(reports).hasSize(1)
     Assertions.assertThat(reports[0].second)
         .isEqualTo(MountContentPools.ATTACHED_VIEW_RELEASED_CATEGORY)
+  }
+
+  @Test
+  @Config(sdk = [Build.VERSION_CODES.N_MR1])
+  fun testReleasedViewGroupIsDiscarded() {
+    RenderCoreConfig.discardReleasedViewGroups = true
+    val hostRenderUnit = TestHostRenderUnit(id = 0)
+    val host = acquireMountContent(context, hostRenderUnit)
+
+    recycle(context, hostRenderUnit, host)
+
+    Assertions.assertThat(hostRenderUnit.contentDiscardedCount).isEqualTo(1)
+    Assertions.assertThat(acquireMountContent(context, hostRenderUnit)).isNotSameAs(host)
+  }
+
+  @Test
+  @Config(sdk = [Build.VERSION_CODES.O])
+  fun testDiscardDoesNotApplyFromO() {
+    RenderCoreConfig.discardReleasedViewGroups = true
+    val hostRenderUnit = TestHostRenderUnit(id = 0)
+    val host = acquireMountContent(context, hostRenderUnit)
+
+    recycle(context, hostRenderUnit, host)
+
+    Assertions.assertThat(acquireMountContent(context, hostRenderUnit)).isSameAs(host)
+  }
+
+  @Test
+  @Config(sdk = [Build.VERSION_CODES.N_MR1])
+  fun testDiscardKeepsPoolingLeafViews() {
+    RenderCoreConfig.discardReleasedViewGroups = true
+    val testRenderUnit = TestRenderUnit(id = 0)
+    val view = acquireMountContent(context, testRenderUnit)
+
+    recycle(context, testRenderUnit, view)
+
+    Assertions.assertThat(acquireMountContent(context, testRenderUnit)).isSameAs(view)
   }
 
   @Test

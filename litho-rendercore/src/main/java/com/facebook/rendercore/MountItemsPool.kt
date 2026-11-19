@@ -197,6 +197,8 @@ object MountContentPools {
           }
       if (pool != null && shouldHoldUntilDrawn(mountContent)) {
         ReleasedViewGroups.hold(context, poolableMountContent, mountContent, poolScope)
+      } else if (shouldDiscard(mountContent)) {
+        poolableMountContent.onContentDiscarded?.invoke(mountContent)
       } else {
         releaseToPool(pool, poolableMountContent, mountContent)
       }
@@ -252,6 +254,11 @@ object MountContentPools {
           Build.VERSION.SDK_INT < Build.VERSION_CODES.O &&
           mountContent is ViewGroup &&
           Looper.myLooper() == Looper.getMainLooper()
+
+  private fun shouldDiscard(mountContent: Any): Boolean =
+      RenderCoreConfig.discardReleasedViewGroups &&
+          Build.VERSION.SDK_INT < Build.VERSION_CODES.O &&
+          mountContent is ViewGroup
 
   /** Looks up the pool [recycle] released into, without creating one if it was cleared since. */
   private fun findMountContentPool(

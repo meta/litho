@@ -133,6 +133,17 @@ object RenderCoreConfig {
   @JvmField var holdReleasedViewGroupsUntilDrawn: Boolean = false
 
   /**
+   * When true, on API 25 and lower a ViewGroup released by [MountContentPools.recycle] is discarded
+   * instead of pooled.
+   *
+   * A released ViewGroup keeps the display list it last drew with, and its old parent's display
+   * list can keep pointing at it, until that window draws again; a closed dialog never does. Reused
+   * from the pool above one of its former ancestors, even many frames later, it closes the loop
+   * described in [holdReleasedViewGroupsUntilDrawn].
+   */
+  @JvmField var discardReleasedViewGroups: Boolean = false
+
+  /**
    * Caches the reflected instance field list per class in
    * [com.facebook.rendercore.utils.hasEquivalentFields].
    *
