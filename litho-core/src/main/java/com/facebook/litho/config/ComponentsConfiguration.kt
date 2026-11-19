@@ -476,6 +476,13 @@ internal constructor(
     @JvmField var textInputUsesMatchParentLayoutParams: Boolean = false
 
     /**
+     * When true, `TextInput.clearFocus` skips `InputMethodManager.hideSoftInputFromWindow` while
+     * the window reports the soft input hidden and the field's focus has not changed since its last
+     * hide. API 30+ only. Other hides are unaffected.
+     */
+    @JvmField var skipRedundantKeyboardHide: Boolean = false
+
+    /**
      * When true, `TextInputComponentSpec.EditTextWithEventHandlers.onTextChanged` stores a detached
      * `SpannableStringBuilder` snapshot in `savedText` instead of the live buffer owned by the
      * underlying `EditText`. This eliminates a TOCTOU race that crashes with

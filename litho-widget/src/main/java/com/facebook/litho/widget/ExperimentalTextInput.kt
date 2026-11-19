@@ -1262,6 +1262,8 @@ internal class EditTextWithEventHandlers(context: Context?) :
   private var oneLineHint: OneLineHint? = null
 
   private var isSoftInputRequested = false
+  // Window insets report a keyboard show only some time after it is requested.
+  private var mayHaveShownSoftInput = false
 
   private var disableAutofill = false
   private var isTextPasted = false
@@ -1357,6 +1359,8 @@ internal class EditTextWithEventHandlers(context: Context?) :
 
   override fun onFocusChanged(focused: Boolean, direction: Int, previouslyFocusedRect: Rect?) {
     super.onFocusChanged(focused, direction, previouslyFocusedRect)
+    // Any keyboard this field opened comes with a focus change before clearFocus decides.
+    mayHaveShownSoftInput = true
     onInputFocusChanged?.invoke(focused)
   }
 
@@ -1504,6 +1508,23 @@ internal class EditTextWithEventHandlers(context: Context?) :
   private fun hideKeyboard(imm: InputMethodManager) {
     imm.hideSoftInputFromWindow(windowToken, 0)
     isSoftInputRequested = false
+    mayHaveShownSoftInput = false
+  }
+
+  /**
+   * Hides the keyboard after the view clears its focus. With
+   * [ComponentsConfiguration.skipRedundantKeyboardHide], skips the call while the window reports
+   * the keyboard hidden and the view's focus has not changed since its last hide.
+   */
+  fun hideSoftInputAfterClearFocus() {
+    if (
+        ComponentsConfiguration.skipRedundantKeyboardHide &&
+            !mayHaveShownSoftInput &&
+            isSoftInputReportedHidden(this)
+    ) {
+      return
+    }
+    setSoftInputVisibility(false)
   }
 
   fun resetSoftInputState() {
@@ -1787,7 +1808,7 @@ class TextInputController internal constructor() {
     val view = editText
     if (view != null) {
       view.clearFocus()
-      view.setSoftInputVisibility(false)
+      view.hideSoftInputAfterClearFocus()
     }
   }
 

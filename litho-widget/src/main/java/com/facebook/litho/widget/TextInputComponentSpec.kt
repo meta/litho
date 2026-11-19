@@ -1206,7 +1206,7 @@ internal object TextInputComponentSpec {
     val view = mountedView.get()
     if (view != null) {
       view.clearFocus()
-      view.setSoftInputVisibility(false)
+      view.hideSoftInputAfterClearFocus()
     }
   }
 
@@ -1416,6 +1416,8 @@ internal object TextInputComponentSpec {
     private var textLineCount = UNMEASURED_LINE_COUNT
     private var textWatcher: TextWatcher? = null
     private var isSoftInputRequested = false
+    // Window insets report a keyboard show only some time after it is requested.
+    private var mayHaveShownSoftInput = false
     /** The whole hint while it's laid out on one line; null otherwise. */
     private var fullHint: CharSequence? = null
     private var oneLineHint: OneLineHint? = null
@@ -1501,6 +1503,8 @@ internal object TextInputComponentSpec {
 
     override fun onFocusChanged(focused: Boolean, direction: Int, previouslyFocusedRect: Rect?) {
       super.onFocusChanged(focused, direction, previouslyFocusedRect)
+      // Any keyboard this field opened comes with a focus change before clearFocus decides.
+      mayHaveShownSoftInput = true
       if (inputFocusChangedEventHandler != null) {
         TextInputComponent.dispatchInputFocusChangedEvent(inputFocusChangedEventHandler, focused)
       }
@@ -1700,6 +1704,23 @@ internal object TextInputComponentSpec {
     private fun hideKeyboard(imm: InputMethodManager) {
       imm.hideSoftInputFromWindow(windowToken, 0)
       isSoftInputRequested = false
+      mayHaveShownSoftInput = false
+    }
+
+    /**
+     * Hides the keyboard after the view clears its focus. With
+     * [ComponentsConfiguration.skipRedundantKeyboardHide], skips the call while the window reports
+     * the keyboard hidden and the view's focus has not changed since its last hide.
+     */
+    fun hideSoftInputAfterClearFocus() {
+      if (
+          ComponentsConfiguration.skipRedundantKeyboardHide &&
+              !mayHaveShownSoftInput &&
+              isSoftInputReportedHidden(this)
+      ) {
+        return
+      }
+      setSoftInputVisibility(false)
     }
 
     fun resetSoftInputState() {
