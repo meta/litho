@@ -190,6 +190,9 @@ class DebugLayoutNode internal constructor(private val result: LithoLayoutResult
   val touchHandler: EventHandler<TouchEvent>?
     get() = node.nodeInfo?.touchHandler
 
+  val longClickHandler: EventHandler<LongClickEvent>?
+    get() = node.nodeInfo?.longClickHandler
+
   /** The class name a screen reader announces this node as, e.g. [AccessibilityRole.SWITCH]. */
   val accessibilityRole: String?
     get() = node.nodeInfo?.accessibilityRole
