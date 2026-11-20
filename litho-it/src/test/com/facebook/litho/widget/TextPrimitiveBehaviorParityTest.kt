@@ -24,7 +24,7 @@ import android.text.style.ClickableSpan
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
-import com.facebook.litho.Column
+import com.facebook.litho.Column as ColumnBuilder
 import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.testing.LithoTestRule
 import com.facebook.litho.testing.TestLithoView
@@ -218,7 +218,7 @@ class TextPrimitiveBehaviorParityTest(private val usePrimitiveText: Boolean) {
         Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
     )
     return lithoTestRule.render {
-      Column.create(context)
+      ColumnBuilder.create(context)
           .paddingPx(YogaEdge.START, paddingStartPx)
           .paddingPx(YogaEdge.TOP, paddingTopPx)
           .child(Text.create(context).text(text).textSizePx(20).widthPx(200).heightPx(40))
@@ -293,7 +293,7 @@ class TextPrimitiveBehaviorParityTest(private val usePrimitiveText: Boolean) {
         Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
     )
     return lithoTestRule.render {
-      Column.create(context)
+      ColumnBuilder.create(context)
           .child(
               Text.create(context)
                   .text(text)
