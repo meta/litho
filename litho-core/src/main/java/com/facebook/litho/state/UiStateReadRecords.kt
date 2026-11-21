@@ -179,7 +179,7 @@ class UiStateReadRecords(
     return result
   }
 
-  interface Config {
+  fun interface Config {
     fun currentTreeId(): Int
   }
 }
