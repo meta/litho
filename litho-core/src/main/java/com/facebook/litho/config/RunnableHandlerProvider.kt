@@ -19,7 +19,7 @@ package com.facebook.litho.config
 import com.facebook.rendercore.RunnableHandler
 
 /** A Factory having a custom strategy for [com.facebook.rendercore.RunnableHandler]s. */
-interface RunnableHandlerProvider {
+fun interface RunnableHandlerProvider {
 
   /**
    * @return a [com.facebook.rendercore.RunnableHandler] that will be used to compute the layouts.
