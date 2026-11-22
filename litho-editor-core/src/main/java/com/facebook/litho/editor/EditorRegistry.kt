@@ -116,12 +116,7 @@ object EditorRegistry {
    */
   @JvmStatic
   fun write(c: Class<*>, f: Field?, node: Any?, values: EditorValue?): Boolean? {
-    val editor = getEditor(c) ?: return null
-    if (f == null || values == null) {
-      return null
-    } else {
-      return editor.write(f, node, values)
-    }
+    return getEditor(c)?.takeIf { f != null && values != null }?.write(f, node, values)
   }
 
   /**
