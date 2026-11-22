@@ -67,7 +67,7 @@ For pull requests, please see our [CONTRIBUTING](CONTRIBUTING.md) guide.
 
 See our [issues](https://github.com/facebook/litho/issues/) page for ideas on how to contribute or to let us know of any problems.
 
-Please also read our [Coding Style](http://fblitho.com/docs/best-practices#coding-style) and [Code of Conduct](https://code.facebook.com/codeofconduct) before you contribute.
+Please also read our [Coding Style](https://github.com/facebook/litho/blob/master/CONTRIBUTING.md#coding-style) and [Code of Conduct](https://code.facebook.com/codeofconduct) before you contribute.
 
 ## Getting Help
 
