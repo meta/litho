@@ -137,7 +137,8 @@ class GreetingComponent(
     override fun ComponentScope.render(): Component {
         val clickCount = useState { 0 }
 
-        return Column(style = style + Style.padding(all = 16.dp)) {
+        // Put the caller's style last so it can override the default padding
+        return Column(style = Style.padding(all = 16.dp) + style) {
             child(Text(
                 text = "Hello, $name!",
                 textSize = 24.sp
