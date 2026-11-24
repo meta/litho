@@ -644,7 +644,13 @@ internal constructor(
     /** The minimum touch-target size, in dp, used by [useAutoTouchExpansion]. Defaults to 48dp. */
     @JvmField var minTouchTargetSizeDp: Int = 48
 
-    @JvmField var enableTouchDelegateInfoForAccessibility: Boolean = true
+    /**
+     * Whether a host's touch delegate reports its expanded touch areas to accessibility services.
+     * Called from `getTouchDelegateInfo()`, not read when Litho is configured, so an app can back
+     * it with a config that is not ready at startup. It is called on every touch exploration hover
+     * event, so it should return a cached value.
+     */
+    @JvmField var touchDelegateInfoForAccessibilityEnabled: () -> Boolean = { true }
 
     /**
      * Policy for interactive components smaller than [minTouchTargetSizeDp].

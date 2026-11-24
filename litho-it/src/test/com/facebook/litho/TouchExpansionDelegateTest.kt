@@ -27,6 +27,7 @@ import android.view.View
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.annotation.RequiresApi
 import androidx.test.core.app.ApplicationProvider
+import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.core.height
 import com.facebook.litho.core.padding
 import com.facebook.litho.core.width
@@ -474,13 +475,39 @@ class TouchExpansionDelegateTest {
   @Test
   @RequiresApi(Build.VERSION_CODES.Q)
   @Config(sdk = [Build.VERSION_CODES.TIRAMISU])
+  fun touchDelegateInfo_asksTheFlagWhenReadNotWhenTheHostIsBuilt() {
+    val previous = ComponentsConfiguration.touchDelegateInfoForAccessibilityEnabled
+    try {
+      var enabled = true
+      var calls = 0
+      ComponentsConfiguration.touchDelegateInfoForAccessibilityEnabled = {
+        calls++
+        enabled
+      }
+      val lithoView = renderExpandedComponent(ClickListenerCallback())
+      val child = requireNotNull(lithoView.findExpandedTouchTarget(10, 10))
+      assertThat(calls).isZero()
+
+      assertThat(lithoView.touchDelegateTargets())
+          .containsExactly(entry(Rect(5, 5, 25, 25), child.accessibilityViewId()))
+      assertThat(calls).isEqualTo(1)
+
+      enabled = false
+      assertThat(lithoView.touchDelegateTargets())
+          .containsExactly(entry(Rect(), lithoView.accessibilityViewId()))
+    } finally {
+      ComponentsConfiguration.touchDelegateInfoForAccessibilityEnabled = previous
+    }
+  }
+
+  @Test
+  @RequiresApi(Build.VERSION_CODES.Q)
+  @Config(sdk = [Build.VERSION_CODES.TIRAMISU])
   fun touchExplorationHover_doesNotDispatchToHostWithMetadataEnabledOrDisabled() {
     for (enabled in listOf(false, true)) {
-      val previous =
-          com.facebook.litho.config.ComponentsConfiguration.enableTouchDelegateInfoForAccessibility
+      val previous = ComponentsConfiguration.touchDelegateInfoForAccessibilityEnabled
       try {
-        com.facebook.litho.config.ComponentsConfiguration.enableTouchDelegateInfoForAccessibility =
-            enabled
+        ComponentsConfiguration.touchDelegateInfoForAccessibilityEnabled = { enabled }
         val lithoView = renderExpandedComponent(ClickListenerCallback())
         val delegate = requireNotNull(lithoView.touchExpansionDelegate)
         var hostDispatches = 0
@@ -501,8 +528,7 @@ class TouchExpansionDelegateTest {
         assertThat(hostDispatches).isZero()
         assertThat(childDispatches).isZero()
       } finally {
-        com.facebook.litho.config.ComponentsConfiguration.enableTouchDelegateInfoForAccessibility =
-            previous
+        ComponentsConfiguration.touchDelegateInfoForAccessibilityEnabled = previous
       }
     }
   }

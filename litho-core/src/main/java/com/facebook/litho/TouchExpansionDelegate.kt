@@ -110,7 +110,7 @@ class TouchExpansionDelegate(host: ComponentHost?) : TouchDelegate(IGNORED_RECT,
    */
   @RequiresApi(Build.VERSION_CODES.Q)
   override fun getTouchDelegateInfo(): TouchDelegateInfo {
-    if (!ComponentsConfiguration.enableTouchDelegateInfoForAccessibility) {
+    if (!ComponentsConfiguration.touchDelegateInfoForAccessibilityEnabled()) {
       return super.getTouchDelegateInfo()
     }
     touchDelegateInfoCache
