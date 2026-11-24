@@ -20,7 +20,7 @@ import android.graphics.Rect
 import android.graphics.Typeface
 import android.text.Layout
 import android.text.Spanned
-import androidx.annotation.VisibleForTesting
+import com.facebook.rendercore.text.LayoutTruncation
 
 /**
  * A [TextContent.Item] read from the [Layout] a text component draws, shared by Litho's legacy text
@@ -51,12 +51,12 @@ class LayoutTextContentItem(
 
   override val linesCount: Int = layout.lineCount
 
-  override val isTruncated: Boolean = isExplicitlyTruncated || isEllipsized(layout)
+  override val isTruncated: Boolean = LayoutTruncation.isTruncated(layout, isExplicitlyTruncated)
 
   // Built from `layout.text`, the exact CharSequence the layout's offsets index into, so it
   // reflects what is drawn even if `text` has diverged (the Android 15/16 StaticLayout desync).
   // Only read by rare debug tooling, so deferred until first accessed.
-  override val displayedText: CharSequence by lazy { buildDisplayedText(layout) }
+  override val displayedText: CharSequence by lazy { LayoutTruncation.buildDisplayedText(layout) }
 
   // Span ranges are read from `layout.text`, the text the layout's offsets index, so their bounds
   // and text always describe the same characters.
@@ -122,64 +122,6 @@ class LayoutTextContentItem(
           layout.getPrimaryHorizontal(layout.getLineEnd(startLine) - 1).toInt(),
           layout.getLineBottom(startLine),
       )
-    }
-  }
-
-  companion object {
-
-    /** Whether the platform ellipsized any line of [layout] (a standard `ellipsize` truncation). */
-    @JvmStatic
-    fun isEllipsized(layout: Layout): Boolean {
-      for (line in 0 until layout.lineCount) {
-        if (layout.getEllipsisCount(line) > 0) {
-          return true
-        }
-      }
-      return false
-    }
-
-    /**
-     * Reconstructs the text actually drawn by [layout], line by line: on each line the platform
-     * ellipsis run (`getEllipsisStart`/`getEllipsisCount`) is replaced with the ellipsis glyph,
-     * exactly the substitution the platform makes when drawing the line. Lines with no ellipsis are
-     * copied verbatim, so a custom ellipsis baked into the text is preserved — and a custom
-     * ellipsis the framework re-ellipsized is shown cut, as actually rendered.
-     */
-    @JvmStatic
-    fun buildDisplayedText(layout: Layout): CharSequence = buildDisplayedText(layout, layout.text)
-
-    /**
-     * Line-walking core, split out so tests can drive a mocked [Layout] with the [text] supplied
-     * out-of-band: Robolectric's real `StaticLayout` never populates ellipsis metadata, and
-     * [Layout.getText] is `final` so a mock cannot return it. Production always passes
-     * `layout.text` via the single-argument overload above. The clamp is a backstop only for AOSP
-     * `StaticLayout` defects (notably Android 15/16) that return line offsets outside their own
-     * text — it degrades the reconstruction rather than throwing IndexOutOfBoundsException.
-     */
-    @VisibleForTesting
-    @JvmStatic
-    fun buildDisplayedText(layout: Layout, text: CharSequence): CharSequence {
-      val length = text.length
-      val builder = StringBuilder(length + layout.lineCount)
-      for (line in 0 until layout.lineCount) {
-        val lineStart = layout.getLineStart(line).coerceIn(0, length)
-        val lineEnd = layout.getLineEnd(line).coerceIn(lineStart, length)
-        val ellipsisCount = layout.getEllipsisCount(line)
-        if (ellipsisCount == 0) {
-          builder.append(text, lineStart, lineEnd)
-        } else {
-          val ellipsisStart =
-              (lineStart + layout.getEllipsisStart(line)).coerceIn(lineStart, lineEnd)
-          builder.append(text, lineStart, ellipsisStart)
-          builder.append('…')
-          builder.append(
-              text,
-              (ellipsisStart + ellipsisCount).coerceIn(ellipsisStart, lineEnd),
-              lineEnd,
-          )
-        }
-      }
-      return builder.toString()
     }
   }
 }

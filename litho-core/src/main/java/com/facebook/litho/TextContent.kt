@@ -58,10 +58,10 @@ interface TextContent {
     val spannables: List<SpannableItem>
 
     /**
-     * Whether this item's content is truncated — i.e. the text actually drawn ([displayedText])
-     * differs from the complete text ([fullText]). Covers a standard `maxLines` + `ellipsize`
-     * truncation and a custom ellipsis (e.g. "… See more"), including the framework bug that
-     * re-ellipsizes a custom ellipsis.
+     * Whether this item does not draw all of its text ([fullText]): an ellipsis is drawn (a
+     * standard `maxLines` + `ellipsize` truncation, or a custom ellipsis such as "… See more",
+     * including one the framework re-ellipsized), or its layout's last line ends before its text
+     * does. Lines its bounds clip are not counted.
      */
     val isTruncated: Boolean
 

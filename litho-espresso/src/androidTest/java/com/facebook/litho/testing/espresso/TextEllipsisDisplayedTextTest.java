@@ -34,11 +34,11 @@ import org.junit.runner.RunWith;
 
 /**
  * On-device coverage for {@link TextContent.Item#getDisplayedText()}. This must run on a real
- * device/emulator: Robolectric's {@code StaticLayout} does not populate ellipsis metadata ({@code
- * getEllipsisStart}/{@code getEllipsisCount}), so the standard-ellipsize reconstruction in {@code
- * TextDrawable.buildDisplayedText} can only be exercised with a real layout. The displayed text is
- * reconstructed from the layout's OWN text ({@code layout.text}) so it reflects what is actually
- * drawn.
+ * device/emulator: in its legacy graphics mode, Robolectric's {@code StaticLayout} does not
+ * populate ellipsis metadata ({@code getEllipsisStart}/{@code getEllipsisCount}), so the
+ * standard-ellipsize reconstruction in {@code LayoutTruncation.buildDisplayedText} can only be
+ * exercised with a real layout. The displayed text is reconstructed from the layout's OWN text
+ * ({@code layout.text}) so it reflects what is actually drawn.
  */
 @RunWith(AndroidJUnit4.class)
 public class TextEllipsisDisplayedTextTest {

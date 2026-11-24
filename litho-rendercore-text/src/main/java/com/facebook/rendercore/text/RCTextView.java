@@ -704,8 +704,12 @@ public class RCTextView extends ViewGroup {
     mClickableSpanListener = clickableSpanListener;
   }
 
+  /**
+   * Whether the text ends in an ellipsis, the platform's or a custom one; text cut off without one
+   * is not counted.
+   */
   public boolean isTextTruncated() {
-    return mIsExplicitlyTruncated || TextMeasurementUtils.getEllipsizedLineNumber(mLayout) != -1;
+    return mIsExplicitlyTruncated || (mLayout != null && LayoutTruncation.isEllipsized(mLayout));
   }
 
   /**
