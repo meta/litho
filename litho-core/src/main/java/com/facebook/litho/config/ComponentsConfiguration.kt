@@ -449,6 +449,13 @@ internal constructor(
     /** This flag is to enable usage of Primitive Text */
     @JvmField var usePrimitiveText: Boolean = false
 
+    /**
+     * When `true`, apps that A/B pinch to zoom use `Zoomable`, which draws a scaled copy of the
+     * content in the window's overlay, instead of `ZoomableComponent`. Litho doesn't read it: the
+     * callers choose the component with it.
+     */
+    @JvmField var useOverlayZoom: Boolean = false
+
     /** This flag is to enable usage of text with spans when measuring Primitive TextInput */
     @JvmField var useTextWithSpansForMeasure: Boolean = false
 
