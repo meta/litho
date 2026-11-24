@@ -16,7 +16,11 @@
 
 package com.facebook.litho.widget.collection
 
+import android.app.Activity
+import android.view.View
+import android.view.ViewGroup
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.facebook.litho.Component
 import com.facebook.litho.ComponentScope
 import com.facebook.litho.EmptyComponent
@@ -26,6 +30,7 @@ import com.facebook.litho.Style
 import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.config.RunnableHandlerProvider
 import com.facebook.litho.core.height
+import com.facebook.litho.core.width
 import com.facebook.litho.layout.flexbox.Column
 import com.facebook.litho.onCleanup
 import com.facebook.litho.testing.LithoTestRule
@@ -42,6 +47,7 @@ import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowLooper
 
@@ -377,6 +383,31 @@ class LithoCollectionItemContentUpdateOnBindTest {
     assertThat(view.layoutState?.height).isEqualTo(HEIGHT_A)
   }
 
+  @Test
+  fun `a nested list shown before its effects run keeps working once they run`() {
+    // scenario: the row is prepared with a nested horizontal list, then changes before it is bound.
+    // Bind shows the prepared layout without its effects, so the nested list's RecyclerView takes
+    // its adapter before the nested list's layout effects run for the first time.
+    val item = createItem(RowWithNestedList(label = LABEL_A), useCommittedLayoutOnBind = true)
+    val scope = createScope(item)
+    item.prepareAsync(childConstraints(scope, item))
+    handler.drain()
+    item.renderInfo = renderInfoOf(RowWithNestedList(label = LABEL_B))
+    val view = newView()
+    with(item) { scope.onBindView(view) }
+    layOut(view)
+    val nestedList = recyclerViews(view).single()
+    assertThat(nestedList.adapter).describedAs("the nested list is attached").isNotNull()
+
+    // expectation: the new layout commits and its effects run with the nested list still attached.
+    drainAndIdle()
+    layOut(view)
+
+    assertThat(recyclerViews(view).single().adapter?.itemCount)
+        .describedAs("the nested list shows its items")
+        .isEqualTo(NESTED_ITEM_INDEXES.size)
+  }
+
   /** Item prepared in the background with component A and bound to a view that shows A. */
   private fun boundItemShowingA(
       prioritizeBoundRows: Boolean = false,
@@ -459,6 +490,39 @@ class LithoCollectionItemContentUpdateOnBindTest {
 
   private fun newView() = LithoRenderTreeView(lithoTestRule.context.androidContext)
 
+  /** Lays [view] out in an activity window, which mounts what its layout state holds. */
+  private fun layOut(view: LithoRenderTreeView) {
+    if (view.parent == null) {
+      Robolectric.buildActivity(Activity::class.java)
+          .setup()
+          .get()
+          .setContentView(view, ViewGroup.LayoutParams(COLLECTION_WIDTH, NESTED_ROW_HEIGHT))
+    }
+    view.measure(
+        View.MeasureSpec.makeMeasureSpec(COLLECTION_WIDTH, View.MeasureSpec.EXACTLY),
+        View.MeasureSpec.makeMeasureSpec(NESTED_ROW_HEIGHT, View.MeasureSpec.EXACTLY),
+    )
+    view.layout(0, 0, COLLECTION_WIDTH, NESTED_ROW_HEIGHT)
+    ShadowLooper.idleMainLooper()
+  }
+
+  private fun recyclerViews(root: View): List<RecyclerView> {
+    val found = mutableListOf<RecyclerView>()
+    val queue = ArrayDeque<View>().apply { add(root) }
+    while (queue.isNotEmpty()) {
+      val view = queue.removeFirst()
+      if (view is RecyclerView) {
+        found += view
+      }
+      if (view is ViewGroup) {
+        for (i in 0 until view.childCount) {
+          queue.add(view.getChildAt(i))
+        }
+      }
+    }
+    return found
+  }
+
   private class RenderCounter {
     private val counts = mutableMapOf<String, Int>()
 
@@ -489,6 +553,24 @@ class LithoCollectionItemContentUpdateOnBindTest {
       }
       return Column(style = Style.height(heightPx.px))
     }
+  }
+
+  private class RowWithNestedList(private val label: String) : KComponent() {
+    override fun ComponentScope.render(): Component = LazyList(
+        orientation = RecyclerView.HORIZONTAL,
+        infraOverride = CollectionInfraOverride.FORCE_NEW,
+        style = Style.width(COLLECTION_WIDTH.px).height(NESTED_ROW_HEIGHT.px),
+    ) {
+      children(items = NESTED_ITEM_INDEXES, id = { index -> "nested_$index" }) { index ->
+        NestedItem(label = "$label-$index")
+      }
+    }
+  }
+
+  private class NestedItem(private val label: String) : KComponent() {
+    override fun ComponentScope.render(): Component = Column(
+        style = Style.width(NESTED_ITEM_WIDTH.px).height((NESTED_ROW_HEIGHT - label.length).px),
+    )
   }
 
   private class FakeRunnableHandler : RunnableHandler {
@@ -537,5 +619,8 @@ class LithoCollectionItemContentUpdateOnBindTest {
     const val NARROW_WIDTH = 300
     const val COLLECTION_HEIGHT = 800
     const val MAX_DRAIN_ITERATIONS = 100
+    const val NESTED_ROW_HEIGHT = 100
+    const val NESTED_ITEM_WIDTH = 100
+    val NESTED_ITEM_INDEXES = (0 until 10).toList()
   }
 }

@@ -198,7 +198,10 @@ class CollectionRecyclerComponent(
       )
     }
         .value
-    val adapter = useState { CollectionPrimitiveViewAdapter() }.value
+    val adapter = useState {
+      CollectionPrimitiveViewAdapter(isCircular = layoutConfig.isCircular)
+    }
+        .value
     val collectionPreparationManager =
         useStateWithDeps(layoutInfo, adapter) { CollectionPreparationManager(layoutInfo, adapter) }
             .value
@@ -1016,10 +1019,6 @@ private class CollectionPrimitiveViewLayoutBehavior(
 
     useLayoutEffect(adapter) {
       adapter.viewHolderCreator = ViewHolderCreator
-      // RecyclerView.Adapter doesn't allow changing the stable ID flag after observers are
-      // registered. Since this flag determines whether we use stable IDs for item identification,
-      // we set it once during initialization.
-      adapter.isCircular = layoutConfig.isCircular
       adapter.latestCommittedData = latestCommittedData
       onCleanup {
         // The viewHolderCreator should only be reset after the adapter is completely unbound from

@@ -52,14 +52,16 @@ class CollectionPrimitiveViewAdapterTest {
   @Before
   fun setup() {
     MockitoAnnotations.initMocks(this)
-    adapter = CollectionPrimitiveViewAdapter()
-
-    // Setup mock view holder creator
-    adapter.viewHolderCreator = { parent, viewType -> mockRootHostHolder }
+    adapter = createAdapter()
 
     // Setup mock root host holder to return a valid view
     whenever(mockRootHostHolder.view).thenReturn(mockView)
   }
+
+  private fun createAdapter(isCircular: Boolean = false): CollectionPrimitiveViewAdapter =
+      CollectionPrimitiveViewAdapter(isCircular = isCircular).apply {
+        viewHolderCreator = { _, _ -> mockRootHostHolder }
+      }
 
   private fun createTestItem(
       idString: String = "test_id",
@@ -111,7 +113,7 @@ class CollectionPrimitiveViewAdapterTest {
 
   @Test
   fun `test adapter item count for circular list with items`() {
-    adapter.isCircular = true
+    adapter = createAdapter(isCircular = true)
     val items = listOf(createTestItem("1"), createTestItem("2"), createTestItem("3"))
     adapter.setItems(items)
 
@@ -120,7 +122,7 @@ class CollectionPrimitiveViewAdapterTest {
 
   @Test
   fun `test adapter item count for circular list with single item`() {
-    adapter.isCircular = true
+    adapter = createAdapter(isCircular = true)
     val items = listOf(createTestItem("1"))
     adapter.setItems(items)
 
@@ -129,7 +131,7 @@ class CollectionPrimitiveViewAdapterTest {
 
   @Test
   fun `test adapter item count for circular list with no items`() {
-    adapter.isCircular = true
+    adapter = createAdapter(isCircular = true)
     adapter.setItems(emptyList())
 
     assertThat(adapter.itemCount).isEqualTo(0)
@@ -137,25 +139,19 @@ class CollectionPrimitiveViewAdapterTest {
 
   @Test
   fun `test stable IDs disabled for circular lists`() {
-    // Initialize stable IDs first by setting isCircular explicitly
-    adapter.isCircular = false // This sets stable IDs to true
-    assertThat(adapter.hasStableIds()).isTrue()
-
-    adapter.isCircular = true
+    adapter = createAdapter(isCircular = true)
 
     assertThat(adapter.hasStableIds()).isFalse()
   }
 
   @Test
   fun `test stable IDs enabled for non-circular lists`() {
-    adapter.isCircular = false
-
     assertThat(adapter.hasStableIds()).isTrue()
   }
 
   @Test
   fun `test position normalization for circular list`() {
-    adapter.isCircular = true
+    adapter = createAdapter(isCircular = true)
     val items = listOf(
         createTestItem("1", viewTypeInt = 10),
         createTestItem("2", viewTypeInt = 20),
@@ -194,7 +190,7 @@ class CollectionPrimitiveViewAdapterTest {
 
   @Test
   fun `test findPositionById in circular list`() {
-    adapter.isCircular = true
+    adapter = createAdapter(isCircular = true)
     val items = listOf(createTestItem("item1"), createTestItem("item2"), createTestItem("item3"))
     adapter.setItems(items)
 
@@ -206,7 +202,7 @@ class CollectionPrimitiveViewAdapterTest {
 
   @Test
   fun `test findItemByPosition in circular list`() {
-    adapter.isCircular = true
+    adapter = createAdapter(isCircular = true)
     val item1 = createTestItem("item1")
     val item2 = createTestItem("item2")
     val item3 = createTestItem("item3")
@@ -237,7 +233,7 @@ class CollectionPrimitiveViewAdapterTest {
 
   @Test
   fun `test setItems validation for circular list - same size allowed`() {
-    adapter.isCircular = true
+    adapter = createAdapter(isCircular = true)
     val items1 = listOf(createTestItem("1"), createTestItem("2"))
     val items2 = listOf(createTestItem("3"), createTestItem("4"))
 
@@ -250,7 +246,7 @@ class CollectionPrimitiveViewAdapterTest {
 
   @Test
   fun `test setItems validation for circular list - empty to items allowed`() {
-    adapter.isCircular = true
+    adapter = createAdapter(isCircular = true)
     adapter.setItems(emptyList())
 
     val items = listOf(createTestItem("1"), createTestItem("2"))
@@ -260,7 +256,7 @@ class CollectionPrimitiveViewAdapterTest {
 
   @Test
   fun `test setItems validation for circular list - items to empty allowed`() {
-    adapter.isCircular = true
+    adapter = createAdapter(isCircular = true)
     val items = listOf(createTestItem("1"), createTestItem("2"))
     adapter.setItems(items)
 
@@ -270,7 +266,7 @@ class CollectionPrimitiveViewAdapterTest {
 
   @Test(expected = IllegalArgumentException::class)
   fun `test setItems validation for circular list - different size throws exception`() {
-    adapter.isCircular = true
+    adapter = createAdapter(isCircular = true)
     val items1 = listOf(createTestItem("1"), createTestItem("2"))
     val items2 = listOf(createTestItem("3"), createTestItem("4"), createTestItem("5"))
 
@@ -355,7 +351,7 @@ class CollectionPrimitiveViewAdapterTest {
 
   @Test
   fun `test circular list edge case with empty items`() {
-    adapter.isCircular = true
+    adapter = createAdapter(isCircular = true)
     adapter.setItems(emptyList())
 
     assertThat(adapter.itemCount).isEqualTo(0)
@@ -366,7 +362,7 @@ class CollectionPrimitiveViewAdapterTest {
 
   @Test
   fun `test circular list with large position calculations`() {
-    adapter.isCircular = true
+    adapter = createAdapter(isCircular = true)
     val items = listOf(
         createTestItem("1", viewTypeInt = 100),
         createTestItem("2", viewTypeInt = 200),

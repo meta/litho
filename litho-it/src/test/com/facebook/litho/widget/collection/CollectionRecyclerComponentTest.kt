@@ -19,6 +19,7 @@ package com.facebook.litho.widget.collection
 import android.graphics.Color
 import androidx.recyclerview.widget.RecyclerView
 import com.facebook.litho.Component
+import com.facebook.litho.ComponentTree
 import com.facebook.litho.LithoView
 import com.facebook.litho.ResourcesScope
 import com.facebook.litho.Style
@@ -1038,6 +1039,51 @@ class CollectionRecyclerComponentTest {
     assertThat(list.skipsRedundantBringToFront).isFalse
   }
 
+  @Test
+  fun `a list keeps its items when a new tree takes over its state while it is shown`() {
+    showListThenHandItsStateToANewTree(isCircular = false)
+  }
+
+  @Test
+  fun `a circular list keeps its items when a new tree takes over its state while it is shown`() {
+    showListThenHandItsStateToANewTree(isCircular = true)
+  }
+
+  /**
+   * Like a feed row rebinding: a new tree built from the shown tree's state is set on the same
+   * view. Its first layout runs the list's layout effects again, before the old content, whose
+   * RecyclerView still holds the list's adapter, is unmounted.
+   */
+  private fun showListThenHandItsStateToANewTree(isCircular: Boolean) {
+    val items = (0..9).map { TestItem(it) }
+
+    // scenario: the first tree shows the list, so its RecyclerView holds the adapter.
+    val testLithoView = lithoTestRule.render {
+      createTestLazyList(items, isCircular = isCircular)
+    }
+    val firstTree = testLithoView.componentTree
+    val shownAdapter = getRecyclerView(testLithoView)?.adapter
+    assertThat(shownAdapter).describedAs("the list is shown").isNotNull
+
+    // scenario: a new tree takes over the first tree's state and replaces it on the same view.
+    val secondTree =
+        ComponentTree.create(lithoTestRule.context)
+            .componentsConfiguration(firstTree.context.lithoConfiguration.componentsConfig)
+            .treeState(firstTree.acquireTreeState())
+            .build()
+    testLithoView.useComponentTree(secondTree)
+    firstTree.release()
+    testLithoView.setRoot { createTestLazyList(items, isCircular = isCircular) }
+    testLithoView.measure().layout()
+    lithoTestRule.idle()
+
+    // expectation: the list keeps its adapter and shows its items.
+    val adapter = getRecyclerView(testLithoView)?.adapter
+    assertThat(adapter).describedAs("the state keeps the adapter").isSameAs(shownAdapter)
+    assertThat(adapter?.hasStableIds()).isEqualTo(!isCircular)
+    assertThat(adapter?.itemCount).isEqualTo(if (isCircular) Int.MAX_VALUE else items.size)
+  }
+
   // region: helper functions
 
   private fun getRecyclerView(testLithoView: TestLithoView): RecyclerView? {
@@ -1050,9 +1096,11 @@ class CollectionRecyclerComponentTest {
       items: List<TestItem> = emptyList(),
       lazyCollectionController: LazyCollectionController? = null,
       refreshProgressBarColor: Int? = null,
+      isCircular: Boolean = false,
   ): Component {
     return LazyList(
         orientation = RecyclerView.VERTICAL,
+        isCircular = isCircular,
         refreshProgressBarColor = refreshProgressBarColor,
         lazyCollectionController = lazyCollectionController,
         style = Style.height(1080.px).viewTag("recycler_view"),

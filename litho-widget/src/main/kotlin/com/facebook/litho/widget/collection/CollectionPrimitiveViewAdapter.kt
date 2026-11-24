@@ -37,8 +37,21 @@ import java.util.IdentityHashMap
  * and [CollectionItem.onViewRecycled] on the holder when the item is bound and recycle
  * respectively.
  */
-class CollectionPrimitiveViewAdapter @PublishedApi internal constructor() :
-    RecyclerView.Adapter<PrimitiveRecyclerViewHolder>() {
+class CollectionPrimitiveViewAdapter
+@PublishedApi
+internal constructor(
+    /**
+     * Whether this adapter behaves as a circular list: Int.MAX_VALUE items, positions wrapped
+     * around the real items. Fixed for the adapter's lifetime because it decides [hasStableIds],
+     * which RecyclerView doesn't allow changing once the adapter is attached.
+     */
+    internal val isCircular: Boolean = false,
+) : RecyclerView.Adapter<PrimitiveRecyclerViewHolder>() {
+
+  init {
+    // Circular lists don't support stable IDs.
+    setHasStableIds(!isCircular)
+  }
 
   private val lock = Any()
   @GuardedBy("lock") private var items: List<CollectionItem<*>> = ArrayList()
@@ -92,23 +105,6 @@ class CollectionPrimitiveViewAdapter @PublishedApi internal constructor() :
           heightSpec: Int,
       ) -> Unit)? =
       null
-
-  /**
-   * Indicates whether this adapter should behave as a circular/infinite list. When true, the
-   * adapter reports Integer.MAX_VALUE as item count and uses modulo arithmetic to wrap positions
-   * around the actual items list.
-   */
-  internal var isCircular: Boolean = false
-    @UiThread
-    set(value) {
-      ThreadUtils.assertMainThread()
-      field = value
-      // Set stable IDs
-      // 1. Cannot change whether this adapter has stable IDs while the adapter has registered
-      // observers.
-      // 2. Circular lists don't support stable IDs
-      setHasStableIds(!value)
-    }
 
   override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PrimitiveRecyclerViewHolder {
     val viewHolderDelegate =
