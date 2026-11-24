@@ -16,26 +16,45 @@
 
 package com.facebook.litho
 
-import com.facebook.litho.testing.testrunner.LithoTestRunner
+import com.facebook.litho.config.ComponentsConfiguration
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CyclicBarrier
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.After
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.ParameterizedRobolectricTestRunner
 
 /**
- * [TreePropContainer] guards its entries with a `Collections.synchronizedMap`, so a member that
+ * [TreePropContainer] guards its entries with the monitor of the map holding them, so a member that
  * reaches into a second container while holding its own map's monitor deadlocks against a thread
  * doing the same thing in the opposite direction.
  *
  * `ComponentTree.requestRenderWithSplitFutures` compares the committed container against the
  * incoming one on the main thread, while `ResolveTreeFuture.resolve` compares that same pair the
  * other way round on a resolve thread. Operand order is lock order, so the two hung each other.
+ *
+ * Every case runs with each map [ComponentsConfiguration.useScatterMapInTreePropContainer] selects,
+ * since both arms ship.
  */
-@RunWith(LithoTestRunner::class)
-class TreePropContainerConcurrencyTest {
+@RunWith(ParameterizedRobolectricTestRunner::class)
+class TreePropContainerConcurrencyTest(private val useScatterMap: Boolean) {
+
+  private var previousSetting = false
+
+  @Before
+  fun setUp() {
+    previousSetting = ComponentsConfiguration.useScatterMapInTreePropContainer
+    ComponentsConfiguration.useScatterMapInTreePropContainer = useScatterMap
+  }
+
+  @After
+  fun tearDown() {
+    ComponentsConfiguration.useScatterMapInTreePropContainer = previousSetting
+  }
 
   @Test
   fun `equals does not hold the container monitor while comparing values`() {
@@ -109,13 +128,34 @@ class TreePropContainerConcurrencyTest {
     assertNoDeadlock(forward = { a.putAll(b) }, reverse = { b.putAll(a) })
   }
 
-  /** Two containers with equal contents, so a comparison walks every entry instead of exiting. */
-  private fun equalContainerPair(): Pair<TreePropContainer, TreePropContainer> {
+  @Test
+  fun `opposing concurrent equals across map kinds do not deadlock`() {
+    val (a, b) = equalContainerPair(otherUsesScatterMap = !useScatterMap)
+    assertNoDeadlock(forward = { a == b }, reverse = { b == a })
+  }
+
+  @Test
+  fun `opposing concurrent putAll across map kinds do not deadlock`() {
+    val (a, b) = equalContainerPair(otherUsesScatterMap = !useScatterMap)
+    assertNoDeadlock(forward = { a.putAll(b) }, reverse = { b.putAll(a) })
+  }
+
+  /**
+   * Two containers with equal contents, so a comparison walks every entry instead of exiting. The
+   * second is backed by the map [otherUsesScatterMap] selects.
+   */
+  private fun equalContainerPair(
+      otherUsesScatterMap: Boolean = useScatterMap,
+  ): Pair<TreePropContainer, TreePropContainer> {
     val props = List(ENTRY_COUNT) { treePropOf<Any?> { null } }
     val fill: TreePropContainer.() -> Unit = {
       props.forEachIndexed { index, prop -> put(prop, "value$index") }
     }
-    return TreePropContainer().apply(fill) to TreePropContainer().apply(fill)
+    val first = TreePropContainer().apply(fill)
+    ComponentsConfiguration.useScatterMapInTreePropContainer = otherUsesScatterMap
+    val second = TreePropContainer().apply(fill)
+    ComponentsConfiguration.useScatterMapInTreePropContainer = useScatterMap
+    return first to second
   }
 
   private fun assertNoDeadlock(forward: () -> Unit, reverse: () -> Unit) {
@@ -192,6 +232,10 @@ class TreePropContainerConcurrencyTest {
   }
 
   companion object {
+    @JvmStatic
+    @ParameterizedRobolectricTestRunner.Parameters(name = "useScatterMap={0}")
+    fun settings(): Collection<Array<Any>> = listOf(arrayOf(false), arrayOf(true))
+
     private const val TIMEOUT_SECONDS = 5L
     private const val PROBE_TIMEOUT_SECONDS = 5L
     /**

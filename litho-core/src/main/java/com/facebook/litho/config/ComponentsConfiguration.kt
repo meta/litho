@@ -393,6 +393,13 @@ internal constructor(
     @JvmField var cacheSolidColorDrawable: Boolean = false
 
     /**
+     * Backs each [com.facebook.litho.TreePropContainer] created while this is true with an
+     * [androidx.collection.MutableScatterMap] instead of a synchronized `HashMap`. Both arms hold
+     * the same tree props; this exists to measure the memory difference.
+     */
+    @JvmField var useScatterMapInTreePropContainer: Boolean = false
+
+    /**
      * When true, mount skips a MountSpec update only when the next render unit's content version
      * equals the mounted unit's. When false, mount trusts `STATE_UPDATED`, which compares with the
      * last committed layout and goes stale when that layout never mounted.
