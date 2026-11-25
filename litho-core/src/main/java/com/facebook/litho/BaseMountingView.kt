@@ -1101,8 +1101,9 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
       layoutState: LayoutState,
       property: StyleTransitionProperty,
   ): Boolean =
-      lithoHostListenerCoordinator?.styleTransitionWillAnimateRootSize(layoutState, property) ==
-          true
+      ComponentsConfiguration.enableStyleTransitionRootSizeHold &&
+          lithoHostListenerCoordinator?.styleTransitionWillAnimateRootSize(layoutState, property) ==
+              true
 
   @VisibleForTesting
   fun processVisibilityOutputs(

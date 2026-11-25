@@ -29,6 +29,7 @@ import com.facebook.litho.ComponentTree
 import com.facebook.litho.LithoRenderTreeView
 import com.facebook.litho.LithoRenderer
 import com.facebook.litho.Style
+import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.core.height
 import com.facebook.litho.core.width
 import com.facebook.litho.layout.flexbox.Column
@@ -66,6 +67,38 @@ class StyleTransitionRootBoundsTest {
   @Test fun heightChangesPreserveSizeBeforeMountAndReachTarget() = checkSizeChanges(width = false)
 
   @Test fun widthChangesPreserveSizeBeforeMountAndReachTarget() = checkSizeChanges(width = true)
+
+  @Test fun disabledHoldMeasuresTargetHeightAndSkipsOffscreenAnimation() = checkDisabledHold(false)
+
+  @Test fun disabledHoldMeasuresTargetWidthAndSkipsOffscreenAnimation() = checkDisabledHold(true)
+
+  private fun checkDisabledHold(width: Boolean) {
+    val previous = ComponentsConfiguration.enableStyleTransitionRootSizeHold
+    ComponentsConfiguration.enableStyleTransitionRootSizeHold = false
+    try {
+      render(root(100, width))
+      view.setRoot(root(300, width))
+      measure()
+      assertThat(if (width) rootView.measuredWidth else rootView.measuredHeight).isEqualTo(300)
+      layout()
+      animationRule.advanceBy(160.ms)
+      assertThat(if (width) rootView.width else rootView.height).isEqualTo(300)
+      rootView.translationY = -1000f
+      flush()
+      assertThat(rootView.getLocalVisibleRect(Rect())).isFalse()
+      for (target in listOf(100, 0, 300)) {
+        view.setRoot(root(target, width))
+        measure()
+        assertThat(if (width) rootView.measuredWidth else rootView.measuredHeight).isEqualTo(target)
+        layout()
+        assertThat(animationRule.hasScheduledFrames()).isFalse()
+        animationRule.advanceBy(160.ms)
+        assertThat(if (width) rootView.width else rootView.height).isEqualTo(target)
+      }
+    } finally {
+      ComponentsConfiguration.enableStyleTransitionRootSizeHold = previous
+    }
+  }
 
   private fun checkSizeChanges(width: Boolean) {
     render(root(100, width))

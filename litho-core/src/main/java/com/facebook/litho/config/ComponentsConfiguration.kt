@@ -438,6 +438,8 @@ internal constructor(
 
     @JvmField var enableComponentHostViewMoveInvalidation: Boolean = false
 
+    @JvmField var enableStyleTransitionRootSizeHold: Boolean = true
+
     /**
      * When true, IMOs are created with hostOutput=null during reduce (skipping per-child
      * ensureHostBounds), and host bounds are finalized in a single bottom-up pass after reduce.
