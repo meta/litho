@@ -319,6 +319,21 @@ class RecyclerBinder private constructor(builder: Builder) :
     }
   }
 
+  /**
+   * Every committed layout refreshes the item's height, so a later state update is compared with
+   * the height the list last saw. Only state updates request a remeasure: layouts the binder
+   * computes itself are already accounted for by the measure or change set that asked for them.
+   */
+  private fun getItemHeightChangeListener(holder: ComponentTreeHolder): MeasureListener {
+    return MeasureListener { _, _, height, stateUpdate ->
+      val previousHeight = holder.measuredHeight
+      holder.measuredHeight = height
+      if (stateUpdate && previousHeight != height) {
+        synchronized(this@RecyclerBinder) { requestRemeasure() }
+      }
+    }
+  }
+
   private val asyncLayoutReadyListener =
       object : NewLayoutStateReadyListener {
         override val dispatchOnPromotedLayout: Boolean
@@ -4968,8 +4983,15 @@ class RecyclerBinder private constructor(builder: Builder) :
         layoutInfo.getScrollDirection() == HORIZONTAL &&
             (recyclerBinderConfig.crossAxisWrapMode == CrossAxisWrapMode.Dynamic)
     componentTreeMeasureListenerFactory =
-        if (!hasDynamicItemHeight) null
-        else ComponentTreeMeasureListenerFactory { holder -> getMeasureListener(holder) }
+        when {
+          hasDynamicItemHeight ->
+              ComponentTreeMeasureListenerFactory { holder -> getMeasureListener(holder) }
+          recyclerBinderConfig.wrapContent &&
+              recyclerBinderConfig.remeasureOnItemHeightChange &&
+              layoutInfo.getScrollDirection() == VERTICAL ->
+              ComponentTreeMeasureListenerFactory { holder -> getItemHeightChangeListener(holder) }
+          else -> null
+        }
 
     isMainAxisWrapContent = recyclerBinderConfig.wrapContent
     isCrossAxisWrapContent = recyclerBinderConfig.crossAxisWrapMode != CrossAxisWrapMode.NoWrap

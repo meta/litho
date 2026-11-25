@@ -134,6 +134,13 @@ data class RecyclerBinderConfig(
      * orientation is horizontal.
      */
     @JvmField val wrapContent: Boolean = false,
+    /**
+     * If true, a vertical [wrapContent] list also re-measures when a state update inside one of its
+     * items commits a layout of a different height. Without it, the list re-measures only when a
+     * change set is applied, so an item that grows or shrinks on its own is clipped or leaves a
+     * gap.
+     */
+    @JvmField val remeasureOnItemHeightChange: Boolean = false,
     /** Specifies how a [Collection] will wrap its contents across the cross axis. */
     @JvmField val crossAxisWrapMode: CrossAxisWrapMode = CrossAxisWrapMode.NoWrap,
     /**
@@ -237,6 +244,7 @@ class RecyclerBinderConfigBuilder internal constructor(configuration: RecyclerBi
   private var layoutHandlerFactory = configuration.layoutHandlerFactory
   private var enableStableIds = configuration.enableStableIds
   private var wrapContent = configuration.wrapContent
+  private var remeasureOnItemHeightChange = configuration.remeasureOnItemHeightChange
   private var crossAxisWrapMode = configuration.crossAxisWrapMode
   private var paginationStrategy = configuration.paginationStrategy
   private var recyclingStrategy = configuration.recyclingStrategy
@@ -309,6 +317,10 @@ class RecyclerBinderConfigBuilder internal constructor(configuration: RecyclerBi
     this.wrapContent = wrapContent
   }
 
+  fun remeasureOnItemHeightChange(enabled: Boolean): RecyclerBinderConfigBuilder = also {
+    this.remeasureOnItemHeightChange = enabled
+  }
+
   fun paginationStrategy(strategy: Int): RecyclerBinderConfigBuilder = also {
     this.paginationStrategy = strategy
   }
@@ -347,6 +359,7 @@ class RecyclerBinderConfigBuilder internal constructor(configuration: RecyclerBi
         layoutHandlerFactory = layoutHandlerFactory,
         enableStableIds = enableStableIds,
         wrapContent = wrapContent,
+        remeasureOnItemHeightChange = remeasureOnItemHeightChange,
         crossAxisWrapMode = crossAxisWrapMode,
         paginationStrategy = paginationStrategy,
         recyclingStrategy = recyclingStrategy,
