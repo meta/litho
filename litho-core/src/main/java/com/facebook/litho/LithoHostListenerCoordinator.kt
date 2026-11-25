@@ -20,6 +20,7 @@ import android.graphics.Rect
 import androidx.annotation.VisibleForTesting
 import com.facebook.litho.DynamicPropsExtension.DynamicPropsExtensionState
 import com.facebook.litho.TransitionsExtension.TransitionsExtensionState
+import com.facebook.litho.animation.StyleTransitionProperty
 import com.facebook.rendercore.MountDelegateTarget
 import com.facebook.rendercore.extensions.ExtensionState
 import com.facebook.rendercore.extensions.VisibleBoundsCallbacks
@@ -227,6 +228,14 @@ class LithoHostListenerCoordinator(private val mountDelegateTarget: MountDelegat
     styleTransitionsExtensionState =
         mountDelegateTarget.registerMountExtension(StyleTransitionsExtension)
             as ExtensionState<StyleTransitionsExtension.StyleTransitionsExtensionState>
+  }
+
+  internal fun styleTransitionWillAnimateRootSize(
+      next: LayoutState,
+      property: StyleTransitionProperty,
+  ): Boolean {
+    val state = styleTransitionsExtensionState ?: return false
+    return StyleTransitionsExtension.willAnimateRootSize(state, next, property)
   }
 
   internal fun collectAllTransitions(layoutState: LayoutState) {

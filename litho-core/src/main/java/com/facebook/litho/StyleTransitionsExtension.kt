@@ -26,6 +26,7 @@ import com.facebook.litho.animation.FiniteAnimationSpec
 import com.facebook.litho.animation.StructuralStyleTransitionId
 import com.facebook.litho.animation.StyleTransitionContentResolver
 import com.facebook.litho.animation.StyleTransitionManager
+import com.facebook.litho.animation.StyleTransitionPlanner
 import com.facebook.litho.animation.StyleTransitionProperty
 import com.facebook.litho.animation.StyleTransitionTarget
 import com.facebook.rendercore.IntSize
@@ -162,6 +163,43 @@ internal object StyleTransitionsExtension :
     // Compose the per-axis Float specs into one IntSize animation — each axis runs at its real
     // Float type (a keyframes per axis is valid), with no reinterpretation cast.
     return CompositeIntSizeSpec(width ?: height!!, height ?: width!!)
+  }
+
+  /**
+   * Whether mounting [next] animates the root host's [property] from its mounted value, by the same
+   * check [StyleTransitionPlanner] plans with. The mounting view then keeps its current size when
+   * measured for [next] and lets the animation drive it, as it does for a legacy root bounds
+   * transition; otherwise it would lay out at the final size for a frame before the animation
+   * starts.
+   */
+  fun willAnimateRootSize(
+      extensionState: ExtensionState<StyleTransitionsExtensionState>,
+      next: LayoutState,
+      property: StyleTransitionProperty,
+  ): Boolean {
+    val state = extensionState.state
+    val previous = state.currentInput ?: return false
+    if (previous.resolveResult?.context?.lithoTree !== next.resolveResult?.context?.lithoTree) {
+      return false
+    }
+    val nextTarget = next.rootStyleTransitionTarget ?: return false
+    val spec = nextTarget.data.spec
+    if (spec.changes[property] == null) return false
+    val id = nextTarget.styleTransitionId
+    val nextItem = nextTarget.animatableItem ?: return false
+    // The planner pairs targets by id, wherever the previous one was.
+    val previousTarget =
+        previous.rootStyleTransitionTarget?.takeIf { it.styleTransitionId == id }
+            ?: previous.styleTransitionTargets.firstOrNull { it.styleTransitionId == id }
+    val previousItem = previousTarget?.animatableItem ?: return false
+    return StyleTransitionPlanner.shouldPlanAnimation(
+        property,
+        spec.reflowMode,
+        property.animatedProperty.get(previousItem),
+        property.animatedProperty.get(nextItem),
+    ) {
+      state.manager.hasRunningAnimation(id, property)
+    }
   }
 
   override fun afterMount(extensionState: ExtensionState<StyleTransitionsExtensionState>) {

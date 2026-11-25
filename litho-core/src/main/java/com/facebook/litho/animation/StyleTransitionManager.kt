@@ -209,6 +209,10 @@ internal class StyleTransitionManager {
     }
   }
 
+  fun hasRunningAnimation(id: StyleTransitionId, property: StyleTransitionProperty): Boolean =
+      runningAnimations.isNotEmpty() &&
+          runningAnimations.containsKey(StyleTransitionAnimationKey(id, property))
+
   fun hasRunningAnimationForRenderUnit(renderUnitId: Long): Boolean =
       runningAnimations.values.any { it.plan.renderUnitId == renderUnitId }
 
@@ -379,36 +383,31 @@ internal object StyleTransitionPlanner {
         if (animationSpec == null) {
           continue
         }
-        if (reflowMode) {
-          // Width/height are always driven by the reflow relayout, not the visual manager.
-          if (
-              property == StyleTransitionProperty.WIDTH ||
-                  property == StyleTransitionProperty.HEIGHT
-          ) {
-            continue
-          }
-          // A relayout-driven position is emergent from the per-frame relayout, so skip its x/y
-          // transform — it would chase the relayout and strand a stale translation. A shift not
-          // driven by the relayout still animates.
-          //
-          // Known limitation: a shift that is PARTLY structural (e.g. a sibling inserted above)
-          // while another reflow node resizes is fully suppressed, so the structural part snaps.
-          if (
-              positionRelayoutDriven &&
-                  (property == StyleTransitionProperty.X || property == StyleTransitionProperty.Y)
-          ) {
-            continue
-          }
+        // A relayout-driven position is emergent from the per-frame relayout, so skip its x/y
+        // transform — it would chase the relayout and strand a stale translation. A shift not
+        // driven by the relayout still animates.
+        //
+        // Known limitation: a shift that is PARTLY structural (e.g. a sibling inserted above)
+        // while another reflow node resizes is fully suppressed, so the structural part snaps.
+        if (
+            positionRelayoutDriven &&
+                (property == StyleTransitionProperty.X || property == StyleTransitionProperty.Y)
+        ) {
+          continue
         }
-        val key = StyleTransitionAnimationKey(nextTarget.styleTransitionId, property)
+        val id = nextTarget.styleTransitionId
         val initialValue = property.animatedProperty.get(previousItem)
         val targetValue = property.animatedProperty.get(nextItem)
-        if (initialValue == targetValue && !runningKeys.contains(key)) {
+        if (
+            !shouldPlanAnimation(property, reflowMode, initialValue, targetValue) {
+              runningKeys.isNotEmpty() && StyleTransitionAnimationKey(id, property) in runningKeys
+            }
+        ) {
           continue
         }
         plans.add(
             StyleTransitionAnimationPlan(
-                key = key,
+                key = StyleTransitionAnimationKey(id, property),
                 renderUnitId = nextItem.getId(),
                 outputType = nextItem.getOutputType(),
                 property = property,
@@ -421,6 +420,30 @@ internal object StyleTransitionPlanner {
     }
 
     return plans
+  }
+
+  /**
+   * Whether a commit plans an animation for the declared [property] of a target from [initialValue]
+   * to [targetValue]: it isn't a size left to the reflow relayout, and its value changes or an
+   * animation for it is still running. [createPlans] adds one cross-target rule for x/y under
+   * reflow.
+   */
+  inline fun shouldPlanAnimation(
+      property: StyleTransitionProperty,
+      reflowMode: Boolean,
+      initialValue: Float,
+      targetValue: Float,
+      isRunning: () -> Boolean,
+  ): Boolean {
+    // Width/height are always driven by the reflow relayout, not the visual manager.
+    if (
+        reflowMode &&
+            (property == StyleTransitionProperty.WIDTH ||
+                property == StyleTransitionProperty.HEIGHT)
+    ) {
+      return false
+    }
+    return initialValue != targetValue || isRunning()
   }
 
   private fun didReflowResize(

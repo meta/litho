@@ -47,8 +47,7 @@ import com.facebook.litho.LithoViewTestHelper.toDebugString
 import com.facebook.litho.ThreadUtils.assertMainThread
 import com.facebook.litho.Transition.RootBoundsTransition
 import com.facebook.litho.TreeState.TreeMountInfo
-import com.facebook.litho.animation.AnimatedProperties
-import com.facebook.litho.animation.AnimatedProperty
+import com.facebook.litho.animation.StyleTransitionProperty
 import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.config.UnmountOnDetach
 import com.facebook.litho.debug.DebugOverlay
@@ -1029,13 +1028,8 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
     if (
         areBoundsVisible ||
             (unmountsOnDetach && (rect != null && rect.isEmpty)) ||
-            hasComponentsExcludedFromIncrementalMount(
-                currentLayoutState,
-            ) // It might not be yet visible but animating from 0
-            // height/width in
-            // which case we still
-            // need to mount them to trigger animation.
-            || animatingRootBoundsFromZero(visibleRectToUse)
+            hasComponentsExcludedFromIncrementalMount(currentLayoutState) ||
+            shouldMountForRootBoundsAnimation(visibleRectToUse)
     ) {
       mountComponent(visibleRectToUse, true, reason)
     }
@@ -1087,14 +1081,28 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
     return true
   }
 
-  private fun animatingRootBoundsFromZero(currentVisibleArea: Rect): Boolean {
-    val layoutState = currentLayoutState
-
-    return (hasTree && !hasMountedAtLeastOnce()) &&
-        layoutState != null &&
-        ((layoutState.rootHeightAnimation != null && currentVisibleArea.height() == 0) ||
-            (layoutState.rootWidthAnimation != null && currentVisibleArea.width() == 0))
+  /**
+   * Whether to mount though nothing is visible, because only the mount starts a root bounds
+   * animation: a legacy root appearing from 0, or a root `Style.transition` whose size measure is
+   * holding (see [getInitialAnimatedMountingViewDimension]), which can be empty or offscreen.
+   */
+  private fun shouldMountForRootBoundsAnimation(currentVisibleArea: Rect): Boolean {
+    val layoutState = currentLayoutState ?: return false
+    if (!hasMountedAtLeastOnce()) {
+      return (layoutState.rootHeightAnimation != null && currentVisibleArea.height() == 0) ||
+          (layoutState.rootWidthAnimation != null && currentVisibleArea.width() == 0)
+    }
+    return isMountStateDirty &&
+        (styleTransitionWillAnimateRootSize(layoutState, StyleTransitionProperty.HEIGHT) ||
+            styleTransitionWillAnimateRootSize(layoutState, StyleTransitionProperty.WIDTH))
   }
+
+  private fun styleTransitionWillAnimateRootSize(
+      layoutState: LayoutState,
+      property: StyleTransitionProperty,
+  ): Boolean =
+      lithoHostListenerCoordinator?.styleTransitionWillAnimateRootSize(layoutState, property) ==
+          true
 
   @VisibleForTesting
   fun processVisibilityOutputs(
@@ -1370,7 +1378,7 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
         currentAnimatedWidth,
         hasNewComponentTree,
         transition,
-        AnimatedProperties.WIDTH,
+        StyleTransitionProperty.WIDTH,
     )
   }
 
@@ -1389,7 +1397,7 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
         currentAnimatedHeight,
         hasNewComponentTree,
         transition,
-        AnimatedProperties.HEIGHT,
+        StyleTransitionProperty.HEIGHT,
     )
   }
 
@@ -1397,18 +1405,21 @@ constructor(context: ComponentContext, attrs: AttributeSet? = null) :
       currentAnimatedDimension: Int,
       hasNewComponentTree: Boolean,
       rootBoundsTransition: RootBoundsTransition?,
-      property: AnimatedProperty,
+      property: StyleTransitionProperty,
   ): Int {
-    if (rootBoundsTransition == null) {
+    val layoutState = currentLayoutState ?: return SIZE_UNSET
+    if (
+        rootBoundsTransition == null && !styleTransitionWillAnimateRootSize(layoutState, property)
+    ) {
       return SIZE_UNSET
     }
     val hasMounted = hasMountedAtLeastOnce()
-    val appearTransition = rootBoundsTransition.appearTransition
+    val appearTransition = rootBoundsTransition?.appearTransition
     if (!hasMounted && appearTransition != null) {
       return Transition.getRootAppearFromValue(
               appearTransition,
-              requireNotNull(currentLayoutState),
-              property,
+              layoutState,
+              property.animatedProperty,
           )
           .toInt()
     }

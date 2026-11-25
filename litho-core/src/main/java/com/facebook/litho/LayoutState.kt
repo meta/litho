@@ -154,6 +154,10 @@ internal constructor(
   internal val styleTransitionTargets: List<StyleTransitionTarget>
     get() = reductionState.styleTransitionTargets ?: emptyList()
 
+  /** The [styleTransitionTargets] entry on the root host, which can animate the view's own size. */
+  internal val rootStyleTransitionTarget: StyleTransitionTarget?
+    get() = reductionState.rootStyleTransitionTarget
+
   /** Whether or not there are components marked as 'ExcludeFromIncrementalMount'. */
   @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
   val hasComponentsExcludedFromIncrementalMount: Boolean

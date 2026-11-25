@@ -92,6 +92,7 @@ internal data class ReductionState(
     var discardKeys: MutableSet<Any>? = null,
     var transitionData: MutableTransitionData? = null,
     var styleTransitionTargets: MutableList<StyleTransitionTarget>? = null,
+    var rootStyleTransitionTarget: StyleTransitionTarget? = null,
     var workingRangeContainer: WorkingRangeContainer? = null,
     var stateReads: MutableMap<StateId, MutableScatterSet<GlobalKey>>? = null,
     // Hoisted from per-output createContentRenderTreeNode — same value for every output in a single
@@ -149,6 +150,7 @@ internal class ReductionStateLite(
     val discardKeys: Set<Any>?,
     val transitionData: TransitionData?,
     val styleTransitionTargets: List<StyleTransitionTarget>?,
+    val rootStyleTransitionTarget: StyleTransitionTarget?,
     val workingRangeContainer: WorkingRangeContainer?,
     val stateReads: Map<StateId, ScatterSet<GlobalKey>>?,
     val subtreeSnapshots: MutableScatterMap<LithoNode, SubtreeSnapshot>?,
@@ -219,6 +221,7 @@ internal fun ReductionState.toLite(): ReductionStateLite = ReductionStateLite(
     discardKeys = discardKeys,
     transitionData = transitionData,
     styleTransitionTargets = styleTransitionTargets,
+    rootStyleTransitionTarget = rootStyleTransitionTarget,
     workingRangeContainer = workingRangeContainer,
     stateReads = stateReads,
     subtreeSnapshots = subtreeSnapshots,

@@ -1733,6 +1733,9 @@ internal object LithoReducer {
           "Litho tree. This is an internal id error."
     }
     targets.add(target)
+    if (target.animatableItem?.getId() == MountState.ROOT_HOST_ID) {
+      reductionState.rootStyleTransitionTarget = target
+    }
   }
 
   private fun addCurrentAffinityGroupToTransitionMapping(reductionState: ReductionState) {
