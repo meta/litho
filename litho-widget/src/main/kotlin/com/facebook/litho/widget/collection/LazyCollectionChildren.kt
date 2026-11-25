@@ -138,6 +138,23 @@ class LazyCollectionChildren {
     maybeRegisterForOnEnterOrNearCallbacks(child)
   }
 
+  /** Where the groups that declare events sit in this flattened list. Null until the first one. */
+  internal var childGroupRanges: MutableList<ChildGroupRange>? = null
+    private set
+
+  internal val size: Int
+    get() = collectionChildrenBuilder.size
+
+  internal val childGroupRangeCount: Int
+    get() = childGroupRanges?.size ?: 0
+
+  internal fun addChildGroupRange(index: Int, range: ChildGroupRange) {
+    (childGroupRanges ?: ArrayList<ChildGroupRange>().also { childGroupRanges = it }).add(
+        index,
+        range,
+    )
+  }
+
   internal fun addChildGroup(id: Any, content: LazyListChildGroupScope.() -> Unit) {
     val groups = childGroups ?: ArrayList<ChildGroup>().also { childGroups = it }
     groups.add(ChildGroup(id, content, position = collectionChildrenBuilder.size))

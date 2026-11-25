@@ -32,6 +32,26 @@ class LazyListChildGroupScope internal constructor(host: ComponentScope) :
     ComponentScope(host), LazyListChildrenScope {
 
   override val children: LazyCollectionChildren = LazyCollectionChildren()
+
+  internal var onNearEnd: OnNearCallback? = null
+    private set
+
+  /**
+   * Calls [callback] when the group's last row comes within [offset] rows of the viewport while
+   * some of its rows are visible. It fires once until the group's row count changes, or the list
+   * scrolls back away from the group's end. An empty group never fires it, so load the first page
+   * from product code. Group events are not dispatched on circular lists.
+   */
+  fun onNearEnd(offset: Int = 0, callback: () -> Unit) {
+    check(onNearEnd == null) { "onNearEnd can be declared at most once per child group" }
+    onNearEnd = OnNearCallback(offset, callback)
+  }
+
+  internal val hasEvents: Boolean
+    get() = onNearEnd != null
+
+  internal fun rangeOf(start: Int, end: Int, state: ChildGroupEventState): ChildGroupRange =
+      ChildGroupRange(start, end, state, onNearEnd)
 }
 
 /** A group declared with [LazyListChildrenScope.childGroup], after [position] rows. */

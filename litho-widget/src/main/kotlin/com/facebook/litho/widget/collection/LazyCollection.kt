@@ -141,6 +141,7 @@ class LazyCollection(
     val isCircular =
         layout.recyclerConfiguration.recyclerBinderConfiguration.recyclerBinderConfig.isCircular
     // A circular list shows virtual positions, which don't map back to its children.
+    val childGroupRanges = children.childGroupRanges.takeUnless { isCircular }
     val savesScrollPosition = saveScrollPosition && useNewInfra && !isCircular
     @OptIn(ExperimentalLithoApi::class)
     val scrollPosition =
@@ -183,6 +184,7 @@ class LazyCollection(
               firstVisibleIndex,
               lastVisibleIndex,
           )
+          childGroupRanges?.dispatchViewportChanged(firstVisibleIndex, lastVisibleIndex)
           if (!useNewInfra) {
             onNearEnd?.let {
               if (lastVisibleIndex >= totalCount - 1 - it.offset) {
@@ -486,9 +488,16 @@ private fun ComponentScope.useAppendRows(
     }
     val key = uniqueGroupKey(group.id) { it in groupIds }
     groupIds.add(key)
+    val start = into.size
+    // Ranges are kept parent-before-child, the order Sections dispatches its events in.
+    val rangeIndex = into.childGroupRangeCount
     withNewScope(key) {
       val scope = LazyListChildGroupScope(this).apply(group.content)
       useAppendRows(scope.children, key, into, groupIds)
+      if (scope.hasEvents) {
+        val state = useState { ChildGroupEventState() }.value
+        into.addChildGroupRange(rangeIndex, scope.rangeOf(start, into.size, state))
+      }
     }
   }
   while (next < rows.size) {
