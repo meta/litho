@@ -28,6 +28,8 @@ import com.facebook.litho.KComponent
 import com.facebook.litho.LithoStartupLogger
 import com.facebook.litho.Style
 import com.facebook.litho.annotations.ExperimentalLithoApi
+import com.facebook.litho.annotations.Hook
+import com.facebook.litho.debug.DebugInfoReporter
 import com.facebook.litho.eventHandlerWithReturn
 import com.facebook.litho.handle
 import com.facebook.litho.kotlinStyle
@@ -46,7 +48,9 @@ import com.facebook.litho.widget.LithoRecyclerView
 import com.facebook.litho.widget.LithoRecyclerView.OnAfterLayoutListener
 import com.facebook.litho.widget.LithoRecyclerView.OnBeforeLayoutListener
 import com.facebook.litho.widget.RecyclerBinder
+import com.facebook.litho.withNewScope
 import com.facebook.rendercore.Dimen
+import com.facebook.rendercore.LogLevel
 
 class LazyCollection(
     private val layout: CollectionLayout,
@@ -115,13 +119,14 @@ class LazyCollection(
 
   override fun ComponentScope.render(): Component {
     val childTracker = useState { ChildVisibilityTracker() }.value
+    val children = useFlattenedChildGroups(lazyCollectionChildren)
     val resolvedItemAnimator =
         when {
           itemAnimator !== CollectionRecyclerSpec.itemAnimator -> itemAnimator
           !context.lithoConfiguration.componentsConfig.useDefaultItemAnimatorInLazyCollections ->
               null
           // Generated ids are positional, so animations would play on the wrong rows.
-          lazyCollectionChildren.hasGeneratedIds -> null
+          children.hasGeneratedIds -> null
           else -> LazyCollectionItemAnimator.Default
         }
     val useNewInfra =
@@ -145,7 +150,7 @@ class LazyCollection(
     val controller =
         lazyCollectionController ?: if (savesScrollPosition) useLazyCollectionController() else null
     if (scrollPosition != null && controller != null) {
-      val childrenSize = lazyCollectionChildren.collectionChildren.size
+      val childrenSize = children.collectionChildren.size
       // A restore after the first render replaces the holder, which then applies its own position.
       useEffect(scrollPosition, childrenSize > 0) {
         scrollPosition.restore(controller, childrenSize)
@@ -171,8 +176,8 @@ class LazyCollection(
             controller?.recyclerView?.let { scrollPosition.record(it) }
           }
           childTracker.onScrollOrUpdated(
-              lazyCollectionChildren.effectiveIndexToId,
-              lazyCollectionChildren.idToChild,
+              children.effectiveIndexToId,
+              children.idToChild,
               firstVisibleIndex,
               lastVisibleIndex,
           )
@@ -208,8 +213,8 @@ class LazyCollection(
             firstVisibleIndex: Int,
             lastVisibleIndex: Int ->
           childTracker.onScrollOrUpdated(
-              lazyCollectionChildren.effectiveIndexToId,
-              lazyCollectionChildren.idToChild,
+              children.effectiveIndexToId,
+              children.idToChild,
               firstVisibleIndex,
               lastVisibleIndex,
           )
@@ -244,7 +249,7 @@ class LazyCollection(
           }
       val fadingEdgeLengthPx = fadingEdgeLength?.toPixels() ?: 0
       val component = CollectionRecyclerComponent(
-          children = lazyCollectionChildren.collectionChildren,
+          children = children.collectionChildren,
           recyclerConfiguration = layout.recyclerConfiguration,
           idComparator = { previousItem, nextItem -> previousItem.id == nextItem.id },
           contentComparator = { previousItem, nextItem ->
@@ -327,7 +332,7 @@ class LazyCollection(
                     .child(
                         createDataDiffSection(
                             context,
-                            lazyCollectionChildren.collectionChildren,
+                            children.collectionChildren,
                             alwaysDetectDuplicates,
                         ),
                     )
@@ -438,6 +443,67 @@ class LazyCollection(
   private fun isChildEquivalent(event: OnCheckIsSameContentEvent<CollectionChild>): Boolean =
       isChildEquivalent(event.previousItem, event.nextItem)
 }
+
+/**
+ * Runs the body of every child group in [children], each under a hook scope keyed by its id, and
+ * returns the list with each group replaced by its rows. A list without groups is returned as is.
+ */
+@Hook
+private fun ComponentScope.useFlattenedChildGroups(
+    children: LazyCollectionChildren,
+): LazyCollectionChildren {
+  children.childGroups ?: return children
+  val flattened = LazyCollectionChildren()
+  useAppendRows(children, groupId = null, into = flattened, groupIds = HashSet())
+  return flattened
+}
+
+@Hook
+private fun ComponentScope.useAppendRows(
+    children: LazyCollectionChildren,
+    groupId: Any?,
+    into: LazyCollectionChildren,
+    groupIds: MutableSet<Any>,
+) {
+  into.inheritGeneratedIds(children)
+  val rows = children.collectionChildren
+  var next = 0
+  children.childGroups?.forEach { group ->
+    while (next < group.position) {
+      into.addResolved(rows[next++].inGroup(groupId))
+    }
+    val key = uniqueGroupKey(group.id) { it in groupIds }
+    groupIds.add(key)
+    withNewScope(key) {
+      val scope = LazyListChildGroupScope(this).apply(group.content)
+      useAppendRows(scope.children, key, into, groupIds)
+    }
+  }
+  while (next < rows.size) {
+    into.addResolved(rows[next++].inGroup(groupId))
+  }
+}
+
+/**
+ * [id], or a [DuplicateChildGroupId] that tells this group apart when another group in the list
+ * already uses [id]. A duplicate is reported, not thrown.
+ */
+private inline fun uniqueGroupKey(id: Any, isUsed: (Any) -> Boolean): Any {
+  if (!isUsed(id)) {
+    return id
+  }
+  var occurrence = 1
+  while (isUsed(DuplicateChildGroupId(id, occurrence))) {
+    occurrence++
+  }
+  DebugInfoReporter.report(category = "LazyList:DuplicateChildGroupId", level = LogLevel.WARNING) {
+    put("occurrence", occurrence)
+  }
+  return DuplicateChildGroupId(id, occurrence)
+}
+
+private fun CollectionChild.inGroup(groupId: Any?): CollectionChild =
+    if (groupId == null) this else copy(id = ChildGroupRowId(groupId, id))
 
 internal fun isChildEquivalent(previous: CollectionChild, next: CollectionChild): Boolean {
   // These end up in the row's render info, not its component, and the render info is only
