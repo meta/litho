@@ -221,6 +221,12 @@ internal constructor(
     @JvmField val enableNewCollection: Boolean = false,
 
     /**
+     * Enables the framework changes behind LazyList child groups that also affect lists and
+     * components that do not declare a child group. Child groups are unsupported while it is off.
+     */
+    @JvmField val enableLazyListChildGroups: Boolean = false,
+
+    /**
      * When true, animated values produced during the `AnimationController` frame callback are
      * published through a same-frame invalidation path (`StateUpdater.applyAnimationFrameUpdates`)
      * instead of the frame-deferred `updateHookStateSync`. When false, animation frames fall back
@@ -829,6 +835,10 @@ internal constructor(
 
     fun enableNewCollection(enabled: Boolean): Builder = apply {
       config = config.copy(enableNewCollection = enabled)
+    }
+
+    fun enableLazyListChildGroups(enabled: Boolean): Builder = apply {
+      config = config.copy(enableLazyListChildGroups = enabled)
     }
 
     fun customLayoutHandlerProvider(provider: RunnableHandlerProvider): Builder = apply {
