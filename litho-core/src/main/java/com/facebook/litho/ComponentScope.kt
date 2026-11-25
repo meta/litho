@@ -18,6 +18,7 @@ package com.facebook.litho
 
 import android.view.View
 import androidx.collection.MutableIntIntMap
+import com.facebook.litho.annotations.ExperimentalLithoApi
 import com.facebook.litho.annotations.Hook
 import com.facebook.litho.debug.DebugInfoReporter
 import com.facebook.litho.state.ComponentState
@@ -31,16 +32,88 @@ import com.facebook.rendercore.LogLevel
  * like [useState], and convenience functions, like [dp].
  */
 open class ComponentScope
-@PublishedApi
-internal constructor(override val context: ComponentContext) : ResourcesScope {
+private constructor(
+    override val context: ComponentContext,
+    hookState: HookState?,
+) : ResourcesScope {
+
+  @PublishedApi
+  internal constructor(
+      context: ComponentContext,
+  ) : this(
+      context,
+      if (context.lithoConfiguration.componentsConfig.enableLazyListChildGroups) HookState()
+      else null,
+  )
 
   @Deprecated("Use the primary constructor instead, and call withResolveContext explicitly")
   constructor(context: ComponentContext, resolveContext: ResolveContext?) : this(context) {
     _resolveContext = resolveContext
   }
 
+  /**
+   * Creates a scope that renders as part of [host]. Hooks called on it belong to the component
+   * [host] is rendering: their state, effects and transitions are that component's, keyed under
+   * whichever hook key [host] is in when they run. This lets an API give a block a receiver of its
+   * own type while the block's hooks still run in the enclosing render.
+   *
+   * Hooks called on it follow the rules for conditional hooks: their state and effects live only
+   * while [host] runs the block in every render. A render that does not run the block drops its
+   * state and detaches its effects.
+   *
+   * Don't keep a hosted scope past the render that created it: it still refers to that render's
+   * hook data, so a later `useState` fails and a later `useEffect` is silently lost.
+   */
+  @ExperimentalLithoApi
+  protected constructor(host: ComponentScope) : this(host.context, host.requireHookState())
+
+  // Shared with every scope created for this render with the hosted constructor. Null while
+  // enableLazyListChildGroups is off: this scope then keeps its hook data in the fields below.
+  private var hookState: HookState? = hookState
+
+  private var resolveContextField: ResolveContext? = null
+  private var stateAlreadyMarkedAsUsedField: Boolean = false
+  private var ownedStateContainerField: KStateContainer? = null
+  private var transitionDataField: MutableTransitionData? = null
+  private var useEffectEntriesField: MutableList<Attachable>? = null
+  private var resolveEffectsField: MutableList<Attachable>? = null
+  private var discardKeyField: Any? = null
+  private var visitedHookKeysField: MutableList<HookKey>? = null
+  private var currentHookKeyField: HookKey? = null
+  private var hookDepthField: Int = 0
+  private var hookIdCountersByDepthField: MutableList<MutableIntIntMap>? = null
+  private var hookEnterCalledField: Boolean = false
+  private var customHookKeyCountsField: MutableMap<HookKey, Int>? = null
+  private var reportedDuplicateCustomHookKeyField: Boolean = false
+
+  private fun requireHookState(): HookState =
+      hookState
+          ?: HookState().also { state ->
+            state.resolveContext = resolveContextField
+            state.stateAlreadyMarkedAsUsed = stateAlreadyMarkedAsUsedField
+            state.ownedStateContainer = ownedStateContainerField
+            state.transitionData = transitionDataField
+            state.useEffectEntries = useEffectEntriesField
+            state.resolveEffects = resolveEffectsField
+            state.discardKey = discardKeyField
+            state.visitedHookKeys = visitedHookKeysField
+            state.currentHookKey = currentHookKeyField
+            state.hookDepth = hookDepthField
+            state.hookIdCountersByDepth = hookIdCountersByDepthField
+            state.hookEnterCalled = hookEnterCalledField
+            state.customHookKeyCounts = customHookKeyCountsField
+            state.reportedDuplicateCustomHookKey = reportedDuplicateCustomHookKeyField
+            hookState = state
+          }
+
   private var isPristine: Boolean = true
-  private var _resolveContext: ResolveContext? = null
+
+  private var _resolveContext: ResolveContext?
+    get() = hookState.let { if (it != null) it.resolveContext else resolveContextField }
+    set(value) {
+      val state = hookState
+      if (state != null) state.resolveContext = value else resolveContextField = value
+    }
 
   internal val resolveContext: ResolveContext
     get() =
@@ -74,23 +147,59 @@ internal constructor(override val context: ComponentContext) : ResourcesScope {
   val isResolveCancelled: Boolean
     get() = _resolveContext?.isFutureReleased ?: false
 
-  // TODO: Extract into more generic container to track hooks when needed
-  internal var stateAlreadyMarkedAsUsed: Boolean = false
+  internal var stateAlreadyMarkedAsUsed: Boolean
+    get() = hookState.let {
+      if (it != null) it.stateAlreadyMarkedAsUsed else stateAlreadyMarkedAsUsedField
+    }
+    set(value) {
+      val state = hookState
+      if (state != null) state.stateAlreadyMarkedAsUsed = value
+      else stateAlreadyMarkedAsUsedField = value
+    }
 
   // state container of the component for the current render pass
-  internal var ownedStateContainer: KStateContainer? = null
-  internal var transitionData: MutableTransitionData? = null
-  internal var useEffectEntries: MutableList<Attachable>? = null
-  internal var resolveEffects: MutableList<Attachable>? = null
-  // Identifies this render's [useOnDiscard] callbacks; recorded on its node.
-  internal var discardKey: Any? = null
+  internal var ownedStateContainer: KStateContainer?
+    get() = hookState.let { if (it != null) it.ownedStateContainer else ownedStateContainerField }
+    set(value) {
+      val state = hookState
+      if (state != null) state.ownedStateContainer = value else ownedStateContainerField = value
+    }
 
-  // Hook keys visited this render, consumed by pruneToVisitedIfNeeded. Used only for membership, so
-  // a list works and is cheaper than a set for the few hooks per component. Populated via
-  // [recordVisitedHookKey], which borrows a recycled buffer from [VisitedHookKeysPool]. The buffer
-  // is returned in [withResolveContext], so steady-state pruning adds no per-render list
-  // allocation.
-  internal var visitedHookKeys: MutableList<HookKey>? = null
+  internal var transitionData: MutableTransitionData?
+    get() = hookState.let { if (it != null) it.transitionData else transitionDataField }
+    set(value) {
+      val state = hookState
+      if (state != null) state.transitionData = value else transitionDataField = value
+    }
+
+  internal var useEffectEntries: MutableList<Attachable>?
+    get() = hookState.let { if (it != null) it.useEffectEntries else useEffectEntriesField }
+    set(value) {
+      val state = hookState
+      if (state != null) state.useEffectEntries = value else useEffectEntriesField = value
+    }
+
+  internal var resolveEffects: MutableList<Attachable>?
+    get() = hookState.let { if (it != null) it.resolveEffects else resolveEffectsField }
+    set(value) {
+      val state = hookState
+      if (state != null) state.resolveEffects = value else resolveEffectsField = value
+    }
+
+  // Identifies this render's [useOnDiscard] callbacks; recorded on its node.
+  internal var discardKey: Any?
+    get() = hookState.let { if (it != null) it.discardKey else discardKeyField }
+    set(value) {
+      val state = hookState
+      if (state != null) state.discardKey = value else discardKeyField = value
+    }
+
+  internal var visitedHookKeys: MutableList<HookKey>?
+    get() = hookState.let { if (it != null) it.visitedHookKeys else visitedHookKeysField }
+    set(value) {
+      val state = hookState
+      if (state != null) state.visitedHookKeys = value else visitedHookKeysField = value
+    }
 
   /**
    * Records [hookKey] as visited this render for liveness-based pruning. Lazily borrows a buffer
@@ -102,12 +211,52 @@ internal constructor(override val context: ComponentContext) : ResourcesScope {
     (visitedHookKeys ?: VisitedHookKeysPool.borrow().also { visitedHookKeys = it }).add(hookKey)
   }
 
-  private var _currentHookKey: HookKey? = null
-  private var hookDepth: Int = 0
-  private var hookIdCountersByDepth: MutableList<MutableIntIntMap>? = null
-  private var hookEnterCalled: Boolean = false
-  private var customHookKeyCounts: MutableMap<HookKey, Int>? = null
-  private var reportedDuplicateCustomHookKey: Boolean = false
+  private var _currentHookKey: HookKey?
+    get() = hookState.let { if (it != null) it.currentHookKey else currentHookKeyField }
+    set(value) {
+      val state = hookState
+      if (state != null) state.currentHookKey = value else currentHookKeyField = value
+    }
+
+  private var hookDepth: Int
+    get() = hookState.let { if (it != null) it.hookDepth else hookDepthField }
+    set(value) {
+      val state = hookState
+      if (state != null) state.hookDepth = value else hookDepthField = value
+    }
+
+  private var hookIdCountersByDepth: MutableList<MutableIntIntMap>?
+    get() = hookState.let {
+      if (it != null) it.hookIdCountersByDepth else hookIdCountersByDepthField
+    }
+    set(value) {
+      val state = hookState
+      if (state != null) state.hookIdCountersByDepth = value else hookIdCountersByDepthField = value
+    }
+
+  private var hookEnterCalled: Boolean
+    get() = hookState.let { if (it != null) it.hookEnterCalled else hookEnterCalledField }
+    set(value) {
+      val state = hookState
+      if (state != null) state.hookEnterCalled = value else hookEnterCalledField = value
+    }
+
+  private var customHookKeyCounts: MutableMap<HookKey, Int>?
+    get() = hookState.let { if (it != null) it.customHookKeyCounts else customHookKeyCountsField }
+    set(value) {
+      val state = hookState
+      if (state != null) state.customHookKeyCounts = value else customHookKeyCountsField = value
+    }
+
+  private var reportedDuplicateCustomHookKey: Boolean
+    get() = hookState.let {
+      if (it != null) it.reportedDuplicateCustomHookKey else reportedDuplicateCustomHookKeyField
+    }
+    set(value) {
+      val state = hookState
+      if (state != null) state.reportedDuplicateCustomHookKey = value
+      else reportedDuplicateCustomHookKeyField = value
+    }
 
   /**
    * Called by compiler-injected code before a dynamically repeated @Hook function call. Creates a
@@ -313,6 +462,32 @@ internal constructor(override val context: ComponentContext) : ResourcesScope {
   fun <T : View> findViewWithTag(tag: Any): T? {
     return context.findViewWithTag(tag)
   }
+}
+
+/**
+ * What one component render records through its hooks. A scope created for this render with the
+ * hosted constructor shares the instance, so hooks called on either scope belong to the same
+ * component. Add per-render hook data here and as a field on [ComponentScope], which keeps it there
+ * while enableLazyListChildGroups is off.
+ */
+internal class HookState {
+  var resolveContext: ResolveContext? = null
+  var stateAlreadyMarkedAsUsed: Boolean = false
+  var ownedStateContainer: KStateContainer? = null
+  var transitionData: MutableTransitionData? = null
+  var useEffectEntries: MutableList<Attachable>? = null
+  var resolveEffects: MutableList<Attachable>? = null
+  var discardKey: Any? = null
+  // Hook keys visited this render, consumed by pruneToVisitedIfNeeded. Used only for membership, so
+  // a list works and is cheaper than a set for the few hooks per component. The buffer is borrowed
+  // from [VisitedHookKeysPool] and returned in [ComponentScope.withResolveContext].
+  var visitedHookKeys: MutableList<HookKey>? = null
+  var currentHookKey: HookKey? = null
+  var hookDepth: Int = 0
+  var hookIdCountersByDepth: MutableList<MutableIntIntMap>? = null
+  var hookEnterCalled: Boolean = false
+  var customHookKeyCounts: MutableMap<HookKey, Int>? = null
+  var reportedDuplicateCustomHookKey: Boolean = false
 }
 
 /**
