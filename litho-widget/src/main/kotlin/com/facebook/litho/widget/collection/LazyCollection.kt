@@ -17,6 +17,7 @@
 package com.facebook.litho.widget.collection
 
 import android.graphics.Color
+import android.util.Log
 import android.view.View
 import androidx.annotation.ColorInt
 import androidx.recyclerview.widget.RecyclerView
@@ -29,6 +30,7 @@ import com.facebook.litho.LithoStartupLogger
 import com.facebook.litho.Style
 import com.facebook.litho.annotations.ExperimentalLithoApi
 import com.facebook.litho.annotations.Hook
+import com.facebook.litho.config.LithoDebugConfigurations
 import com.facebook.litho.debug.DebugInfoReporter
 import com.facebook.litho.eventHandlerWithReturn
 import com.facebook.litho.handle
@@ -453,6 +455,16 @@ private fun ComponentScope.useFlattenedChildGroups(
     children: LazyCollectionChildren,
 ): LazyCollectionChildren {
   children.childGroups ?: return children
+  if (
+      LithoDebugConfigurations.isDebugModeEnabled &&
+          !context.lithoConfiguration.componentsConfig.enableLazyListChildGroups
+  ) {
+    Log.e(
+        "LazyCollection",
+        "LazyList child groups require ComponentsConfiguration.enableLazyListChildGroups; " +
+            "with it off, their rows may render stale TreeProps.",
+    )
+  }
   val flattened = LazyCollectionChildren()
   useAppendRows(children, groupId = null, into = flattened, groupIds = HashSet())
   return flattened

@@ -42,7 +42,10 @@ abstract class LazyListChildGroupTestCases(enableNewCollection: Boolean) {
 
   @get:Rule
   val lithoTestRule = LithoTestRule(
-      ComponentsConfiguration.defaultInstance.copy(enableNewCollection = enableNewCollection),
+      ComponentsConfiguration.defaultInstance.copy(
+          enableNewCollection = enableNewCollection,
+          enableLazyListChildGroups = true,
+      ),
   )
 
   @Test
@@ -189,11 +192,6 @@ abstract class LazyListChildGroupTestCases(enableNewCollection: Boolean) {
       child(id = "count:${count.value}", component = Text("${count.value}"))
     }
   }
-
-  private fun LazyListChildrenScope.childGroup(
-      id: Any,
-      content: LazyListChildGroupScope.() -> Unit,
-  ) = children.addChildGroup(id, content)
 
   private fun renderAndGetIds(content: ComponentScope.() -> Component): List<Any?>? {
     class Owner : KComponent() {

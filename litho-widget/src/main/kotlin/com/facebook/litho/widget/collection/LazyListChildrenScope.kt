@@ -20,11 +20,25 @@ import com.facebook.litho.Component
 import com.facebook.litho.ContainerDsl
 import com.facebook.litho.ResourcesScope
 
-/** The functions that declare the rows of a [LazyList]. */
+/**
+ * The functions that declare the rows of a [LazyList]. Write reusable helpers as extensions of this
+ * interface so they work both at the top level of a list and inside a [childGroup].
+ */
 @ContainerDsl
 interface LazyListChildrenScope : ResourcesScope {
 
   val children: LazyCollectionChildren
+
+  /**
+   * Adds a group of rows. The rows [content] declares are placed where the group is declared, so
+   * the list stays one flat list of rows, and the group adds no view.
+   *
+   * [content] runs during the list's render and may call hooks; their state belongs to the group. A
+   * row id only needs to be unique within its group, and [id] must be unique across the list.
+   */
+  fun childGroup(id: Any, content: LazyListChildGroupScope.() -> Unit) {
+    children.addChildGroup(id, content)
+  }
 
   /**
    * Add a child [Component] to the Lazy Collection.
