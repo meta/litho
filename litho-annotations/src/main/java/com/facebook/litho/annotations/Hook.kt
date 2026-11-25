@@ -20,14 +20,15 @@ package com.facebook.litho.annotations
  * Marker for the Litho hooks.
  *
  * Carrying this annotation is what makes a function a hook, and it drives both hook rules:
- * `KComponentHookCallsite` requires the call to come from `render()` or another `@Hook` function,
- * and `KComponentHookInDeferredLambda` requires it to run synchronously during render. Neither rule
- * restricts control flow — the compiler plugin gives each call site a structural identity, so hooks
- * may be called in conditions, loops, and after early returns. Two consequences are worth knowing:
- * a hook's state lives exactly as long as the hook keeps being called, so a hook that stops running
- * loses its state and starts from its initial value when it runs again; and repeated invocations of
- * one call site are positional unless wrapped in `withNewScope` with a stable product key. See the
- * Hooks Overview doc.
+ * `KComponentHookCallsite` requires the call to come from `render()`, another `@Hook` function, or
+ * a lambda whose receiver is marked [RunsInOwnHookScope], and `KComponentHookInDeferredLambda`
+ * requires it to run synchronously during render. Neither rule restricts control flow — the
+ * compiler plugin gives each call site a structural identity, so hooks may be called in conditions,
+ * loops, and after early returns. Two consequences are worth knowing: a hook's state lives exactly
+ * as long as the hook keeps being called, so a hook that stops running loses its state and starts
+ * from its initial value when it runs again; and repeated invocations of one call site are
+ * positional unless wrapped in `withNewScope` with a stable product key. See the Hooks Overview
+ * doc.
  *
  * Calling a hook requires opting in, and the only supported way to do that is the `-opt-in`
  * argument that `litho_hook_identity_decorator` emits alongside the Litho compiler plugin. A module

@@ -3,6 +3,8 @@
 // class OuterConditionalComponent
 //   val condition: Boolean
 //   fun render(): Component
+// class OwnScope
+// class OwnScopeSubclass
 // class HookInRender
 //   val a: String
 //   val b: Int
@@ -126,3 +128,27 @@ fun ComponentScope.useDeferred(): Boolean =
       useBinding { true }
       false
     }
+
+// FILE: HookInOwnHookScopeReceiverLambda.kt
+
+import com.facebook.litho.ComponentScope
+import com.facebook.litho.annotations.ExperimentalLithoApi
+import com.facebook.litho.annotations.RunsInOwnHookScope
+import com.facebook.litho.useState
+
+// A lambda whose receiver runs in its own hook scope hosts its hooks in any function. This is the
+// shape of a LazyList childGroup body in a helper.
+@OptIn(ExperimentalLithoApi::class)
+@RunsInOwnHookScope
+abstract class OwnScope(host: ComponentScope) : ComponentScope(host)
+
+abstract class OwnScopeSubclass(host: ComponentScope) : OwnScope(host)
+
+fun hosted(content: OwnScope.() -> Unit) = Unit
+
+fun hostedSubclass(content: OwnScopeSubclass.() -> Unit) = Unit
+
+fun helper() {
+  hosted { useState { 0 } }
+  hostedSubclass { useState { 0 } }
+}

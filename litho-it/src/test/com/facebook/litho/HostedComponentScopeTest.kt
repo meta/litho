@@ -17,6 +17,7 @@
 package com.facebook.litho
 
 import com.facebook.litho.annotations.ExperimentalLithoApi
+import com.facebook.litho.annotations.RunsInOwnHookScope
 import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.core.height
 import com.facebook.litho.core.width
@@ -57,7 +58,84 @@ class HostedComponentScopeTest(private val enableLazyListChildGroups: Boolean) {
       ),
   )
 
+  // Compiler identity fixture: the returned receiver body runs synchronously in render below.
+  @Suppress("KComponentHookCallsite")
+  private fun stateBody(): HostedScope.() -> Pair<State<Int>, State<Int>> = {
+    useState { 1 } to useState { 2 }
+  }
+
+  // Compiler identity fixture: the returned receiver body runs synchronously in render below.
+  @Suppress("KComponentHookCallsite")
+  private fun <S : HostedScope> genericStateBody(): S.() -> Pair<State<Int>, State<Int>> = {
+    useState { 1 } to useState { 2 }
+  }
+
+  @Test
+  fun `generic receiver lambda in named helper has distinct persistent state identities`() {
+    lateinit var states: Pair<State<Int>, State<Int>>
+    class TestComponent : KComponent() {
+      override fun ComponentScope.render(): Component {
+        states =
+            withNewScope("generic-helper") {
+              genericStateBody<HostedScope>().invoke(HostedScope(this))
+            }
+        return Row(style = Style.height(100.dp).width(100.dp))
+      }
+    }
+
+    val view = lithoTestRule.render { TestComponent() }
+    assertThat(states.first.value).isEqualTo(1)
+    assertThat(states.second.value).isEqualTo(2)
+    lithoTestRule.act(view) { states.second.update(20) }
+    assertThat(states.first.value).isEqualTo(1)
+    assertThat(states.second.value).isEqualTo(20)
+  }
+
+  @Test
+  fun `receiver lambda in named helper has distinct persistent state identities`() {
+    lateinit var states: Pair<State<Int>, State<Int>>
+    class TestComponent : KComponent() {
+      override fun ComponentScope.render(): Component {
+        states = withNewScope("helper") { stateBody().invoke(HostedScope(this)) }
+        return Row(style = Style.height(100.dp).width(100.dp))
+      }
+    }
+
+    val view = lithoTestRule.render { TestComponent() }
+    assertThat(states.first.value).isEqualTo(1)
+    assertThat(states.second.value).isEqualTo(2)
+    lithoTestRule.act(view) { states.second.update(20) }
+    assertThat(states.first.value).isEqualTo(1)
+    assertThat(states.second.value).isEqualTo(20)
+  }
+
+  @Test
+  fun `method local class property receiver lambda inherits named owner identity`() {
+    lateinit var states: Pair<State<Int>, State<Int>>
+    class TestComponent : KComponent() {
+      override fun ComponentScope.render(): Component {
+        class Holder {
+          // Deliberate stored-body control, invoked synchronously under withNewScope below.
+          @Suppress("KComponentHookInDeferredLambda")
+          val body: HostedScope.() -> Pair<State<Int>, State<Int>> = {
+            useState { 1 } to useState { 2 }
+          }
+        }
+        states = withNewScope("local-class") { Holder().body.invoke(HostedScope(this)) }
+        return Row(style = Style.height(100.dp).width(100.dp))
+      }
+    }
+
+    val view = lithoTestRule.render { TestComponent() }
+    assertThat(states.first.value).isEqualTo(1)
+    assertThat(states.second.value).isEqualTo(2)
+    lithoTestRule.act(view) { states.first.update(10) }
+    assertThat(states.first.value).isEqualTo(10)
+    assertThat(states.second.value).isEqualTo(2)
+  }
+
   @OptIn(ExperimentalLithoApi::class)
+  @RunsInOwnHookScope
   private class HostedScope(host: ComponentScope) : ComponentScope(host)
 
   @Test

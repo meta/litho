@@ -4,6 +4,11 @@
 // e: file:///Hooks.kt:10:40 Hooks can only be called from render() or from another @Hook function. Either annotate this function @Hook, which makes its own call sites subject to the same rule, or hoist the hook into the caller and pass the value in. See: https://www.internalfb.com/intern/staticdocs/litho/docs/state-and-side-effects/hooks-intro#rules-for-hooks
 // e: file:///Hooks.kt:94:20 Hooks can only be called from render() or from another @Hook function. Either annotate this function @Hook, which makes its own call sites subject to the same rule, or hoist the hook into the caller and pass the value in. See: https://www.internalfb.com/intern/staticdocs/litho/docs/state-and-side-effects/hooks-intro#rules-for-hooks
 // e: file:///Hooks.kt:102:23 Hooks can only be called from render() or from another @Hook function. Either annotate this function @Hook, which makes its own call sites subject to the same rule, or hoist the hook into the caller and pass the value in. See: https://www.internalfb.com/intern/staticdocs/litho/docs/state-and-side-effects/hooks-intro#rules-for-hooks
+// e: file:///Hooks.kt:111:55 Hooks can only be called from render() or from another @Hook function. Either annotate this function @Hook, which makes its own call sites subject to the same rule, or hoist the hook into the caller and pass the value in. See: https://www.internalfb.com/intern/staticdocs/litho/docs/state-and-side-effects/hooks-intro#rules-for-hooks
+// e: file:///Hooks.kt:115:30 Hooks can only be called from render() or from another @Hook function. Either annotate this function @Hook, which makes its own call sites subject to the same rule, or hoist the hook into the caller and pass the value in. See: https://www.internalfb.com/intern/staticdocs/litho/docs/state-and-side-effects/hooks-intro#rules-for-hooks
+// e: file:///Hooks.kt:117:73 Hooks can only be called from render() or from another @Hook function. Either annotate this function @Hook, which makes its own call sites subject to the same rule, or hoist the hook into the caller and pass the value in. See: https://www.internalfb.com/intern/staticdocs/litho/docs/state-and-side-effects/hooks-intro#rules-for-hooks
+// e: file:///Hooks.kt:119:48 Hooks can only be called from render() or from another @Hook function. Either annotate this function @Hook, which makes its own call sites subject to the same rule, or hoist the hook into the caller and pass the value in. See: https://www.internalfb.com/intern/staticdocs/litho/docs/state-and-side-effects/hooks-intro#rules-for-hooks
+// e: file:///Hooks.kt:121:54 Hooks can only be called from render() or from another @Hook function. Either annotate this function @Hook, which makes its own call sites subject to the same rule, or hoist the hook into the caller and pass the value in. See: https://www.internalfb.com/intern/staticdocs/litho/docs/state-and-side-effects/hooks-intro#rules-for-hooks
 // END
 
 // FILE: Hooks.kt
@@ -113,4 +118,20 @@ class HookInAnonymousObjectInRender : KComponent() {
     }
     return Column()
   }
+}
+
+// Only a lambda whose receiver runs in its own hook scope hosts a hook. Any other lambda, including
+// one whose receiver is a plain ComponentScope, is looked through to the plain helper around it.
+class HookInNonOwnScopeReceiverLambda {
+  fun ComponentScope.helper() = with("not a scope") { useState { 0 } }
+
+  fun hosted(content: ComponentScope.() -> Unit) = Unit
+
+  fun forwarded() = hosted { useState { 0 } }
+
+  fun plainCounter(scope: ComponentScope, initial: Int) = with(scope) { useState { initial } }
+
+  fun ran(scope: ComponentScope) = scope.run { useState { 0 } }
+
+  fun applied(scope: ComponentScope) = scope.apply { useState { 0 } }
 }
