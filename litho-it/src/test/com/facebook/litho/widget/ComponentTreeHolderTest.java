@@ -198,6 +198,30 @@ public class ComponentTreeHolderTest {
   }
 
   @Test
+  public void testRebuildsTreeReleasedForDestroyedActivity() {
+    final boolean previous = ComponentsConfiguration.releaseActivityTreesOnDestroy;
+    ComponentsConfiguration.releaseActivityTreesOnDestroy = true;
+    try {
+      ComponentTreeHolder holder = createComponentTreeHolder(mComponentRenderInfo);
+      holder.computeLayoutSync(mContext, mWidthSpec, mHeightSpec, new Size());
+      final ComponentTree tree = holder.getComponentTree();
+
+      tree.release();
+
+      assertThat(holder.isTreeValid()).isFalse();
+      assertThat(holder.hasCompletedLatestLayout()).isFalse();
+
+      holder.computeLayoutSync(mContext, mWidthSpec, mHeightSpec, new Size());
+
+      assertThat(holder.getComponentTree()).isNotSameAs(tree);
+      assertThat(holder.getComponentTree().isReleased()).isFalse();
+      assertThat(holder.isTreeValid()).isTrue();
+    } finally {
+      ComponentsConfiguration.releaseActivityTreesOnDestroy = previous;
+    }
+  }
+
+  @Test
   public void testHasCompletedLatestLayoutForSyncRender() {
     ComponentTreeHolder holder = createComponentTreeHolder(mComponentRenderInfo);
     holder.computeLayoutSync(mContext, mWidthSpec, mHeightSpec, new Size());

@@ -421,6 +421,9 @@ internal constructor(
      */
     @JvmField var useOwnJobInComponentCoroutineScope: Boolean = false
 
+    /** Apps install [com.facebook.litho.ActivityScopedTreeReleaser] only when this is set. */
+    @JvmField var releaseActivityTreesOnDestroy: Boolean = false
+
     @JvmField var shouldOverrideHasTransientState: Boolean = false
     @JvmField var reduceMemorySpikeUserSession: Boolean = false
     @JvmField var reduceMemorySpikeDataDiffSection: Boolean = false

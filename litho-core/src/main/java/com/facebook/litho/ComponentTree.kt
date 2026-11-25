@@ -128,7 +128,7 @@ open class ComponentTree protected constructor(builder: Builder) :
   var lithoVisibilityEventsController: LithoVisibilityEventsController? = null
     private set
 
-  @GuardedBy("this") private var released: Boolean = false
+  @Volatile private var released: Boolean = false
 
   @ThreadConfined(ThreadConfined.UI)
   private var onReleaseListeners: MutableList<LithoTreeLifecycleProvider.OnReleaseListener>? = null
@@ -439,6 +439,9 @@ open class ComponentTree protected constructor(builder: Builder) :
     }
 
     ComponentTreeRegistry.register(this)
+    if (ActivityScopedTreeReleaser.isInstalled) {
+      ActivityScopedTreeReleaser.onTreeCreated(this, androidContext)
+    }
   }
 
   /**
@@ -3088,6 +3091,11 @@ open class ComponentTree protected constructor(builder: Builder) :
         AccessibilityUtils.isAccessibilityEnabled(accessibilityManager) ==
             layoutState.isAccessibilityEnabled
   }
+
+  /** [isReleased] without taking this tree's lock, for callers that already hold another lock. */
+  @get:RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+  val isReleasedNoLock: Boolean
+    get() = released
 
   @get:Synchronized
   @Suppress("FieldsBelowInit")

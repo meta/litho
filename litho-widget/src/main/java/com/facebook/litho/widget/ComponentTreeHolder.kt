@@ -107,7 +107,7 @@ open class ComponentTreeHolder @VisibleForTesting internal constructor(builder: 
 
   @get:Synchronized
   open val isTreeValid: Boolean
-    get() = _isTreeValid
+    get() = _isTreeValid && !hasReleasedComponentTree()
 
   @get:Synchronized
   open val componentTree: ComponentTree?
@@ -426,7 +426,10 @@ open class ComponentTreeHolder @VisibleForTesting internal constructor(builder: 
 
   @Synchronized
   open fun isTreeValidForSizeSpecs(widthSpec: Int, heightSpec: Int): Boolean =
-      _isTreeValid && lastRequestedWidthSpec == widthSpec && lastRequestedHeightSpec == heightSpec
+      _isTreeValid &&
+          !hasReleasedComponentTree() &&
+          lastRequestedWidthSpec == widthSpec &&
+          lastRequestedHeightSpec == heightSpec
 
   @Synchronized
   open fun updateLayoutHandler(layoutHandler: RunnableHandler?) {
@@ -454,21 +457,36 @@ open class ComponentTreeHolder @VisibleForTesting internal constructor(builder: 
   @Synchronized
   fun hasCompletedLatestLayout(): Boolean =
       renderInfo.rendersView() ||
-          (_componentTree?.hasCompatibleLayout(lastRequestedWidthSpec, lastRequestedHeightSpec) ==
-              true)
+          (!hasReleasedComponentTree() &&
+              _componentTree?.hasCompatibleLayout(
+                  lastRequestedWidthSpec,
+                  lastRequestedHeightSpec,
+              ) == true)
 
   @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
   @Synchronized
   fun hasComponentAndSizeCompatibleLayoutIgnoringAccessibility(): Boolean =
       renderInfo.rendersView() ||
-          (_componentTree?.hasComponentAndSizeCompatibleLayoutIgnoringAccessibility(
-              lastRequestedWidthSpec,
-              lastRequestedHeightSpec,
-          ) == true)
+          (!hasReleasedComponentTree() &&
+              _componentTree?.hasComponentAndSizeCompatibleLayoutIgnoringAccessibility(
+                  lastRequestedWidthSpec,
+                  lastRequestedHeightSpec,
+              ) == true)
+
+  @GuardedBy("this")
+  private fun hasReleasedComponentTree(): Boolean =
+      ComponentsConfiguration.releaseActivityTreesOnDestroy &&
+          _componentTree?.isReleasedNoLock == true
 
   @OptIn(ExperimentalLithoApi::class)
   @GuardedBy("this")
   private fun ensureComponentTree(context: ComponentContext): ComponentTree {
+    if (hasReleasedComponentTree()) {
+      _componentTree = null
+      _isTreeValid = false
+      visibilityEventsController?.let { lithoVisibilityEventsController?.removeListener(it) }
+      visibilityEventsController = null
+    }
     if (_componentTree == null) {
       val parentController = lithoVisibilityEventsController
       if (parentController != null) {
