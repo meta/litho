@@ -424,6 +424,9 @@ internal constructor(
     /** Apps install [com.facebook.litho.ActivityScopedTreeReleaser] only when this is set. */
     @JvmField var releaseActivityTreesOnDestroy: Boolean = false
 
+    /** Section handles held by product code hold their SectionTree weakly. */
+    @JvmField var weakSectionTreeHandles: Boolean = false
+
     @JvmField var shouldOverrideHasTransientState: Boolean = false
     @JvmField var reduceMemorySpikeUserSession: Boolean = false
     @JvmField var reduceMemorySpikeDataDiffSection: Boolean = false

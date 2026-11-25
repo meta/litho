@@ -23,7 +23,9 @@ import com.facebook.litho.ComponentScope
 import com.facebook.litho.KComponent
 import com.facebook.litho.LithoView
 import com.facebook.litho.Style
+import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.kotlin.widget.Text
+import com.facebook.litho.sections.SectionContext
 import com.facebook.litho.sections.SectionTree
 import com.facebook.litho.testing.LithoTestRule
 import com.facebook.litho.testing.TestLithoView
@@ -32,6 +34,7 @@ import com.facebook.litho.view.viewTag
 import com.facebook.litho.widget.RecyclerEventsController
 import com.facebook.litho.widget.SectionsRecyclerView
 import com.facebook.litho.widget.SmoothScrollAlignmentType
+import java.lang.ref.WeakReference
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.Rule
 import org.junit.Test
@@ -40,6 +43,7 @@ import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.spy
 import org.mockito.kotlin.verify
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 
@@ -310,5 +314,37 @@ class LazyCollectionControllerTest {
           (findFirstVisibleItemPosition()..findLastVisibleItemPosition())
         }
     assertThat(visibleRange).contains(9)
+  }
+
+  @Test
+  fun `a controller kept by app code does not keep its list alive`() {
+    val previous = ComponentsConfiguration.weakSectionTreeHandles
+    ComponentsConfiguration.weakSectionTreeHandles = true
+    val controller = LazyCollectionController()
+    val sectionTree =
+        try {
+          attachUnreferencedTree(controller)
+        } finally {
+          ComponentsConfiguration.weakSectionTreeHandles = previous
+        }
+
+    repeat(20) {
+      if (sectionTree.get() != null) {
+        Runtime.getRuntime().gc()
+        Thread.sleep(10)
+      }
+    }
+
+    assertThat(sectionTree.get()).isNull()
+    controller.scrollToIndex(1, 0)
+  }
+
+  private fun attachUnreferencedTree(
+      controller: LazyCollectionController,
+  ): WeakReference<SectionTree> {
+    val tree =
+        SectionTree.create(SectionContext(RuntimeEnvironment.getApplication()), mock()).build()
+    controller.scrollerDelegate = SectionTreeScroller(tree)
+    return WeakReference(tree)
   }
 }

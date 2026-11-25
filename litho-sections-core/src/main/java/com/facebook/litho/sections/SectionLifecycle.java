@@ -34,12 +34,14 @@ import com.facebook.litho.StateContainer;
 import com.facebook.litho.TreePropContainer;
 import com.facebook.litho.annotations.EventHandlerRebindMode;
 import com.facebook.litho.annotations.OnCreateTreeProp;
+import com.facebook.litho.config.ComponentsConfiguration;
 import com.facebook.litho.sections.annotations.DiffSectionSpec;
 import com.facebook.litho.sections.annotations.GroupSectionSpec;
 import com.facebook.litho.sections.annotations.OnDataBound;
 import com.facebook.litho.sections.annotations.OnDataRendered;
 import com.facebook.litho.sections.annotations.OnDiff;
 import com.facebook.litho.widget.SmoothScrollAlignmentType;
+import java.util.Objects;
 
 public abstract class SectionLifecycle implements EventDispatcher, EventTriggerTarget {
   static final String WRONG_CONTEXT_FOR_EVENT_HANDLER =
@@ -226,10 +228,12 @@ public abstract class SectionLifecycle implements EventDispatcher, EventTriggerT
       final EventHandlerRebindMode mode) {
     Section section;
     if (c == null || (section = c.getSectionScope()) == null) {
-      ComponentsReporter.emitMessage(
-          ComponentsReporter.LogLevel.FATAL,
-          NO_SCOPE_EVENT_HANDLER,
-          "Creating event handler without scope.");
+      if (c == null || !c.hasCollectedSectionTree()) {
+        ComponentsReporter.emitMessage(
+            ComponentsReporter.LogLevel.FATAL,
+            NO_SCOPE_EVENT_HANDLER,
+            "Creating event handler without scope.");
+      }
       return NoOpEventHandler.getNoOpEventHandler();
     } else if (reference != section.getClass()) {
       ComponentsReporter.emitMessage(
@@ -273,13 +277,15 @@ public abstract class SectionLifecycle implements EventDispatcher, EventTriggerT
   @SuppressWarnings({"rawtypes", "unchecked"}) // heterogeneous event plumbing (raw by design)
   @Nullable
   protected static EventTrigger getEventTrigger(SectionContext c, int id, String key) {
-    if (c.getSectionScope() == null) {
+    final Section scope = c.getSectionScope();
+    final SectionTree sectionTree = c.getSectionTree();
+    if (scope == null || (ComponentsConfiguration.weakSectionTreeHandles && sectionTree == null)) {
       return null;
     }
 
     EventTrigger trigger =
-        c.getSectionTree()
-            .getEventTrigger(new EventTriggerKey(c.getSectionScope().getGlobalKey(), id, key));
+        Objects.requireNonNull(sectionTree)
+            .getEventTrigger(new EventTriggerKey(scope.getGlobalKey(), id, key));
 
     if (trigger == null) {
       return null;
@@ -291,11 +297,13 @@ public abstract class SectionLifecycle implements EventDispatcher, EventTriggerT
   @SuppressWarnings({"rawtypes", "unchecked"}) // heterogeneous event plumbing (raw by design)
   @Nullable
   protected static EventTrigger getEventTrigger(SectionContext c, int id, Handle handle) {
-    if (c.getSectionScope() == null) {
+    final SectionTree sectionTree = c.getSectionTree();
+    if (c.getSectionScope() == null
+        || (ComponentsConfiguration.weakSectionTreeHandles && sectionTree == null)) {
       return null;
     }
 
-    EventTrigger trigger = c.getSectionTree().getEventTrigger(handle, id);
+    EventTrigger trigger = Objects.requireNonNull(sectionTree).getEventTrigger(handle, id);
 
     if (trigger == null) {
       return null;

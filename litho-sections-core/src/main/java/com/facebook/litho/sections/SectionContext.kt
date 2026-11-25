@@ -31,6 +31,7 @@ import com.facebook.litho.StringGlobalKey
 import com.facebook.litho.TreePropContainer
 import com.facebook.litho.allNotNull
 import com.facebook.litho.annotations.EventHandlerRebindMode
+import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.widget.SectionsDebug
 import java.lang.ref.WeakReference
 
@@ -48,8 +49,26 @@ constructor(
 
   val keyHandler: KeyHandler = KeyHandler()
 
-  var sectionTree: SectionTree? = null
-    private set
+  private var strongSectionTree: SectionTree? = null
+  private var weakSectionTree: WeakReference<SectionTree>? = null
+
+  val sectionTree: SectionTree?
+    get() = strongSectionTree ?: weakSectionTree?.get()
+
+  fun hasCollectedSectionTree(): Boolean = weakSectionTree.let { it != null && it.get() == null }
+
+  private fun setSectionTree(sectionTree: SectionTree?) {
+    if (sectionTree != null && ComponentsConfiguration.weakSectionTreeHandles) {
+      weakSectionTree = WeakReference(sectionTree)
+    } else {
+      strongSectionTree = sectionTree
+    }
+  }
+
+  private fun copySectionTree(from: SectionContext) {
+    strongSectionTree = from.strongSectionTree
+    weakSectionTree = from.weakSectionTree
+  }
 
   var treeLoadingEventHandler: EventHandler<LoadingEvent>? = null
     private set
@@ -142,7 +161,7 @@ constructor(
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     fun withSectionTree(context: SectionContext, sectionTree: SectionTree?): SectionContext {
       val sectionContext = SectionContext(context)
-      sectionContext.sectionTree = sectionTree
+      sectionContext.setSectionTree(sectionTree)
       sectionContext.treeLoadingEventHandler = SectionTreeLoadingEventHandler(sectionTree)
       return sectionContext
     }
@@ -151,7 +170,7 @@ constructor(
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     fun withScope(context: SectionContext, scope: Section): SectionContext {
       val sectionContext = SectionContext(context)
-      sectionContext.sectionTree = context.sectionTree
+      sectionContext.copySectionTree(context)
       sectionContext.treeLoadingEventHandler = context.treeLoadingEventHandler
       sectionContext.changeSetCalculationState = context.changeSetCalculationState
       sectionContext.scope = WeakReference(scope)
@@ -161,7 +180,7 @@ constructor(
     @JvmStatic
     fun forNewChangeSetCalculation(contextFromSectionTree: SectionContext): SectionContext {
       val sectionContext = SectionContext(contextFromSectionTree)
-      sectionContext.sectionTree = contextFromSectionTree.sectionTree
+      sectionContext.copySectionTree(contextFromSectionTree)
       sectionContext.treeLoadingEventHandler = contextFromSectionTree.treeLoadingEventHandler
       sectionContext.changeSetCalculationState = ChangeSetCalculationState()
       return sectionContext

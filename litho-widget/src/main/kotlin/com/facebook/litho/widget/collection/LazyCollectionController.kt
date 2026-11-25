@@ -24,12 +24,14 @@ import com.facebook.litho.ComponentScope
 import com.facebook.litho.ResourcesScope
 import com.facebook.litho.annotations.ExperimentalLithoApi
 import com.facebook.litho.annotations.Hook
+import com.facebook.litho.config.ComponentsConfiguration
 import com.facebook.litho.sections.SectionTree
 import com.facebook.litho.useState
 import com.facebook.litho.widget.RecyclerEventsController
 import com.facebook.litho.widget.SmoothScrollAlignmentType
 import com.facebook.rendercore.Dimen
 import com.facebook.rendercore.px
+import java.lang.ref.WeakReference
 
 /** A hook to create a cached [LazyCollectionController] to use with a [LazyCollection]. */
 @Hook
@@ -280,14 +282,22 @@ sealed interface ScrollerDelegate {
   fun scrollToIndex(index: Int, @Px offset: Int = 0)
 }
 
-class SectionTreeScroller(private val sectionTree: SectionTree) : ScrollerDelegate {
+class SectionTreeScroller(sectionTree: SectionTree) : ScrollerDelegate {
+
+  private val strongSectionTree: SectionTree? =
+      if (ComponentsConfiguration.weakSectionTreeHandles) null else sectionTree
+  private val weakSectionTree: WeakReference<SectionTree>? =
+      if (strongSectionTree == null) WeakReference(sectionTree) else null
+
+  private val sectionTree: SectionTree?
+    get() = strongSectionTree ?: weakSectionTree?.get()
 
   override fun smoothScrollToId(
       id: Any,
       offset: Int,
       smoothScrollAlignmentType: SmoothScrollAlignmentType,
   ) {
-    sectionTree.requestSmoothFocusOnRoot(id, offset, smoothScrollAlignmentType)
+    sectionTree?.requestSmoothFocusOnRoot(id, offset, smoothScrollAlignmentType)
   }
 
   override fun smoothScrollToIndex(
@@ -295,15 +305,15 @@ class SectionTreeScroller(private val sectionTree: SectionTree) : ScrollerDelega
       offset: Int,
       smoothScrollAlignmentType: SmoothScrollAlignmentType,
   ) {
-    sectionTree.requestSmoothFocusOnRoot(index, offset, smoothScrollAlignmentType)
+    sectionTree?.requestSmoothFocusOnRoot(index, offset, smoothScrollAlignmentType)
   }
 
   override fun scrollToId(id: Any, offset: Int) {
-    sectionTree.requestFocusOnRoot(id, offset)
+    sectionTree?.requestFocusOnRoot(id, offset)
   }
 
   override fun scrollToIndex(index: Int, offset: Int) {
-    sectionTree.requestFocusOnRoot(index, offset)
+    sectionTree?.requestFocusOnRoot(index, offset)
   }
 }
 

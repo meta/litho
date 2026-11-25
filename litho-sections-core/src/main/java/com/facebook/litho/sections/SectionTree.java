@@ -1792,7 +1792,8 @@ public class SectionTree {
           DebugEvents.CREATE_CHILDREN,
           "-1",
           attributes -> {
-            int id = context.getSectionTree() != null ? context.getSectionTree().hashCode() : -1;
+            final SectionTree tree = context.getSectionTree();
+            int id = tree != null ? tree.hashCode() : -1;
             attributes.put(Id, id);
             attributes.put(Name, nextRoot.getSimpleName());
             return Unit.INSTANCE;

@@ -25,11 +25,13 @@ import static com.facebook.litho.widget.SnapUtil.SNAP_TO_START;
 import android.view.View;
 import androidx.recyclerview.widget.RecyclerView;
 import com.facebook.infer.annotation.Nullsafe;
+import com.facebook.litho.config.ComponentsConfiguration;
 import com.facebook.litho.sections.SectionTree;
 import com.facebook.litho.widget.LayoutInfo;
 import com.facebook.litho.widget.RecyclerEventsController;
 import com.facebook.litho.widget.SmoothScrollAlignmentType;
 import com.facebook.litho.widget.SnapUtil;
+import java.lang.ref.WeakReference;
 import javax.annotation.Nullable;
 
 /**
@@ -40,6 +42,7 @@ import javax.annotation.Nullable;
 public class RecyclerCollectionEventsController extends RecyclerEventsController {
 
   @Nullable private SectionTree mSectionTree;
+  @Nullable private WeakReference<SectionTree> mWeakSectionTree;
   private int mSnapMode = SNAP_NONE;
   private int mFirstCompletelyVisibleItemPosition = 0;
   private int mLastCompletelyVisibleItemPosition = 0;
@@ -57,12 +60,16 @@ public class RecyclerCollectionEventsController extends RecyclerEventsController
    * @param showSpinner
    */
   public void requestRefresh(boolean showSpinner) {
-    if (mSectionTree != null) {
-      if (showSpinner) {
-        showRefreshing();
-      }
-
-      mSectionTree.refresh();
+    if (getSectionTree() == null) {
+      return;
+    }
+    if (showSpinner) {
+      showRefreshing();
+    }
+    // Read again, as showing the spinner can bind this controller to another tree.
+    final SectionTree sectionTree = getSectionTree();
+    if (sectionTree != null) {
+      sectionTree.refresh();
     }
   }
 
@@ -168,8 +175,9 @@ public class RecyclerCollectionEventsController extends RecyclerEventsController
    * "id"}.
    */
   public void requestSmoothScroll(Object id, int offset, SmoothScrollAlignmentType type) {
-    if (mSectionTree != null) {
-      mSectionTree.requestSmoothFocusOnRoot(id, offset, type);
+    final SectionTree sectionTree = getSectionTree();
+    if (sectionTree != null) {
+      sectionTree.requestSmoothFocusOnRoot(id, offset, type);
     }
   }
 
@@ -179,8 +187,9 @@ public class RecyclerCollectionEventsController extends RecyclerEventsController
    * com.facebook.litho.widget.RecyclerBinder#ID_CUSTOM_ATTR_KEY "id"}.
    */
   public void requestScroll(Object id, int offset) {
-    if (mSectionTree != null) {
-      mSectionTree.requestFocusOnRoot(id, offset);
+    final SectionTree sectionTree = getSectionTree();
+    if (sectionTree != null) {
+      sectionTree.requestFocusOnRoot(id, offset);
     }
   }
 
@@ -190,8 +199,9 @@ public class RecyclerCollectionEventsController extends RecyclerEventsController
    * viewport change.
    */
   public void requestFocusOnRoot(int index, int offset) {
-    if (mSectionTree != null) {
-      mSectionTree.requestFocusOnRoot(index, offset);
+    final SectionTree sectionTree = getSectionTree();
+    if (sectionTree != null) {
+      sectionTree.requestFocusOnRoot(index, offset);
     }
   }
 
@@ -304,7 +314,22 @@ public class RecyclerCollectionEventsController extends RecyclerEventsController
   }
 
   public void setSectionTree(@Nullable SectionTree sectionTree) {
-    mSectionTree = sectionTree;
+    if (sectionTree != null && ComponentsConfiguration.weakSectionTreeHandles) {
+      mSectionTree = null;
+      mWeakSectionTree = new WeakReference<>(sectionTree);
+    } else {
+      mSectionTree = sectionTree;
+      mWeakSectionTree = null;
+    }
+  }
+
+  @Nullable
+  private SectionTree getSectionTree() {
+    if (mSectionTree != null) {
+      return mSectionTree;
+    }
+    final WeakReference<SectionTree> weakSectionTree = mWeakSectionTree;
+    return weakSectionTree == null ? null : weakSectionTree.get();
   }
 
   public void setSnapMode(int snapMode) {
