@@ -16,6 +16,7 @@
 
 package com.facebook.litho.widget.collection
 
+import androidx.recyclerview.widget.LinearLayoutManager
 import com.facebook.litho.Component
 import com.facebook.litho.ComponentScope
 import com.facebook.litho.KComponent
@@ -178,6 +179,29 @@ abstract class LazyListChildGroupTestCases(enableNewCollection: Boolean) {
     assertThat(counts.getValue("second").value).isEqualTo(0)
     assertThat(testLithoView.findCollectionComponent()?.items?.map { it.id })
         .containsExactly(ChildGroupRowId("first", "count:1"), ChildGroupRowId("second", "count:0"))
+  }
+
+  @Test
+  fun `scrollToIdInGroup scrolls to the row inside that group`() {
+    val controller = LazyCollectionController()
+
+    class Owner : KComponent() {
+      override fun ComponentScope.render(): Component =
+          LazyList(lazyCollectionController = controller) {
+            (0..50).forEach { group ->
+              childGroup(id = group) { child(id = 0, component = Text("$group")) }
+            }
+          }
+    }
+
+    val testLithoView = lithoTestRule.render(widthPx = 100, heightPx = 100) { Owner() }
+    lithoTestRule.idle()
+    lithoTestRule.act(testLithoView) { controller.scrollToIdInGroup(25, 0) }
+    testLithoView.setRoot(Owner())
+    lithoTestRule.idle()
+
+    val layoutManager = controller.recyclerView?.layoutManager as LinearLayoutManager
+    assertThat(layoutManager.findFirstVisibleItemPosition()).isEqualTo(25)
   }
 
   // Packaged lint cannot see this helper's separate synchronous childGroup render scope.

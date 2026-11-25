@@ -209,6 +209,19 @@ class LazyCollectionController {
   ) {
     scrollerDelegate?.smoothScrollToId(id, offset, smoothScrollAlignmentType)
   }
+
+  /**
+   * Scroll the [LazyCollection] so that the child declared with [id] inside the child group
+   * [groupId] is fully visible. Not an overload of [scrollToId]: `scrollToId(groupId, 9)` would
+   * resolve to its `offset` parameter.
+   *
+   * @param offset Attempt to offset the child by this number of pixels from the start of the
+   *   Collection.
+   */
+  @UiThread
+  fun scrollToIdInGroup(groupId: Any, id: Any, @Px offset: Int = 0) {
+    scrollToId(ChildGroupRowId(groupId, id), offset)
+  }
 }
 
 sealed interface ScrollerDelegate {
