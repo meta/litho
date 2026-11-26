@@ -270,6 +270,16 @@ internal constructor(
      * never mounted otherwise grows without bound.
      */
     @JvmField val boundDataRenderedCallbacksBeforeMount: Boolean = false,
+    // TODO: When this becomes the default, update the rendered contract in OnDataRendered and
+    // ChangeSetCompleteCallback.
+    /**
+     * When true, a [com.facebook.litho.widget.RecyclerBinder] mounted on a view that only reports
+     * its own draws (see [com.facebook.litho.widget.HasPostDispatchDrawListener]) also checks its
+     * pending `@OnDataRendered` callbacks on the window's next pre-draw, as it does for other
+     * views. Without it, a change set that only touches off-screen items is laid out without
+     * redrawing the view, and its callbacks wait until something else redraws it.
+     */
+    @JvmField val dispatchDataRenderedAfterLayout: Boolean = false,
     /**
      * When true, a render reads the root and tree props when its resolve starts, and the size when
      * its layout starts, not when it was requested. A resolve the layout thread runs late then
@@ -874,6 +884,10 @@ internal constructor(
 
     fun boundDataRenderedCallbacksBeforeMount(enabled: Boolean): Builder = apply {
       config = config.copy(boundDataRenderedCallbacksBeforeMount = enabled)
+    }
+
+    fun dispatchDataRenderedAfterLayout(enabled: Boolean): Builder = apply {
+      config = config.copy(dispatchDataRenderedAfterLayout = enabled)
     }
 
     fun renderWithCurrentInputs(enabled: Boolean): Builder = apply {

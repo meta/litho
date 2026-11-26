@@ -176,6 +176,11 @@ data class RecyclerBinderConfig(
      * [ComponentsConfiguration.layoutItemsOutsideMeasureLock] of its configuration.
      */
     @JvmField val layoutItemsOutsideMeasureLock: Boolean? = null,
+    /**
+     * Overrides [ComponentsConfiguration.dispatchDataRenderedAfterLayout] for this binder. If not
+     * set, the binder follows its configuration.
+     */
+    @JvmField val dispatchDataRenderedAfterLayout: Boolean? = null,
     /** Rebind component rows when their effective child size specs change on update. */
     @JvmField val enableSizeSpecRebind: Boolean = false,
     /**
@@ -250,6 +255,7 @@ class RecyclerBinderConfigBuilder internal constructor(configuration: RecyclerBi
   private var recyclingStrategy = configuration.recyclingStrategy
   private var resolvePaginationTargetOnCommit = configuration.resolvePaginationTargetOnCommit
   private var layoutItemsOutsideMeasureLock = configuration.layoutItemsOutsideMeasureLock
+  private var dispatchDataRenderedAfterLayout = configuration.dispatchDataRenderedAfterLayout
   private var deferOutOfRangeTreeReleaseUntilScrollIdle =
       configuration.deferOutOfRangeTreeReleaseUntilScrollIdle
 
@@ -337,6 +343,10 @@ class RecyclerBinderConfigBuilder internal constructor(configuration: RecyclerBi
     this.layoutItemsOutsideMeasureLock = enabled
   }
 
+  fun dispatchDataRenderedAfterLayout(enabled: Boolean?): RecyclerBinderConfigBuilder = also {
+    this.dispatchDataRenderedAfterLayout = enabled
+  }
+
   fun deferOutOfRangeTreeReleaseUntilScrollIdle(enabled: Boolean): RecyclerBinderConfigBuilder =
       also {
         this.deferOutOfRangeTreeReleaseUntilScrollIdle = enabled
@@ -365,6 +375,7 @@ class RecyclerBinderConfigBuilder internal constructor(configuration: RecyclerBi
         recyclingStrategy = recyclingStrategy,
         resolvePaginationTargetOnCommit = resolvePaginationTargetOnCommit,
         layoutItemsOutsideMeasureLock = layoutItemsOutsideMeasureLock,
+        dispatchDataRenderedAfterLayout = dispatchDataRenderedAfterLayout,
         deferOutOfRangeTreeReleaseUntilScrollIdle = deferOutOfRangeTreeReleaseUntilScrollIdle,
     )
   }
