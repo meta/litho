@@ -582,12 +582,24 @@ class IncrementalMountExtension(
       }
       return
     }
+    val state = extensionState.state
+    val inputBeforeAcquire = state.input
+    val cursorBeforeAcquire = cursorIndex(state, candidate.cursor)
     val alreadyOwned = extensionState.ownsReference(candidate.output.id)
     if (!alreadyOwned && !acquirePremountReference(extensionState, candidate.output.id, true)) {
       return
     }
     val acquired = !alreadyOwned && extensionState.ownsReference(candidate.output.id)
-    advancePremountCursor(extensionState.state, candidate.cursor)
+    // The acquire can re-enter: a pass on this tree moves the cursor past the candidate, and a new
+    // layout re-derives it for another input. Advancing again would then skip an unconsidered item
+    // or leave [0, count], so advance only while the cursor still points at the candidate.
+    if (
+        !IncrementalMountExtensionConfigs.advancePremountCursorOnlyIfUnchanged ||
+            (state.input === inputBeforeAcquire &&
+                cursorIndex(state, candidate.cursor) == cursorBeforeAcquire)
+    ) {
+      advancePremountCursor(state, candidate.cursor)
+    }
     if (isTracing) {
       traceLegacyPremountOutcome(
           extensionState,
@@ -661,6 +673,12 @@ class IncrementalMountExtension(
     }
     return null
   }
+
+  private fun cursorIndex(state: IncrementalMountExtensionState, cursor: PremountCursor): Int =
+      when (cursor) {
+        PremountCursor.TOPS -> state.previousTopsIndex
+        PremountCursor.BOTTOMS -> state.previousBottomsIndex
+      }
 
   private fun advancePremountCursor(
       state: IncrementalMountExtensionState,

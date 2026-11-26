@@ -44,4 +44,13 @@ object IncrementalMountExtensionConfigs {
    * tree; past that the oldest is released immediately. `0` releases immediately.
    */
   var maxPendingOffscreenReleases: Int = 0
+
+  /**
+   * When true, the legacy premount route ([GapWorkerMode.PREMOUNT]) advances its cursor after a
+   * premount only if the cursor still points at the item it premounted, in the same input. Mounting
+   * that item can re-enter incremental mount and move the cursor already; advancing it again then
+   * skips an item that enters the screen later, or moves it out of range, which crashes the next
+   * scroll with an [IndexOutOfBoundsException].
+   */
+  @JvmField var advancePremountCursorOnlyIfUnchanged: Boolean = false
 }

@@ -48,6 +48,7 @@ import com.facebook.rendercore.testing.TestHostRenderUnit
 import com.facebook.rendercore.testing.TestRenderUnit
 import com.facebook.rendercore.testing.ViewWrapperUnit
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -2767,6 +2768,224 @@ class IncrementalMountExtensionTest {
         assertThat(fixture.extension.prepareOffscreenDrain(fixture.extensionState)).isFalse()
         assertThat(fixture.queuedReleases.isEmpty()).isTrue()
       }
+
+  // Lean model trace premount_cursor_overshoot_index_fault (contract A7): bind; attach [0,30);
+  // gap frame whose premount mount re-enters a pass [20,60) on the same tree; scroll back [0,30).
+  @Test
+  fun `legacy premount keeps the tops cursor in range when its mount re-enters a pass`() {
+    withAdvancePremountCursorOnlyIfUnchanged(true) {
+      premountWhoseMountReentersThenScrollBack { fixture -> scroll(fixture, Rect(0, 20, 10, 60)) }
+    }
+  }
+
+  // The same trace without the fix: the cursor overshoots and the scroll back reads past the end.
+  @Test
+  fun `legacy premount overshoots the tops cursor when its mount re-enters a pass without the fix`() {
+    withAdvancePremountCursorOnlyIfUnchanged(false) {
+      assertThatThrownBy {
+            premountWhoseMountReentersThenScrollBack { fixture ->
+              scroll(fixture, Rect(0, 20, 10, 60))
+            }
+          }
+          .isInstanceOf(IndexOutOfBoundsException::class.java)
+    }
+  }
+
+  // Lean model trace a7_relayout_route (contract A7): as above, but the premount mount commits a
+  // new layout, so the cursor is re-derived for another input.
+  @Test
+  fun `legacy premount keeps the tops cursor in range when its mount commits a new layout`() {
+    withAdvancePremountCursorOnlyIfUnchanged(true) {
+      premountWhoseMountReentersThenScrollBack { fixture -> relayout(fixture, Rect(0, 20, 10, 60)) }
+    }
+  }
+
+  // The same trace without the fix: the cursor re-derived for the new input overshoots it.
+  @Test
+  fun `legacy premount overshoots the tops cursor when its mount commits a new layout without the fix`() {
+    withAdvancePremountCursorOnlyIfUnchanged(false) {
+      assertThatThrownBy {
+            premountWhoseMountReentersThenScrollBack { fixture ->
+              relayout(fixture, Rect(0, 20, 10, 60))
+            }
+          }
+          .isInstanceOf(IndexOutOfBoundsException::class.java)
+    }
+  }
+
+  // Lean model trace premount_cursor_overshoot_blank (contract A7): bind; gap frame whose premount
+  // mount re-enters the attach layout pass [0,30); scroll [20,60). The bottom item enters and must
+  // be mounted.
+  @Test
+  fun `legacy premount does not skip an entering item when its mount re-enters a pass`() {
+    withAdvancePremountCursorOnlyIfUnchanged(true) {
+      assertThat(premountWhoseMountReentersAttachThenScrollDown()).isTrue()
+    }
+  }
+
+  // The same trace without the fix: the bottom item is skipped and stays unmounted on screen.
+  @Test
+  fun `legacy premount skips an entering item when its mount re-enters a pass without the fix`() {
+    withAdvancePremountCursorOnlyIfUnchanged(false) {
+      assertThat(premountWhoseMountReentersAttachThenScrollDown()).isFalse()
+    }
+  }
+
+  // Contract A7 on the bottoms cursor: attach [30,60), so the tops cursor is at the end and the
+  // premount takes the top item from the bottoms cursor; its mount re-enters a pass [0,40) on the
+  // same tree; scroll back [30,60).
+  @Test
+  fun `legacy premount keeps the bottoms cursor in range when its mount re-enters a pass`() {
+    withAdvancePremountCursorOnlyIfUnchanged(true) {
+      premountAboveWhoseMountReentersThenScrollBack()
+    }
+  }
+
+  // The same trace without the fix: the bottoms cursor goes below 0 and the scroll back reads
+  // before the start.
+  @Test
+  fun `legacy premount moves the bottoms cursor below 0 when its mount re-enters a pass without the fix`() {
+    withAdvancePremountCursorOnlyIfUnchanged(false) {
+      assertThatThrownBy { premountAboveWhoseMountReentersThenScrollBack() }
+          .isInstanceOf(IndexOutOfBoundsException::class.java)
+    }
+  }
+
+  private fun withAdvancePremountCursorOnlyIfUnchanged(enabled: Boolean, test: () -> Unit) {
+    val saved = IncrementalMountExtensionConfigs.advancePremountCursorOnlyIfUnchanged
+    IncrementalMountExtensionConfigs.advancePremountCursorOnlyIfUnchanged = enabled
+    try {
+      test()
+    } finally {
+      IncrementalMountExtensionConfigs.advancePremountCursorOnlyIfUnchanged = saved
+      IncrementalMountGapWorker.resetWorkerForTesting()
+    }
+  }
+
+  /** Commits a new input with the same outputs, as a new layout of the same content does. */
+  private fun relayout(fixture: CostAwarePremountFixture, visibleRect: Rect) {
+    val outputs = checkNotNull(fixture.extensionState.state.input?.getIncrementalMountOutputs())
+    fixture.extension.beforeMount(
+        fixture.extensionState,
+        TestIncrementalMountExtensionInput(*outputs.toTypedArray()),
+        visibleRect,
+    )
+    fixture.extension.afterMount(fixture.extensionState)
+  }
+
+  /**
+   * Attaches the rect
+   * [0,30), runs one legacy gap worker frame whose premount of the bottom item runs [reenter], then
+   * scrolls back to [0,30) and checks the cursor and the content on screen.
+   */
+  private fun premountWhoseMountReentersThenScrollBack(
+      reenter: (CostAwarePremountFixture) -> Unit,
+  ) {
+    val top = output(id = 1, index = 1, top = 0, bottom = 20)
+    val middle = output(id = 2, index = 2, top = 20, bottom = 40)
+    val bottom = output(id = 3, index = 3, top = 40, bottom = 60)
+    lateinit var fixture: CostAwarePremountFixture
+    fixture =
+        createCostAwareFixture(
+            listOf(top, middle, bottom),
+            mode = PREMOUNT,
+            onCreateById = mapOf(bottom.id to { reenter(fixture) }),
+        )
+    (fixture.extensionState.rootHost as View).layout(0, 0, 10, 60)
+    fixture.extension.onRegisterForPremount(fixture.extensionState, null)
+    scroll(fixture, Rect(0, 0, 10, 30))
+
+    // What the gap worker's legacy route (premountExtension) runs in one frame.
+    var asks = 0
+    while (fixture.extension.hasItemToMount(fixture.extensionState) && asks < 10) {
+      fixture.extension.premountNext(fixture.extensionState)
+      asks++
+    }
+    val topsAfterFrame =
+        IncrementalMountExtension.getPreviousTopsIndex(fixture.extensionState.state)
+
+    scroll(fixture, Rect(0, 0, 10, 30))
+
+    assertThat(topsAfterFrame).isBetween(0, 3)
+    assertThat(fixture.mountState.getContentById(top.id)).isNotNull()
+    assertThat(fixture.mountState.getContentById(middle.id)).isNotNull()
+  }
+
+  /**
+   * Attaches the rect [30,60), so only the bottoms cursor has an item left: the top one. Runs one
+   * legacy gap worker frame whose premount of that item re-enters a pass [0,40), then scrolls back
+   * to [30,60) and checks the cursor and the content on screen.
+   */
+  private fun premountAboveWhoseMountReentersThenScrollBack() {
+    val top = output(id = 1, index = 1, top = 0, bottom = 20)
+    val middle = output(id = 2, index = 2, top = 20, bottom = 40)
+    val bottom = output(id = 3, index = 3, top = 40, bottom = 60)
+    lateinit var fixture: CostAwarePremountFixture
+    fixture =
+        createCostAwareFixture(
+            listOf(top, middle, bottom),
+            mode = PREMOUNT,
+            onCreateById = mapOf(top.id to { scroll(fixture, Rect(0, 0, 10, 40)) }),
+        )
+    (fixture.extensionState.rootHost as View).layout(0, 0, 10, 60)
+    fixture.extension.onRegisterForPremount(fixture.extensionState, null)
+    scroll(fixture, Rect(0, 30, 10, 60))
+    assertThat(IncrementalMountExtension.getPreviousTopsIndex(fixture.extensionState.state))
+        .describedAs("tops cursor at the end")
+        .isEqualTo(3)
+
+    // What the gap worker's legacy route (premountExtension) runs in one frame.
+    var asks = 0
+    while (fixture.extension.hasItemToMount(fixture.extensionState) && asks < 10) {
+      fixture.extension.premountNext(fixture.extensionState)
+      asks++
+    }
+    val bottomsAfterFrame =
+        IncrementalMountExtension.getPreviousBottomsIndex(fixture.extensionState.state)
+
+    scroll(fixture, Rect(0, 30, 10, 60))
+
+    assertThat(bottomsAfterFrame).isBetween(0, 3)
+    assertThat(fixture.mountState.getContentById(middle.id)).isNotNull()
+    assertThat(fixture.mountState.getContentById(bottom.id)).isNotNull()
+  }
+
+  /**
+   * Runs one legacy gap worker ask whose premount of the top item re-enters the attach layout
+   * pass [0,30), then scrolls to [20,60). Returns whether the bottom item, which entered, is
+   * mounted.
+   */
+  private fun premountWhoseMountReentersAttachThenScrollDown(): Boolean {
+    val top = output(id = 1, index = 1, top = 0, bottom = 20)
+    val middle = output(id = 2, index = 2, top = 20, bottom = 40)
+    val bottom = output(id = 3, index = 3, top = 40, bottom = 60)
+    lateinit var fixture: CostAwarePremountFixture
+    fixture =
+        createCostAwareFixture(
+            listOf(top, middle, bottom),
+            mode = PREMOUNT,
+            onCreateById =
+                mapOf(
+                    top.id to
+                        {
+                          fixture.extension.onVisibleBoundsChanged(
+                              fixture.extensionState,
+                              Rect(0, 0, 10, 30),
+                              VisibilityChangeReason.MOUNT,
+                          )
+                        },
+                ),
+        )
+    (fixture.extensionState.rootHost as View).layout(0, 0, 10, 60)
+    fixture.extension.onRegisterForPremount(fixture.extensionState, null)
+
+    // One gap worker frame with room for a single ask (model: gap budget 1).
+    fixture.extension.premountNext(fixture.extensionState)
+
+    scroll(fixture, Rect(0, 20, 10, 60))
+
+    return fixture.mountState.getContentById(bottom.id) != null
+  }
 
   private fun nodeFor(output: IncrementalMountOutput): RenderTreeNode =
       RenderTreeNode(null, TestRenderUnit(output.id), null, output.bounds, null, 0)
