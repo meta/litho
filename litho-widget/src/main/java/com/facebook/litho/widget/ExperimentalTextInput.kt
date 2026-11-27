@@ -2107,11 +2107,16 @@ internal class MeasureContext(ctx: Context) : ContextWrapper(ctx) {
 
   inline fun withInputMethodManagerDisabled(block: () -> Unit) {
     try {
-      inputMethodManagerDisabled = true
+      updateInputMethodManagerDisabled(true)
       block()
     } finally {
-      inputMethodManagerDisabled = false
+      updateInputMethodManagerDisabled(false)
     }
+  }
+
+  @PublishedApi
+  internal fun updateInputMethodManagerDisabled(disabled: Boolean) {
+    inputMethodManagerDisabled = disabled
   }
 }
 
