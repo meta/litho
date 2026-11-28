@@ -32,8 +32,8 @@ import org.junit.runner.RunWith
 import org.robolectric.Shadows.shadowOf
 
 /**
- * With [LithoCollectionItem]'s `updatesShownTreeAsync`, new content for a view already showing the
- * item's tree is laid out in the background; without it, bind lays it out right away.
+ * With [StaleContentAtBind.ON_SHOWING_VIEW], new content for a view already showing the item's tree
+ * is laid out in the background; with [StaleContentAtBind.NEVER], bind lays it out right away.
  */
 @RunWith(LithoTestRunner::class)
 class LithoCollectionItemShownTreeAsyncTest {
@@ -47,7 +47,7 @@ class LithoCollectionItemShownTreeAsyncTest {
   @Test
   fun `a rebind of the same view keeps the committed layout until the background layout lands`() {
     val view = LithoView(context)
-    val item = item(updatesShownTreeAsync = true)
+    val item = item(StaleContentAtBind.ON_SHOWING_VIEW)
     item.bind(view)
 
     title = "second"
@@ -60,9 +60,9 @@ class LithoCollectionItemShownTreeAsyncTest {
   }
 
   @Test
-  fun `a rebind of the same view lays the new content out right away without the option`() {
+  fun `a rebind of the same view lays the new content out right away when updating synchronously`() {
     val view = LithoView(context)
-    val item = item(updatesShownTreeAsync = false)
+    val item = item(StaleContentAtBind.NEVER)
     item.bind(view)
 
     title = "second"
@@ -72,8 +72,8 @@ class LithoCollectionItemShownTreeAsyncTest {
   }
 
   @Test
-  fun `a view new to the tree binds the new content right away with the option`() {
-    val item = item(updatesShownTreeAsync = true)
+  fun `a view new to the tree binds the new content right away when updating only shown trees async`() {
+    val item = item(StaleContentAtBind.ON_SHOWING_VIEW)
     item.bind(LithoView(context))
     item.unbind()
 
@@ -86,7 +86,7 @@ class LithoCollectionItemShownTreeAsyncTest {
 
   @Test
   fun `a view new to the tree shows the latest content while an async update is in flight`() {
-    val item = item(updatesShownTreeAsync = true)
+    val item = item(StaleContentAtBind.ON_SHOWING_VIEW)
     val first = LithoView(context)
     item.bind(first)
     title = "second"
@@ -104,13 +104,13 @@ class LithoCollectionItemShownTreeAsyncTest {
         .isTrue
   }
 
-  private fun item(updatesShownTreeAsync: Boolean) = LithoCollectionItem(
+  private fun item(staleContentAtBind: StaleContentAtBind) = LithoCollectionItem(
       context = context,
       dataProvider = { title },
       component = { Row().also { built += it } },
       sizeConstraints = SizeConstraints.exact(100, 100),
       traceTag = "test",
-      updatesShownTreeAsync = updatesShownTreeAsync,
+      staleContentAtBind = staleContentAtBind,
   )
 
   private fun committedRootIsLatest(view: LithoView): Boolean =

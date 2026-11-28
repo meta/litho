@@ -66,6 +66,13 @@ import kotlin.concurrent.withLock
  * on must unbind every view it binds; a view it leaves bound keeps its tree. Without it,
  * [unprepare] releases the tree whether or not a view shows it.
  *
+ * ## Data changes found at bind
+ * A [bind] that finds the data changed since the tree last took it may let the view show the older
+ * layout while the new one is laid out, as [staleContentAtBind] says. With
+ * [StaleContentAtBind.ALLOWED] the new root is set only once the current frame is done: setting it
+ * during the bind would not help, as the measure that follows in the same frame would find a root
+ * with no layout and lay it out on the main thread anyway.
+ *
  * @param T The data type. Supports nullable types for placeholder states.
  * @param context Android context for component creation.
  * @param dataProvider Provides data when called. Invoked lazily during preparation.
@@ -111,10 +118,8 @@ import kotlin.concurrent.withLock
  *   the item into re-laying out a kept tree when constraints change, and into leaving a shown
  *   tree's size to its LithoView; without it, the item keeps its fixed-constraint behavior. Invoked
  *   on the thread preparing or binding the item, so it must be cheap and thread-safe.
- * @param updatesShownTreeAsync whether new content for a view already showing this item's tree is
- *   laid out in the background, the view keeping the committed layout until it lands. Off by
- *   default: [bind] then lays the new content out on the main thread, so the view never shows older
- *   content. A view new to the tree still binds synchronously.
+ * @param staleContentAtBind whether a view may show older data while [bind] lays out newer data
+ *   (see "Data changes found at bind"). [StaleContentAtBind.NEVER] by default.
  */
 class LithoCollectionItem<T>(
     val context: Context,
@@ -136,7 +141,7 @@ class LithoCollectionItem<T>(
     private val visibilityEventsController: LithoVisibilityEventsController? = null,
     private val keepStateAfterRelease: Boolean = true,
     private val sizeConstraintsProvider: ((T) -> SizeConstraints)? = null,
-    private val updatesShownTreeAsync: Boolean = false,
+    private val staleContentAtBind: StaleContentAtBind = StaleContentAtBind.NEVER,
 ) : BindableCollectionItem {
 
   init {
@@ -172,7 +177,7 @@ class LithoCollectionItem<T>(
 
   /**
    * Set by [unprepare] with [keepTreeWhileShown] and cleared by [prepare]: whether the owner has
-   * released this item, so the tree it still has goes on [unbind].
+   * released this item, so the tree it still has goes on [unbind] and takes no posted update.
    */
   private var isReleasedByOwner = false
 
@@ -240,6 +245,7 @@ class LithoCollectionItem<T>(
   }
 
   /** Binds the component to the view. Must be called on the main thread. */
+  @OptIn(AllowsStaleContentOnScreen::class)
   @UiThread
   override fun bind(view: View) {
     ThreadUtils.assertMainThread()
@@ -258,23 +264,15 @@ class LithoCollectionItem<T>(
           ComponentsSystrace.trace("LithoCollectionItem.bind.updateIfNeeded") {
             // A view already showing this tree has measured it; a view new to it has not.
             val viewAlreadyShowsTree = targetView.componentTree === componentTree
-            when {
-              !updatesShownTreeAsync ->
-                  // Lays new content out now.
-                  prepareWithDataIfNeeded(
-                      sync = true,
-                      updateSizeConstraints = !viewAlreadyShowsTree,
-                  )
-              viewAlreadyShowsTree ->
-                  // Lays new content out in the background; the view keeps the committed layout
-                  // until it lands.
-                  prepareWithDataIfNeeded(sync = false, updateSizeConstraints = false)
-              else -> {
-                // Lays new content out now. An earlier bind may have left the latest root laying
-                // out in the background, under a key this bind already sees as current: finish it
-                // here, a no-op when it already landed.
-                prepareWithDataIfNeeded(sync = true, updateSizeConstraints = true)
-                componentTree?.let { tree -> tree.setRootSync(tree.root) }
+            when (staleContentAtBind) {
+              StaleContentAtBind.NEVER -> {
+                prepareWithDataIfNeeded(sync = true, updateSizeConstraints = !viewAlreadyShowsTree)
+              }
+              StaleContentAtBind.ON_SHOWING_VIEW -> {
+                updateKeepingShownLayout(viewAlreadyShowsTree)
+              }
+              StaleContentAtBind.ALLOWED -> {
+                updateAfterFrameIfNeeded(viewAlreadyShowsTree)
               }
             }
           }
@@ -354,6 +352,73 @@ class LithoCollectionItem<T>(
     treeVisibilityEventsController = null
     preparedContent = null
     return tree to controller
+  }
+
+  /**
+   * Lays new data out in the background for a view already showing the tree, which keeps its
+   * committed layout until it lands, and now for a view new to it. An earlier bind may have left
+   * the latest root laying out in the background, under a key this bind already sees as current:
+   * the view new to the tree finishes it, a no-op when it already landed. Holds [lock].
+   */
+  @UiThread
+  private fun updateKeepingShownLayout(viewAlreadyShowsTree: Boolean) {
+    if (viewAlreadyShowsTree) {
+      prepareWithDataIfNeeded(sync = false, updateSizeConstraints = false)
+      return
+    }
+    prepareWithDataIfNeeded(sync = true, updateSizeConstraints = true)
+    componentTree?.let { tree -> tree.setRootSync(tree.root) }
+  }
+
+  /**
+   * Leaves the tree's committed layout for the view to show and posts the update to after the
+   * frame. Unchanged data leaves the tree as a [StaleContentAtBind.NEVER] bind does: a first layout
+   * still in the background is waited for by the view's layout, not by this bind. Changed data with
+   * nothing laid out at its size yet is laid out now, unless [viewAlreadyShowsTree]: that view
+   * already shows a layout and owns the tree's size. The size check ignores which root the layout
+   * was built from: the view's measure reuses a layout with the same specs
+   * (`performExactSameSpecsCheck`, on by default). Holds [lock], on the main thread.
+   */
+  @UiThread
+  private fun updateAfterFrameIfNeeded(viewAlreadyShowsTree: Boolean) {
+    val tree = componentTree ?: return
+    val data = dataProvider()
+    if (preparedContent?.key == contentKey(data)) {
+      return
+    }
+    if (!viewAlreadyShowsTree) {
+      val constraints = sizeConstraintsFor(data)
+      if (!tree.hasCompatibleLayout(constraints.toWidthSpec(), constraints.toHeightSpec())) {
+        // The view would lay out the older data first, so lay out the latest now.
+        prepareWithDataIfNeeded(sync = true, updateSizeConstraints = true)
+        tree.setRootSync(tree.root)
+        return
+      }
+    }
+    mainHandler.post { updateAfterFrame() }
+  }
+
+  /**
+   * Lays the latest data out in the background, unless the item was released since. Never waits for
+   * [lock], and skips the update while another thread holds it: a [prepare] lays the latest data
+   * out itself, and after an [unprepare] the view keeps the committed layout until the next prepare
+   * or bind.
+   */
+  @UiThread
+  private fun updateAfterFrame() {
+    if (!lock.tryLock()) {
+      return
+    }
+    try {
+      if (componentTree == null || isReleasedByOwner) {
+        return
+      }
+      ComponentsSystrace.trace("LithoCollectionItem.updateAfterFrame") {
+        prepareWithDataIfNeeded(sync = false, updateSizeConstraints = lithoView == null)
+      }
+    } finally {
+      lock.unlock()
+    }
   }
 
   /** [ComponentTree.release] must run on the main thread. */
@@ -489,3 +554,38 @@ class LithoCollectionItem<T>(
     private val mainHandler = Handler(Looper.getMainLooper())
   }
 }
+
+/** Whether a view may show older data while [LithoCollectionItem.bind] lays out newer data. */
+enum class StaleContentAtBind {
+  /** Never: bind lays the new data out on the main thread. */
+  NEVER,
+
+  /**
+   * Only on a view already showing the tree, which keeps its committed layout until the new one
+   * lands. A view new to the tree lays the new data out on the main thread.
+   */
+  ON_SHOWING_VIEW,
+
+  /**
+   * On any view: it shows the tree's committed layout, and the new one replaces it once laid out. A
+   * tree with nothing laid out at the view's size yet lays the new data out on the main thread. A
+   * shown item its owner releases before the update runs keeps the committed layout until the next
+   * prepare or bind.
+   */
+  @AllowsStaleContentOnScreen ALLOWED,
+}
+
+/**
+ * Marks [StaleContentAtBind.ALLOWED]: a visible row can show older data for a frame or more, and
+ * change height when the new layout lands. Opt in only for a list where that is acceptable.
+ */
+@MustBeDocumented
+@Retention(AnnotationRetention.BINARY)
+@RequiresOptIn(
+    level = RequiresOptIn.Level.ERROR,
+    message =
+        "With StaleContentAtBind.ALLOWED a visible row can show older data for a frame or more " +
+            "and change height when the new layout lands. Check that this is acceptable for your " +
+            "list before opting in.",
+)
+annotation class AllowsStaleContentOnScreen
